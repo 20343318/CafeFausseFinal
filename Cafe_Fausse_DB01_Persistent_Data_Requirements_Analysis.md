@@ -1,11 +1,13 @@
 # Cafe Fausse DB-01 Persistent-Data Requirements Analysis
 
-**Document version:** 1.0  
+**Document version:** 1.1  
 **Established:** 2026-08-14  
 **Roadmap increment:** DB-01  
 **Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.1 (PRA-001 through PRA-028), and the approved least-to-most implementation roadmap  
 **Scope:** PostgreSQL persistent-data requirements only  
-**Status:** Ready for DB-01 approval checkpoint  
+**Status:** Approved  
+**Approved by/date:** Abdul, 2026-08-15  
+**Approval source:** Explicit DB-01 approval in the project conversation  
 **Code status:** No SQL or application code generated
 
 ## 1. Purpose and boundary
@@ -332,7 +334,7 @@ No genuinely unresolved persistent-data business requirement remains after appro
 
 The items in Section 9 are intentionally deferred technical design choices, not business-rule ambiguities and not authorization to add scope.
 
-## 14. DB-01 completion assessment and approval checkpoint
+## 14. DB-01 completion assessment and approval record
 
 ### Completion assessment
 
@@ -353,8 +355,17 @@ The items in Section 9 are intentionally deferred technical design choices, not 
 | Conceptual/logical/schema decisions avoided | Complete |
 | SQL/application code avoided | Complete |
 
-### Approval checkpoint
+### Approval record
 
-DB-01 is **ready for user review and approval**. Approval authorizes Prompt 5 / DB-02 conceptual data modeling. It does not approve a PostgreSQL schema, SQL, migrations, transaction mechanism, Flask contract, or React design.
+| Item | Recorded value |
+|---|---|
+| Increment | DB-01 — Persistent-data requirements |
+| Status | Approved |
+| Approver | Abdul |
+| Approval date | 2026-08-15 |
+| Approval source | Explicit DB-01 approval in the project conversation |
+| Next authorized increment | Prompt 5 / DB-02 — Conceptual data modeling |
+
+DB-01 approval authorizes Prompt 5 / DB-02 conceptual data modeling. It does not approve a PostgreSQL schema, SQL, migrations, transaction mechanism, Flask contract, or React design.
 
 No SQL or application code was generated.
