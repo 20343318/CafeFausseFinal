@@ -1,6 +1,6 @@
 # Cafe Fausse Project Requirements Addendum
 
-**Addendum version:** 2.0  
+**Addendum version:** 2.1  
 **Established:** 2026-08-13  
 **Last updated:** 2026-08-14  
 **Relationship to baseline:** Supplements but may not contradict `SRS(1).pdf`, `Rubric(1).pdf`, or the Project Requirements Baseline  
@@ -476,7 +476,68 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | Demo / documentation | Demonstrate full schedule, disabled unavailable slots, stale-slot handling, and responsiveness. |
 | Dependencies | PRA-006 through PRA-019, PRA-023, PRA-024 |
 
-## 6. Prompt 1-to-Addendum crosswalk
+## 6. Prompt 4 approved supplemental requirements
+
+### PRA-026 - Prospective configuration changes and repeatable reinitialization
+
+| Field | Value |
+|---|---|
+| Prompt 4 source | P4-LIF-01 |
+| Status / approval | Approved; Abdul, Option A with demonstration/reinitialization notes, 2026-08-14 |
+| Exact approved requirement | A confirmed reservation retains its originally booked occupancy interval, party size, and exclusive table assignments. Later reservation-configuration or table-capacity changes apply prospectively to subsequent availability calculations and reservations; they do not recalculate, invalidate, or alter existing reservations. Seating configuration is relatively fixed in Version 1. For academic demonstration, development, or testing, designated nonproduction reservation data may be deleted through controlled reset and reinitialization procedures before restarting with a changed seating configuration. Later PostgreSQL deliverables shall provide repeatable initialization, seed, reset, and verification procedures. |
+| Default / validation | Existing confirmed reservation facts are immutable; configuration changes affect new calculations only. Reset/reinitialization is restricted to designated development, test, or demonstration data. |
+| Classification / control | Fixed lifecycle behavior plus PostgreSQL business configuration and controlled development/test tooling. |
+| Rationale | Prevents configuration changes from creating retroactive overlaps or invalid assignments while supporting repeatable academic demonstrations. |
+| SRS / rubric refined | SRS reservation persistence, availability, and data integrity; rubric direct database effects and sophisticated reservation logic. |
+| PostgreSQL impact | Preserve the booked occupancy facts and assignments of every confirmed reservation; later deliverables provide safe repeatable initialization/reset procedures. |
+| Flask/API impact | Apply current configuration to new availability and booking operations without rewriting existing reservations. |
+| React/UI impact | No customer-facing reset or configuration-management control; confirmed reservation details remain stable. |
+| Unit-test impact | Test that configuration changes do not change existing reservation occupancy or assignments. |
+| Integration-test impact | Test prospective changes and clean nonproduction reset/reinitialization from a known state. |
+| Demo / documentation | Document and rehearse repeatable demo reset/seed procedures; do not present reset as a customer feature. |
+| Dependencies | PRA-007, PRA-013, PRA-016 to PRA-018, PRA-022 |
+
+### PRA-027 - Database-generated reservation fingerprint and retry separation
+
+| Field | Value |
+|---|---|
+| Prompt 4 source | P4-RTY-01 |
+| Status / approval | Approved; Abdul, final simplified fingerprint interpretation, 2026-08-14 |
+| Exact approved requirement | PostgreSQL generates and stores a deterministic, versioned, opaque reservation fingerprint from the resolved customer identifier, canonical reservation start timestamp, and party size. Middle initial, phone, name text, email text, newsletter status/action, assigned tables, reservation end, and current configuration values are excluded. A matching fingerprint is a lookup aid; PostgreSQL shall also verify the underlying customer, start, and party-size facts before treating a request as an exact retry. An equivalent retry returns the existing reservation confirmation and current authoritative newsletter state without reapplying or changing the newsletter action contained in the retry. A same-customer overlapping request with a different party size or other nonmatching reservation identity is rejected under the same-customer overlap rule. Clients do not generate the fingerprint. The successful response may return it with the stable confirmation reference. |
+| Default / validation | Versioned fingerprint inputs: customer identifier + canonical start + party size. Hash/fingerprint collision must not alone establish equality. |
+| Classification / control | Persistent technical reservation identity generated authoritatively by PostgreSQL; fixed retry behavior. |
+| Rationale | Provides deterministic UI-independent retry safety while separating mutable newsletter preference and optional customer fields from reservation identity. |
+| SRS / rubric refined | SRS reservation confirmation, persistence, and double/overbooking prevention; rubric sophisticated logic, integration, and direct database effects. |
+| PostgreSQL impact | Generate, persist, and verify the opaque fingerprint and return the existing reservation for an exact retry. |
+| Flask/API impact | Expose consistent retry behavior to React and future mobile/third-party clients without moving fingerprint logic into clients. |
+| React/UI impact | Clients submit ordinary reservation data and never generate the fingerprint; an exact retry displays the existing confirmation and current newsletter state. |
+| Unit-test impact | Test stable equivalent fingerprints, excluded-field changes, party-size differences, collision verification, and newsletter nonmutation on retry. |
+| Integration-test impact | Test lost-response retry, replay after newsletter changes, mobile/third-party-equivalent requests, and same-customer conflicting overlap. |
+| Demo / documentation | Demonstrate a safe retry with no duplicate reservation and document the client-independent rule. |
+| Dependencies | PRA-014, PRA-019 to PRA-021, PRA-023 to PRA-025, PRA-026 |
+
+### PRA-028 - Version 1 retention until controlled reset
+
+| Field | Value |
+|---|---|
+| Prompt 4 source | P4-RET-01 |
+| Status / approval | Approved; Abdul, Option A, 2026-08-14 |
+| Exact approved requirement | During normal Version 1 operation, customer, reservation, and table-assignment records are retained indefinitely until a controlled development, test, or demonstration reset. Past reservations cease affecting availability because their occupancy intervals have ended, not because their records are deleted. Newsletter unsubscription retains the customer record with current newsletter status set to false. Version 1 performs no automatic deletion, archival, anonymization, or retention-period purge. Controlled reset/reinitialization is not a customer feature and must target designated nonproduction data. |
+| Default / validation | Retain records during normal operation; delete only through controlled nonproduction reset/reinitialization. |
+| Classification / control | Fixed Version 1 data-lifecycle behavior. |
+| Rationale | Keeps the academic project deterministic, preserves database demonstration evidence, and avoids unapproved retention/archive complexity. |
+| SRS / rubric refined | SRS persistent customer/reservation storage and availability; rubric direct database-effect demonstration and reproducible application behavior. |
+| PostgreSQL impact | No automatic purge/archive mechanism; time-bounded availability ignores elapsed intervals while records remain queryable. |
+| Flask/API impact | No customer deletion, archive, or retention-management operation. |
+| React/UI impact | No deletion/archive control; newsletter unsubscribe only changes current preference. |
+| Unit-test impact | Test that past reservations remain stored but do not block future intervals and that unsubscribe retains the customer. |
+| Integration-test impact | Verify retained history, current availability, and controlled reset/reinitialization isolation. |
+| Demo / documentation | Document normal retention and safe demo/test reset procedures. |
+| Dependencies | PRA-020, PRA-022, PRA-026 |
+
+## 7. Decision-to-Addendum crosswalk
+
+### 7.1 Prompt 1 decisions
 
 | Prompt 1 decision | Addendum ID |
 |---|---|
@@ -501,7 +562,15 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | P1-MSG-01 | PRA-024 |
 | P1-UI-01 | PRA-025 |
 
-## 7. Authoritative-document compatibility findings
+### 7.2 Prompt 4 decisions
+
+| Prompt 4 decision | Addendum ID |
+|---|---|
+| P4-LIF-01 | PRA-026 |
+| P4-RTY-01 | PRA-027 |
+| P4-RET-01 | PRA-028 |
+
+## 8. Authoritative-document compatibility findings
 
 No approved supplemental requirement contradicts the SRS or rubric. These interpretations control:
 
@@ -512,9 +581,9 @@ No approved supplemental requirement contradicts the SRS or rubric. These interp
 5. **Random assignment:** single-table selection remains random among equally suitable choices. Multi-table minimum-count and least-waste criteria precede random tie-breaking to avoid needless fragmentation.
 6. **Displayed availability:** React's display does not weaken Flask/PostgreSQL authority; every booking is revalidated.
 
-## 8. Remaining unresolved decisions
+## 9. Remaining unresolved decisions
 
-No genuinely ambiguous Prompt 1 operational business rule remains among the required decision IDs. These deliberately deferred technical-design decisions belong to later prompts:
+No genuinely ambiguous operational or persistent-data business rule remains among the approved Prompt 1 and Prompt 4 decisions. These deliberately deferred technical-design decisions belong to later prompts:
 
 - exact PostgreSQL tables, columns, types, keys, constraints, indexes, configuration representation, and multi-table assignment structure;
 - exact transaction, concurrency-control, locking, and idempotency mechanisms;
@@ -522,9 +591,9 @@ No genuinely ambiguous Prompt 1 operational business rule remains among the requ
 - exact React components, routing, state management, debounce/on-blur timing, and visual styling;
 - exact test frameworks, fixtures, controlled clock, and deployment topology.
 
-They must continue to honor PRA-001 through PRA-025.
+They must continue to honor PRA-001 through PRA-028.
 
-## 9. Future enhancements — inactive and unapproved for Version 1
+## 10. Future enhancements — inactive and unapproved for Version 1
 
 These are not active supplemental requirements and shall not be implemented without later explicit approval.
 
@@ -544,8 +613,11 @@ These are not active supplemental requirements and shall not be implemented with
 | FE-012 | Physical table adjacency/combinability | Inactive; Version 1 has no floor-plan constraint. |
 | FE-013 | More than 30 active bookable tables | Inactive; model extensibility does not change the Version 1 count. |
 | FE-014 | Customer self-service contact updates | Inactive; Version 1 does not silently overwrite differing stored identity/contact values. |
+| FE-015 | Retroactive configuration changes | Inactive; would recalculate or alter existing reservations after configuration changes and requires new conflict rules. |
+| FE-016 | Effective-dated configuration history | Inactive; would retain configuration versions and associate reservations with effective versions for auditing. |
+| FE-017 | Production retention, archival, anonymization, and deletion policies | Inactive; Version 1 retains data until controlled nonproduction reset. |
 
-## 10. Decision record template
+## 11. Decision record template
 
 ### PRA-XXX - Short title
 
@@ -569,9 +641,10 @@ These are not active supplemental requirements and shall not be implemented with
 | Dependencies | Other approved requirement IDs |
 | Supersedes | Earlier PRA ID, or none |
 
-## 11. Change log
+## 12. Change log
 
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-08-13 | Established addendum governance and recorded five already-approved project constraints. No unresolved business rule or optional enhancement was approved. |
 | 2.0 | 2026-08-14 | Preserved PRA-001 through PRA-005; added PRA-006 through PRA-025 from all final Prompt 1 approvals; added the complete crosswalk, compatibility findings, deferred technical decisions, and a separate inactive Future Enhancements register. Obsolete/superseded Prompt 1 proposals were not recorded as active requirements. |
+| 2.1 | 2026-08-14 | Added PRA-026 through PRA-028 from approved Prompt 4 decisions governing prospective configuration changes, database-generated reservation fingerprints, retry/newsletter separation, Version 1 retention, and repeatable nonproduction reset/reinitialization. Added FE-015 through FE-017 as inactive future enhancements. |
