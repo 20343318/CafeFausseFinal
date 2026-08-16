@@ -1,13 +1,15 @@
 # Cafe Fausse DB-02 Conceptual Data Model
 
-**Document version:** 1.1.1  
+**Document version:** 1.2  
 **Established:** 2026-08-15  
 **Last amended:** 2026-08-15  
 **Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
 **Roadmap increment:** DB-02  
 **Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), approved DB-01 Persistent-Data Requirements Analysis 1.2.1, and the approved least-to-most implementation roadmap 1.1.1  
 **Scope:** Conceptual PostgreSQL data model only  
-**Status:** Ready for DB-02 approval checkpoint; amended by PRA-029  
+**Status:** Approved  
+**Approved by/date:** Abdul, 2026-08-15  
+**Approval source:** Explicit DB-02 approval in the project conversation after review of the PRA-029-amended model  
 **Code status:** No SQL or application code generated
 
 ## 1. Purpose and boundary
@@ -569,10 +571,18 @@ The six-entity model resolves the DB-01 conceptual questions, including the PRA-
 | DB-03/DB-04 decisions deferred | Complete |
 | SQL/application code avoided | Complete |
 
-### 17.2 Approval checkpoint
+### 17.2 Approval record
 
-DB-02 version 1.1.1 is **ready for user review and approval**. Version 1.1.1 is a packaging-only regeneration of the PRA-029-amended model; it introduces no new conceptual decision.
+DB-02 version 1.2 is **approved** by Abdul as of 2026-08-15. This approval includes the six-concept model and the PRA-029 operating-hours amendment recorded in the preceding version. The status revision introduces no new conceptual decision.
 
-Approval of DB-02 will authorize Prompt 6 / DB-03 logical PostgreSQL schema and integrity design. It will not approve SQL, migrations, transaction/concurrency mechanisms, Flask contracts, React design, or implementation code.
+DB-02 approval authorizes Prompt 6 / DB-03 logical PostgreSQL schema and integrity design. It does not approve SQL, migrations, transaction/concurrency mechanisms, Flask contracts, React design, or implementation code.
+
+### 17.3 Version record
+
+| Version | Date | Change |
+|---|---|---|
+| 1.1 | 2026-08-15 | Added the PRA-029 operating-hours amendment and expanded the conceptual model to six persistent concepts. |
+| 1.1.1 | 2026-08-15 | Regenerated the downloadable PRA-029-amended artifact without changing requirements or conceptual decisions. |
+| 1.2 | 2026-08-15 | Recorded Abdul's explicit DB-02 approval and authorization to proceed to Prompt 6 / DB-03. No conceptual-model content changed. |
 
 No SQL or application code was generated.
