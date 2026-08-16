@@ -1,13 +1,15 @@
 # Cafe Fausse DB-01 Persistent-Data Requirements Analysis
 
-**Document version:** 1.1  
+**Document version:** 1.2.1  
 **Established:** 2026-08-14  
+**Last amended:** 2026-08-15  
+**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
 **Roadmap increment:** DB-01  
-**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.1 (PRA-001 through PRA-028), and the approved least-to-most implementation roadmap  
+**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), and the approved least-to-most implementation roadmap 1.1.1  
 **Scope:** PostgreSQL persistent-data requirements only  
-**Status:** Approved  
+**Status:** Approved as amended by PRA-029  
 **Approved by/date:** Abdul, 2026-08-15  
-**Approval source:** Explicit DB-01 approval in the project conversation  
+**Approval source:** Explicit DB-01 approval followed by explicit operating-hours override P5-HRS-01 in the project conversation  
 **Code status:** No SQL or application code generated
 
 ## 1. Purpose and boundary
@@ -40,7 +42,8 @@ Requirement references use SRS `FR-*` and `NFR-*`, rubric `RUB-*` from the basel
 | Reservation occupancy | Immutable booked start plus immutable booked end/duration fact | Current duration configuration must not recalculate an existing reservation |
 | Assigned tables | Persistent association of one reservation with one or more restaurant tables | No table sharing, partial assignment, customer-selected tables, or adjacency model |
 | Restaurant table inventory | Exactly 30 Version 1 persistent table records with individual capacities | No additional active Version 1 tables |
-| Reservation configuration | Current PostgreSQL business configuration values | No configuration history or effective-dated versions |
+| Reservation configuration | Current PostgreSQL scalar business-configuration values | No configuration history or effective-dated versions |
+| Recurring weekly operating hours | One current PostgreSQL-backed schedule seeded to the SRS hours | No hard-coded Flask/React authority, holiday/date-specific exceptions, or schedule history |
 | Availability | Derived from current request, fixed/configured rules, retained reservations, and assigned tables | No independent availability ledger or stored slot-status record |
 | Reservation retry identity | Database-generated, stored, versioned opaque fingerprint plus verification of its underlying reservation facts | No client-generated key and no newsletter/optional-customer data in the fingerprint |
 
@@ -62,7 +65,7 @@ Requirement references use SRS `FR-*` and `NFR-*`, rubric `RUB-*` from the basel
 | CUS-10 Submitted newsletter action | User intent `subscribe`, `unsubscribe`, or no change during a request. Sources: PRA-019 to PRA-021, PRA-027. | Explicit request state; not part of reservation fingerprint. | TRN; outcome becomes CUS-09, not a history record. | Applied idempotently. On a newly committed reservation, applied atomically; on exact reservation retry, ignored for mutation and current CUS-09 is returned. | PostgreSQL processes it transactionally but does not retain it as an event. Flask conveys intent; React or future clients submit it. |
 | CUS-11 Customer created/updated timestamps | Potential technical metadata for diagnostics/maintenance. No authoritative business requirement mandates it. | Optional technical design decision; defaults/constraints not approved. | TID. | If adopted later, must not become subscription-history or profile-audit functionality. | Prompt 6 may decide whether technical timestamps are justified. Flask/React have no current business need for them. |
 
-### 4.2 PostgreSQL reservation configuration and fixed schedule
+### 4.2 PostgreSQL reservation configuration and recurring weekly schedule
 
 | ID / data item | Business meaning and authoritative source | Required/default/approved validation | Classification and source of truth | Lifecycle, identity, and relationships | PostgreSQL responsibility and future consumers |
 |---|---|---|---|---|---|
@@ -71,7 +74,7 @@ Requirement references use SRS `FR-*` and `NFR-*`, rubric `RUB-*` from the basel
 | CFG-03 Maximum advance-booking window | Inclusive future calendar-date limit. Source: PRA-010. | Required current value; default 60 days; allowed 1-365. | PBC. | Mutable prospectively; affects new availability/booking requests only. | PostgreSQL stores/validates it. Flask calculates date bounds in restaurant time; React uses returned bounds/validation. |
 | CFG-04 Same-day minimum lead time | Minimum time between authoritative current time and same-day start. Source: PRA-011. | Required current value; default 120 minutes; allowed 0-1440. | PBC. | Mutable prospectively; existing bookings unchanged. | PostgreSQL stores/validates it. Flask applies authoritative clock; React displays resulting availability. |
 | CFG-05 Restaurant timezone | IANA zone governing reservation rules and display. Source: PRA-012. | Required current value; default `America/New_York`; valid IANA identifier. | PBC. | Relatively fixed; changes apply prospectively and must not reinterpret stored reservation instants. No history required. | PostgreSQL stores current zone and supports unambiguous reservation facts. Flask calculates/displays restaurant-local values; React renders those values regardless of browser zone. |
-| FIX-01 Weekly operating hours | Monday-Saturday 5:00 PM-11:00 PM; Sunday 5:00 PM-9:00 PM. Sources: FR-02; PRA-008, PRA-009. | Required exactly as SRS. | FIX; not PostgreSQL business configuration in Version 1. | Stable Version 1 rule. No holiday/exception records. | PostgreSQL need not store it as business data. Flask applies the fixed schedule; React displays hours and returned slots. |
+| FIX-01 Recurring weekly operating-hours schedule | Authoritative weekly opening/closing schedule used for display, slot generation, and closing validation. The stable DB-01 identifier is retained although PRA-029 reclassified the item. Sources: FR-02, FR-07, FR-18; PRA-008, PRA-009, PRA-029. | Required PostgreSQL seed: Monday-Saturday 5:00 PM-11:00 PM; Sunday 5:00 PM-9:00 PM. Current schedule must provide sufficient opening/closing information for every weekday; exact logical validation and supported daily-period structure are deferred. | PBC under PRA-029, not FIX; dedicated operating-hours conceptual home. | Current recurring schedule may change prospectively in controlled testing/demonstration without changing Flask logic. Existing reservations remain unchanged. No holiday/date-specific exception or schedule-history data is active in Version 1. | PostgreSQL stores/seeds the authoritative schedule. Flask reads it for slot generation/validation and exposes it; React receives current hours through Flask rather than owning hard-coded authoritative values. |
 | CFG-06 Configuration history/effective dates | Historical versions of settings. Sources: FE-016. | Not approved for Version 1. | FE. | No records or reservation-to-version relationship. | Excluded. Current configuration plus immutable booked facts are sufficient. |
 
 ### 4.3 Restaurant table inventory and capacity
@@ -117,7 +120,7 @@ Requirement references use SRS `FR-*` and `NFR-*`, rubric `RUB-*` from the basel
 |---|---|---|---|---|---|
 | AVL-01 Availability request date | Date for which slots are requested. Sources: FR-06, FR-07; PRA-008, PRA-010 to PRA-012, PRA-025. | Required request input; restaurant-local; within inclusive current-through-window dates. | TRN. | Exists for one availability request; no availability history. | PostgreSQL supplies settings/inventory/reservations; Flask validates/calculates; React collects. |
 | AVL-02 Availability request party size | Party used to evaluate table combinations. Sources: FR-06, FR-07; PRA-015, PRA-023, PRA-025. | Required request integer 1 through current derived maximum. | TRN; becomes RSV-05 only after successful booking. | Exists for request; changing it invalidates selected slot. | PostgreSQL evaluates capacity; Flask validates; React collects. |
-| AVL-03 Legitimate daily start slots | Every interval-aligned start that fits hours and ends by close. Sources: PRA-006 to PRA-012, PRA-025. | Derived from date, fixed schedule, interval, duration, lead, window, and timezone. | DRV; not persisted slot rows. | Recomputed per request/current clock/configuration. | PostgreSQL provides config and conflict data; exact calculation allocation between PostgreSQL/Flask is designed later. Flask returns list; React renders all. |
+| AVL-03 Legitimate daily start slots | Every interval-aligned start that fits hours and ends by close. Sources: PRA-006 to PRA-012, PRA-025, PRA-029. | Derived from date, current PostgreSQL recurring schedule, interval, duration, lead, window, and timezone. | DRV; not persisted slot rows. | Recomputed per request/current clock/configuration. | PostgreSQL provides the current schedule, scalar configuration, and conflict data; exact calculation allocation between PostgreSQL/Flask is designed later. Flask returns the list; React renders it. |
 | AVL-04 Slot availability flag | Whether at least one exclusive capacity-sufficient table combination is currently free. Sources: FR-07 to FR-09; PRA-015, PRA-018, PRA-025. | Boolean per derived slot/party request; provisional until booking revalidation. | DRV; not persisted. | Recomputed from retained reservations/assignments; may become stale immediately. | PostgreSQL authoritatively supports revalidation. Flask returns provisional flag; React enables/disables accordingly. |
 | AVL-05 Free-table set | Current tables having no overlapping assignment for the requested half-open interval. Sources: PRA-013, PRA-018. | Derived for a request; back-to-back is free. | DRV/TRN. | Transaction/request scoped; never a durable free/busy status. | PostgreSQL derives under booking concurrency rules. Flask requests result; React never receives the internal set before confirmation. |
 | AVL-06 Eligible table combinations | Capacity-sufficient combinations from the free-table set. Sources: PRA-015, PRA-018. | Rank by minimum table count, then least unused seats, then random tie. | DRV/TRN. | Request/transaction scoped. Only winning associations persist. | PostgreSQL derives/selects authoritatively. Flask/React do not duplicate logic. |
@@ -187,7 +190,7 @@ These relationships organize requirements only; they do not finalize entities or
 | Current newsletter status | Retain with customer and overwrite with the latest committed Boolean state; no event history. |
 | Reservation and assignments | Retain through normal operation, including after the interval passes; remove only through controlled nonproduction reset. |
 | Reservation fingerprint | Retain for the reservation lifetime to support exact retry. |
-| Current configuration/table capacities | Retain current values; no version history. Controlled reinitialization may restore known defaults. |
+| Current scalar configuration, recurring operating hours, and table capacities | Retain current values; no version history. Controlled reinitialization restores the approved defaults, including the SRS weekly schedule. |
 | Availability/candidate/slot data | Do not retain; recompute. |
 | Confirmation-email input | Do not retain. |
 
@@ -200,7 +203,7 @@ These relationships organize requirements only; they do not finalize entities or
 | SRS Time Slot is singular; approved occupancy has start and end/duration. | Preserve start plus an immutable booked end/duration fact. | It makes the SRS time slot operational and prevents overlap; it does not change the selected start. |
 | SRS Table Number is singular; approved reservations may require multiple tables. | Preserve one or more specific table assignments. A single-table booking still has one table number. | Multi-table capability extends capacity while maintaining the SRS's concrete table assignment. |
 | SRS assumes 30 tables but provides no table-inventory or capacity fields. | Persist exactly 30 current table identities and individual capacities, initially four. | It operationalizes the required 30-table availability model without activating more tables. |
-| SRS does not identify configurable interval/duration/window/lead/timezone data. | Persist the five approved current business settings. | The SRS leaves these rules undefined; configuration makes its validity/availability requirements deterministic. |
+| SRS does not identify configurable interval/duration/window/lead/timezone data or the storage representation of its weekly hours. | Persist the five approved scalar settings plus the authoritative recurring weekly schedule seeded to the SRS hours. | The scalar rules close SRS gaps, while database-backed hours preserve the literal SRS schedule and avoid duplicate Flask/React authority. |
 | SRS newsletter signup may suggest a subscriber list, but Customers already includes Newsletter Signup. | Keep the current Boolean only on the customer and retain the dedicated form. | It satisfies signup/storage while preventing contradictory duplicate sources and additively supports unsubscribe. |
 | SRS does not define retry correlation. | Persist a database-generated opaque fingerprint and version with the reservation. | It strengthens confirmation and double-booking protection without changing the visible booking requirements. |
 | SRS does not explicitly require stable confirmation details beyond success. | Use authoritative reservation/customer/assignment data to assemble the approved confirmation. | It provides evidence and user clarity without duplicating business facts. |
@@ -214,7 +217,7 @@ Authoritative availability requires:
 
 - requested restaurant-local date and party size (transient);
 - current authoritative time (transient);
-- fixed weekly hours;
+- current PostgreSQL recurring weekly operating hours seeded to the SRS baseline;
 - current interval, duration, window, lead-time, and timezone configuration;
 - exactly 30 table identities and capacities;
 - retained reservation immutable intervals;
@@ -256,7 +259,7 @@ Names, email text, middle initial, phone, newsletter action/status, end time, co
 The following do not represent unresolved business requirements and must not be finalized in DB-01:
 
 - exact conceptual entities and whether configuration is one record or several;
-- exact tables, columns, PostgreSQL data types, keys, constraints, indexes, and naming conventions;
+- exact tables, columns, PostgreSQL data types, keys, constraints, indexes, and naming conventions, including the recurring-operating-hours relation;
 - representation of normalized email/name/phone comparison values;
 - representation of the immutable booked end/duration fact;
 - exact fingerprint/hash algorithm, storage format, algorithm-version representation, and collision-verification mechanism;
@@ -286,6 +289,7 @@ The following do not represent unresolved business requirements and must not be 
 | General customer contact-update history | FE-014; PRA-019 |
 | Retroactive reservation/configuration recalculation data | FE-015; PRA-026 |
 | Effective-dated configuration versions | FE-016; PRA-026 |
+| Holiday/date-specific operating-hour exceptions or schedule history | FE-009, FE-016; PRA-029 |
 | Production retention/archive/anonymization/deletion policy records | FE-017; PRA-028 |
 | Independent availability ledger or preallocated slot rows | Availability is derived and revalidated |
 | Separate newsletter subscriber source | PRA-020; Customers is authoritative |
@@ -306,23 +310,24 @@ The following do not represent unresolved business requirements and must not be 
 | NFR-05 | Immutable intervals, assignments, fingerprint, uniqueness/exclusivity, atomic behavior later |
 | NFR-06 | Safe response/log behavior; no technical error data is required as business persistence |
 | NFR-09 | Traceable definitions and later data dictionary/migrations; optional technical metadata deferred |
-| PRA-006 to PRA-012 | Five PostgreSQL settings, fixed hours, and derived date/time boundaries |
+| PRA-006 to PRA-012 | Five PostgreSQL scalar settings, schedule-dependent rules, and derived date/time boundaries |
 | PRA-013 to PRA-018 | Immutable half-open intervals, table capacity/inventory, derived availability, exclusive assignments |
 | PRA-019 to PRA-021 | Customer identity, structured name, optional phone, single authoritative current newsletter state |
 | PRA-022 to PRA-025 | Immutable active reservations, validation inputs, confirmation assembly, provisional slot display |
 | PRA-026 | Prospective configuration behavior and controlled repeatable reset requirement |
 | PRA-027 | Versioned database fingerprint, exact retry, and newsletter separation |
 | PRA-028 | Retention through normal operation and no automatic purge/archive |
+| PRA-029 | PostgreSQL-backed recurring weekly schedule seeded to the SRS hours; no hard-coded Flask/React authority or holiday exceptions |
 | RUB-01, RUB-05 to RUB-07 | Complete SRS data, working forms, full-stack integration, direct database effects, sophisticated logic |
 
 ## 12. Future PostgreSQL, Flask, and React information needs
 
 | Consumer | Required information from this inventory |
 |---|---|
-| PostgreSQL implementation | Durable customer/reservation/table/configuration/assignment/fingerprint facts; derivation inputs; integrity/lifecycle rules; reset baseline. |
-| Flask API | Current limits/timezone; customer match and newsletter state; daily derived slot statuses; authoritative booking/confirmation/retry outcomes; current newsletter state on retry. |
-| React/JSX | Dynamic party maximum; restaurant-local date/time and full slot list; validation outcomes; async newsletter state; reservation confirmation reference, start/end, party size, all table numbers, and current newsletter state. |
-| Demonstration/testing | Known 30 x 4 initialization; repeatable customers/reservations; direct queries showing newsletter and reservation effects; controlled conflicts; safe reset/reinitialization. |
+| PostgreSQL implementation | Durable customer/reservation/table/configuration/operating-hours/assignment/fingerprint facts; derivation inputs; integrity/lifecycle rules; reset baseline. |
+| Flask API | Current limits/timezone/weekly hours; customer match and newsletter state; daily derived slot statuses; authoritative booking/confirmation/retry outcomes; current newsletter state on retry. |
+| React/JSX | API-supplied current hours, dynamic party maximum, restaurant-local date/time and full slot list; validation outcomes; async newsletter state; reservation confirmation reference, start/end, party size, all table numbers, and current newsletter state. |
+| Demonstration/testing | Known SRS recurring schedule, 30 x 4 initialization, repeatable customers/reservations, alternate isolated weekly schedules, direct queries showing data effects, controlled conflicts, and safe reset/reinitialization. |
 
 ## 13. Remaining unresolved persistent-data requirements
 
@@ -330,7 +335,8 @@ No genuinely unresolved persistent-data business requirement remains after appro
 
 - P4-LIF-01, recorded as PRA-026;
 - P4-RTY-01, recorded as PRA-027;
-- P4-RET-01, recorded as PRA-028.
+- P4-RET-01, recorded as PRA-028;
+- P5-HRS-01, recorded as PRA-029.
 
 The items in Section 9 are intentionally deferred technical design choices, not business-rule ambiguities and not authorization to add scope.
 
@@ -343,7 +349,7 @@ The items in Section 9 are intentionally deferred technical design choices, not 
 | Customers and structured names covered | Complete |
 | Canonical email, confirmation email, and optional phone classified | Complete |
 | Current newsletter source of truth and lifecycle covered | Complete |
-| All approved PostgreSQL settings covered | Complete |
+| All approved PostgreSQL settings and recurring weekly hours covered | Complete |
 | Exactly 30 tables and individual capacities covered | Complete |
 | Reservation start/end/party/fingerprint covered | Complete |
 | One-or-more exclusive assignments covered | Complete |
@@ -360,11 +366,12 @@ The items in Section 9 are intentionally deferred technical design choices, not 
 | Item | Recorded value |
 |---|---|
 | Increment | DB-01 — Persistent-data requirements |
-| Status | Approved |
+| Status | Approved as amended by PRA-029 |
 | Approver | Abdul |
 | Approval date | 2026-08-15 |
-| Approval source | Explicit DB-01 approval in the project conversation |
+| Approval source | Explicit DB-01 approval and later P5-HRS-01 operating-hours override in the project conversation |
 | Next authorized increment | Prompt 5 / DB-02 — Conceptual data modeling |
+| Artifact regeneration | `2026-08-15-PRA029-R1`; packaging-only revision with no change to approved requirements |
 
 DB-01 approval authorizes Prompt 5 / DB-02 conceptual data modeling. It does not approve a PostgreSQL schema, SQL, migrations, transaction mechanism, Flask contract, or React design.
 

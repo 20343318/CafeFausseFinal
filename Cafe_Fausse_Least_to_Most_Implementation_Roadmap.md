@@ -1,8 +1,10 @@
 # Cafe Fausse Least-to-Most Implementation Roadmap
 
-**Roadmap version:** 1.0  
+**Roadmap version:** 1.1.1  
 **Established:** 2026-08-14  
-**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, and `Cafe_Fausse_Project_Requirements_Addendum.md` version 2.0  
+**Last amended:** 2026-08-15  
+**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
+**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, and `Cafe_Fausse_Project_Requirements_Addendum.md` version 2.2.1  
 **Target:** Rubric score 5  
 **Required architecture order:** PostgreSQL -> Flask REST API -> React/JSX UI -> integration  
 **Status:** Planning document only; no implementation code is contained in this roadmap
@@ -21,7 +23,7 @@ The following rules govern execution:
 6. PostgreSQL and Flask remain authoritative for data integrity and reservation decisions. React validation and availability displays are usability aids.
 7. All tests use isolated test data. Demonstration data is separate and repeatable.
 8. Maintain traceability from SRS, rubric, and PRA requirements to artifacts and evidence throughout—not as a final reconstruction exercise.
-9. Future Enhancements FE-001 through FE-014 in Addendum 2.0 are inactive and excluded from Version 1.
+9. Future Enhancements FE-001 through FE-017 in Addendum 2.2 are inactive and excluded from Version 1.
 10. Avoid unnecessary enterprise mechanisms: no microservices, event bus, distributed cache, customer authentication, administrative portal, CI/CD platform, or cloud infrastructure is required for Version 1.
 
 ## 2. Phase and gate summary
@@ -40,33 +42,33 @@ No Flask application implementation begins until DB-07 is approved.
 ### DB-01 - Persistent-data requirements and lifecycle inventory
 
 - **Objective:** Derive every persistent datum, relationship, lifecycle rule, and source-of-truth rule before selecting database structures.
-- **Requirements addressed:** SRS FR-06 to FR-08 and FR-15 to FR-18; NFR-05 and NFR-09; baseline DB-01 to DB-08; PRA-004 to PRA-025, especially PRA-006 to PRA-022.
-- **Dependencies:** Approved SRS, rubric, Project Requirements Baseline, and Addendum 2.0.
-- **Artifacts produced:** Approved persistent-data inventory; required/optional data matrix; lifecycle and ownership matrix; explicit mapping of structured names to SRS Customer Name; explicit mapping of one-or-more assigned tables to SRS Table Number.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-08, and FR-15 to FR-18; NFR-05 and NFR-09; baseline DB-01 to DB-08; PRA-004 to PRA-029, especially PRA-006 to PRA-022 and PRA-029.
+- **Dependencies:** Approved SRS, rubric, Project Requirements Baseline, and Addendum 2.2.
+- **Artifacts produced:** Approved persistent-data inventory; required/optional data matrix; lifecycle and ownership matrix; database-backed recurring-hours requirement; explicit mapping of structured names to SRS Customer Name; explicit mapping of one-or-more assigned tables to SRS Table Number.
 - **Unit tests required:** Define database-test cases for field presence, required/optional values, normalization inputs, derived values, and lifecycle transitions; no executable database tests yet.
 - **Integration tests required:** Define future database-to-Flask data scenarios for customer reuse, newsletter state, reservations, and multi-table assignments.
 - **Manual verification:** Trace every persistent datum to at least one SRS, rubric, or PRA requirement; verify no separate newsletter subscriber source is introduced.
-- **Completion criteria:** The inventory covers customers, structured names, optional phone, newsletter state, restaurant configuration, exactly 30 current tables, individual capacities, reservation start/end/party size, and all assigned tables, with no unresolved persistence-level business ambiguity.
+- **Completion criteria:** The inventory covers customers, structured names, optional phone, newsletter state, scalar restaurant configuration, authoritative recurring weekly hours, exactly 30 current tables, individual capacities, reservation start/end/party size, and all assigned tables, with no unresolved persistence-level business ambiguity.
 - **Approval checkpoint:** Approve the persistent-data analysis before conceptual modeling.
 
 ### DB-02 - Conceptual data model
 
 - **Objective:** Define the smallest normalized conceptual model that can express the approved data and relationships without choosing PostgreSQL implementation details prematurely.
-- **Requirements addressed:** SRS FR-17 and FR-18; NFR-05 and NFR-09; PRA-015 to PRA-022; rubric database integration and direct database-effect criteria.
+- **Requirements addressed:** SRS FR-02, FR-07, FR-17, and FR-18; NFR-05 and NFR-09; PRA-008, PRA-009, PRA-015 to PRA-022, and PRA-029; rubric database integration and direct database-effect criteria.
 - **Dependencies:** DB-01 approved.
-- **Artifacts produced:** Conceptual entity-relationship model; entity definitions; relationship/cardinality list; conceptual uniqueness, exclusivity, and lifecycle constraints; traceability annotations.
-- **Unit tests required:** Model-review cases proving one customer per normalized email, exactly 30 Version 1 tables, one reservation-to-many assigned tables, and one current newsletter state per customer.
+- **Artifacts produced:** Six-concept entity-relationship model including Restaurant Operating Hours; entity definitions; relationship/cardinality list; conceptual uniqueness, exclusivity, and lifecycle constraints; traceability annotations.
+- **Unit tests required:** Model-review cases proving one customer per normalized email, one authoritative recurring weekday schedule seeded to the SRS hours, exactly 30 Version 1 tables, one reservation-to-many assigned tables, and one current newsletter state per customer.
 - **Integration tests required:** Scenario walkthroughs showing how a single-table reservation, multi-table reservation, newsletter-only customer, and existing-customer reservation traverse the model.
 - **Manual verification:** Confirm that structured name fields collectively satisfy Customer Name and multi-table relationships add to rather than remove the SRS Table Number requirement.
-- **Completion criteria:** Every DB-01 datum has exactly one authoritative conceptual home; no unnecessary duplicate entity or future-enhancement entity exists.
+- **Completion criteria:** Every DB-01 datum has exactly one authoritative conceptual home; recurring weekly hours belong to PostgreSQL and are not duplicated as Flask/React authority; no unnecessary duplicate entity or future-enhancement entity exists.
 - **Approval checkpoint:** Approve the conceptual model before logical schema design.
 
 ### DB-03 - Logical PostgreSQL schema and integrity design
 
 - **Objective:** Convert the conceptual model into an implementation-ready logical PostgreSQL design with types, keys, nullability, uniqueness, checks, indexes, and configuration representation.
-- **Requirements addressed:** SRS FR-06 to FR-08 and FR-15 to FR-18; NFR-05 and NFR-09; PRA-005 to PRA-023.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-08, and FR-15 to FR-18; NFR-05 and NFR-09; PRA-005 to PRA-023 and PRA-029.
 - **Dependencies:** DB-02 approved.
-- **Artifacts produced:** Logical schema specification; column/data-type catalogue; key and constraint catalogue; index rationale; configuration-value constraints; migration ordering; schema-to-requirement traceability.
+- **Artifacts produced:** Logical schema specification; column/data-type catalogue; key and constraint catalogue; index rationale; configuration and recurring-operating-hours constraints; migration ordering; schema-to-requirement traceability.
 - **Unit tests required:** Planned tests for all nullability, range, format, uniqueness, referential-integrity, configuration-value, and exactly-30 initialization rules.
 - **Integration tests required:** Planned tests proving valid records can support the Flask use cases and invalid direct writes cannot bypass critical integrity rules.
 - **Manual verification:** Inspect coverage of SRS minimum Customers and Reservations data plus the approved additive fields/relationships.
@@ -87,23 +89,23 @@ No Flask application implementation begins until DB-07 is approved.
 
 ### DB-05 - Database foundation implementation
 
-- **Objective:** Implement the smallest reproducible database foundation: migrations, customers, business configuration, and exactly 30 initialized tables.
-- **Requirements addressed:** SRS FR-16 and FR-17; NFR-05 and NFR-09; PRA-005, PRA-006, PRA-007, PRA-010 to PRA-012, PRA-015 to PRA-017, PRA-019 to PRA-021.
+- **Objective:** Implement the smallest reproducible database foundation: migrations, customers, scalar business configuration, recurring weekly operating hours, and exactly 30 initialized tables.
+- **Requirements addressed:** SRS FR-02, FR-07, FR-16, FR-17, and FR-18; NFR-05 and NFR-09; PRA-005 to PRA-012, PRA-015 to PRA-017, PRA-019 to PRA-021, and PRA-029.
 - **Dependencies:** DB-03 and DB-04 approved; PostgreSQL development/test environments available.
-- **Artifacts produced:** Versioned database migrations; customer/configuration/table objects; initial business configuration; 30 table records at capacity four; rollback/reset instructions; database unit-test fixtures.
-- **Unit tests required:** Migration up/down or clean rebuild; required constraints; normalized-email uniqueness; name/phone/newsletter integrity; permitted configuration values; exactly 30 bookable tables; initial total capacity 120.
+- **Artifacts produced:** Versioned database migrations; customer/configuration/operating-hours/table objects; SRS recurring-hours seed; initial scalar business configuration; 30 table records at capacity four; rollback/reset instructions; database unit-test fixtures.
+- **Unit tests required:** Migration up/down or clean rebuild; required constraints; normalized-email uniqueness; name/phone/newsletter integrity; permitted configuration values; seven recurring weekday rules matching the SRS seed; exactly 30 bookable tables; initial total capacity 120.
 - **Integration tests required:** Rebuild a clean test database from migrations and verify expected seed/configuration state through database access available to the future Flask layer.
-- **Manual verification:** Inspect tables, constraints, settings, and the 30 x 4 initialization using direct PostgreSQL queries.
+- **Manual verification:** Inspect the SRS operating-hours seed, tables, constraints, scalar settings, and the 30 x 4 initialization using direct PostgreSQL queries.
 - **Completion criteria:** A clean database can be created reproducibly and all foundation tests pass; no reservation implementation exists yet.
 - **Approval checkpoint:** Approve foundation persistence before adding reservations.
 
 ### DB-06 - Reservation persistence, allocation, and concurrency implementation
 
-- **Objective:** Add reservation storage and exclusive table assignments, then implement the approved atomic availability/allocation behavior from simplest success to concurrent conflict.
-- **Requirements addressed:** SRS FR-06 to FR-09, FR-17, FR-18; NFR-05; PRA-007 to PRA-018, PRA-022, PRA-023; rubric sophisticated logic and direct database effects.
+- **Objective:** Add reservation storage and exclusive table assignments, then implement the approved atomic database-backed-schedule availability/allocation behavior from simplest success to concurrent conflict.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-09, FR-17, FR-18; NFR-05; PRA-007 to PRA-018, PRA-022, PRA-023, PRA-029; rubric sophisticated logic and direct database effects.
 - **Dependencies:** DB-05 complete.
 - **Artifacts produced:** Reservation and assignment database objects; authoritative availability/allocation database operations; indexes; deterministic test hooks for random tie selection where needed; database test dataset.
-- **Unit tests required:** Valid single-table insert; valid multi-table insert; start/end/party constraints; half-open overlap; back-to-back acceptance; allocation priorities; random tie eligibility; same-customer overlap; exact retry; invalid configuration dependency.
+- **Unit tests required:** Valid single-table insert; valid multi-table insert; current operating-hours boundaries; alternate recurring test schedule; start/end/party constraints; half-open overlap; back-to-back acceptance; allocation priorities; random tie eligibility; same-customer overlap; exact retry; invalid configuration dependency.
 - **Integration tests required:** Concurrent competing bookings; all-or-none multi-table assignment; rollback of reservation-linked newsletter change; no unused-seat sharing; no overlapping table participation.
 - **Manual verification:** Execute representative transactions and directly inspect customer, reservation, assignment, and preference state before/after commit and rollback.
 - **Completion criteria:** All correctness and concurrency tests pass repeatedly; no conflicting or partial committed state is observable.
@@ -112,12 +114,12 @@ No Flask application implementation begins until DB-07 is approved.
 ### DB-07 - PostgreSQL verification and phase gate
 
 - **Objective:** Prove the PostgreSQL layer is complete, reproducible, performant enough for the required workflows, and ready to serve Flask.
-- **Requirements addressed:** All database-applicable SRS requirements; NFR-02, NFR-05, NFR-09; PRA-001 to PRA-023; rubric PostgreSQL integration, sophisticated logic, and database-demonstration evidence.
+- **Requirements addressed:** All database-applicable SRS requirements; NFR-02, NFR-05, NFR-09; PRA-001 to PRA-029 as applicable; rubric PostgreSQL integration, sophisticated logic, and database-demonstration evidence.
 - **Dependencies:** DB-01 through DB-06 complete.
-- **Artifacts produced:** PostgreSQL verification report; schema/data dictionary; migration/seed/reset guide; test results; representative query plans/timing results; updated traceability matrix; known-limitations record.
+- **Artifacts produced:** PostgreSQL verification report; schema/data dictionary; SRS operating-hours seed evidence; migration/seed/reset guide; test results; representative query plans/timing results; updated traceability matrix; known-limitations record.
 - **Unit tests required:** Full `UT-DB-*` suite from a clean database, including constraints and configuration boundaries.
 - **Integration tests required:** Full database transaction/concurrency suite under repeatable parallel attempts and clean-reset verification.
-- **Manual verification:** Rebuild from nothing, inspect exactly 30 tables and settings, create single/multi-table reservations, show overlap rejection and back-to-back acceptance, and verify direct database effects.
+- **Manual verification:** Rebuild from nothing, inspect the SRS recurring schedule, exactly 30 tables, and scalar settings; create single/multi-table reservations; show schedule-boundary and overlap behavior; and verify direct database effects.
 - **Completion criteria:** Clean rebuild succeeds; all PostgreSQL tests pass; required operations meet an agreed portion of the two-second submission budget; evidence maps to every database-applicable requirement; no blocking defect remains.
 - **Approval checkpoint:** **Hard Gate 1.** Explicitly approve PostgreSQL before any Flask implementation begins.
 
@@ -128,9 +130,9 @@ No React implementation begins until API-09 is approved.
 ### API-01 - Backend operation inventory
 
 - **Objective:** Derive the minimum Flask operations and use cases from the approved database behavior without defining endpoint syntax yet.
-- **Requirements addressed:** SRS FR-06 to FR-09, FR-15, FR-16, FR-18; NFR-02, NFR-05, NFR-06, NFR-09; baseline API-01 to API-07; PRA-006 to PRA-025.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-09, FR-15, FR-16, FR-18; NFR-02, NFR-05, NFR-06, NFR-09; baseline API-01 to API-07; PRA-006 to PRA-025 and PRA-029.
 - **Dependencies:** DB-07 approved.
-- **Artifacts produced:** Operation catalogue for configuration/limits, daily availability, customer/newsletter-status lookup, newsletter preference setting, reservation creation/retry, and health/readiness; authorization/out-of-scope statement.
+- **Artifacts produced:** Operation catalogue for current recurring hours, configuration/limits, daily availability, customer/newsletter-status lookup, newsletter preference setting, reservation creation/retry, and health/readiness; authorization/out-of-scope statement.
 - **Unit tests required:** Define success, validation, not-found/not-applicable, conflict, unavailable, retry, database-failure, and timeout cases per operation.
 - **Integration tests required:** Map every operation to required PostgreSQL behavior and database fixture state.
 - **Manual verification:** Confirm no cancellation, modification, authentication, administration, or messaging operation is introduced.
@@ -140,9 +142,9 @@ No React implementation begins until API-09 is approved.
 ### API-02 - Flask REST contract
 
 - **Objective:** Define stable HTTP methods, paths, request/response fields, error codes, status codes, time representation, and retry semantics.
-- **Requirements addressed:** SRS external/communication interfaces, FR-06 to FR-09, FR-15, FR-16, FR-18; NFR-06; PRA-012, PRA-014, PRA-019 to PRA-025.
+- **Requirements addressed:** SRS external/communication interfaces, FR-02, FR-06 to FR-09, FR-15, FR-16, FR-18; NFR-06; PRA-012, PRA-014, PRA-019 to PRA-025, PRA-029.
 - **Dependencies:** API-01 approved; DB-07 contract available.
-- **Artifacts produced:** REST contract specification; normalized field definitions; error envelope; confirmation representation; complete-slot availability representation; idempotency/retry behavior; privacy/exposure rules.
+- **Artifacts produced:** REST contract specification; current recurring-hours representation; normalized field definitions; error envelope; confirmation representation; complete-slot availability representation; idempotency/retry behavior; privacy/exposure rules.
 - **Unit tests required:** Contract-schema cases for every request/response variant, including all-slot status, authoritative newsletter state, multi-table confirmation, and safe nontechnical errors.
 - **Integration tests required:** Contract-to-database mapping cases for success, stale availability, same-customer conflict, full slot, mismatch, and safe retry.
 - **Manual verification:** Review that availability responses expose no customer, reservation, table-assignment, or unnecessary capacity details.
@@ -152,7 +154,7 @@ No React implementation begins until API-09 is approved.
 ### API-03 - Flask architecture, configuration, and test strategy
 
 - **Objective:** Choose the smallest modular Flask structure and testing approach that supports the approved contract and database layer.
-- **Requirements addressed:** SRS NFR-02, NFR-06, NFR-09 and software interfaces; PRA-001 to PRA-005, PRA-012, PRA-023, PRA-024; rubric correct Flask integration.
+- **Requirements addressed:** SRS NFR-02, NFR-06, NFR-09 and software interfaces; PRA-001 to PRA-005, PRA-012, PRA-023, PRA-024, PRA-029; rubric correct Flask integration.
 - **Dependencies:** API-02 approved.
 - **Artifacts produced:** Backend module/responsibility diagram; database-access decision; configuration/environment catalogue; connection/transaction ownership rules; exception-to-response map; safe logging plan; API test plan.
 - **Unit tests required:** Planned tests for configuration loading, validation, service decisions, error mapping, log redaction, and clock/timezone abstraction.
@@ -199,11 +201,11 @@ No React implementation begins until API-09 is approved.
 
 ### API-07 - Reservation-slot discovery
 
-- **Objective:** Implement authoritative daily slot generation and availability status for a selected date and party size.
-- **Requirements addressed:** SRS FR-06 to FR-08 and FR-18; NFR-02, NFR-05, NFR-06; PRA-006 to PRA-013, PRA-015 to PRA-018, PRA-023, PRA-025.
+- **Objective:** Implement authoritative daily slot generation and availability status for a selected date and party size using the current PostgreSQL recurring schedule.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-08 and FR-18; NFR-02, NFR-05, NFR-06; PRA-006 to PRA-013, PRA-015 to PRA-018, PRA-023, PRA-025, PRA-029.
 - **Dependencies:** API-06 complete; approved database availability operations.
 - **Artifacts produced:** Availability operation/endpoint; full-day slot response; validation/error behavior; controlled-clock and inventory fixtures; tests.
-- **Unit tests required:** Weekday/Sunday hours; interval alignment; duration/closing; advance window; same-day lead; timezone/DST; party bounds; available/unavailable marking; no arbitrary slot; safe payload exposure.
+- **Unit tests required:** SRS seed hours; alternate recurring test schedules; weekday/Sunday lookup; interval alignment; duration/closing; advance window; same-day lead; timezone/DST; party bounds; available/unavailable marking; no arbitrary slot; safe payload exposure.
 - **Integration tests required:** Compare API results with database inventory across empty, partially occupied, fragmented, multi-table, and fully unavailable dates.
 - **Manual verification:** Request weekday, Sunday, boundary, same-day, and full/fragmented examples and inspect complete slot schedules.
 - **Completion criteria:** Every legitimate daily start is returned exactly once with correct provisional status, and invalid date/party inputs are safely rejected.
@@ -224,7 +226,7 @@ No React implementation begins until API-09 is approved.
 ### API-09 - Flask verification and phase gate
 
 - **Objective:** Verify the entire Flask contract, quality attributes, logging, and database integration before React implementation.
-- **Requirements addressed:** All API-applicable SRS requirements; NFR-02, NFR-05, NFR-06, NFR-09; PRA-001 to PRA-025; rubric Flask/database/form integration.
+- **Requirements addressed:** All API-applicable SRS requirements; NFR-02, NFR-05, NFR-06, NFR-09; PRA-001 to PRA-029 as applicable; rubric Flask/database/form integration.
 - **Dependencies:** API-01 through API-08 complete.
 - **Artifacts produced:** Flask verification report; passing unit/integration results; contract examples; performance evidence; logging/redaction evidence; updated traceability; known-limitations record.
 - **Unit tests required:** Full `UT-API-*` suite for configuration, validation, services, errors, clock, randomness test seam, retry semantics, and log redaction.
@@ -240,9 +242,9 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 ### UI-01 - Content, asset, and React architecture analysis
 
 - **Objective:** Inventory required content/assets and define a minimal React page/component architecture before visual implementation.
-- **Requirements addressed:** SRS FR-01 to FR-16, user-interface requirements, NFR-03, NFR-04, NFR-07 to NFR-09; rubric five pages, excellent UI/UX, images, and Flexbox/Grid; PRA-001 to PRA-004.
+- **Requirements addressed:** SRS FR-01 to FR-16, user-interface requirements, NFR-03, NFR-04, NFR-07 to NFR-09; rubric five pages, excellent UI/UX, images, and Flexbox/Grid; PRA-001 to PRA-004 and PRA-029.
 - **Dependencies:** API-09 approved; supplied image collection available or asset gaps explicitly recorded.
-- **Artifacts produced:** Content matrix; asset inventory and attribution/licensing record; page map; component-responsibility plan; routing decision; shared-layout plan; deferred copy/asset decisions requiring approval.
+- **Artifacts produced:** Content matrix; database-backed current-hours content source mapping; asset inventory and attribution/licensing record; page map; component-responsibility plan; routing decision; shared-layout plan; deferred copy/asset decisions requiring approval.
 - **Unit tests required:** Planned render/content/navigation tests and asset fallback/alt-text checks.
 - **Integration tests required:** Planned route-to-page and shared-layout tests using no live API.
 - **Manual verification:** Compare every required menu item, price, address, phone, hour, history element, award, review, and gallery category to the SRS.
@@ -276,10 +278,10 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 ### UI-04 - React shell, routing, navigation, and shared layout
 
 - **Objective:** Implement the smallest navigable React/JSX application with shared responsive structure.
-- **Requirements addressed:** SRS FR-01, FR-02, FR-04, React/JSX and CSS interface constraints; NFR-03, NFR-04, NFR-07 to NFR-09; rubric five-page navigation and Flexbox/Grid.
+- **Requirements addressed:** SRS FR-01, FR-02, FR-04, React/JSX and CSS interface constraints; NFR-03, NFR-04, NFR-07 to NFR-09; PRA-029; rubric five-page navigation and Flexbox/Grid.
 - **Dependencies:** UI-03 approved.
-- **Artifacts produced:** React application shell; five routes/pages as placeholders; shared header/navigation/footer/contact/hours; responsive navigation; base styles; tests.
-- **Unit tests required:** Route rendering, navigation links, active/focus state, mobile navigation, shared contact/hours content, and not-found behavior if approved.
+- **Artifacts produced:** React application shell; five routes/pages as placeholders; shared header/navigation/footer/contact plus API-contract-backed hours display using mocks; responsive navigation; base styles; tests.
+- **Unit tests required:** Route rendering, navigation links, active/focus state, mobile navigation, mocked current-hours display/failure behavior, and not-found behavior if approved.
 - **Integration tests required:** Mocked browser navigation among all five routes with no live API.
 - **Manual verification:** Navigate with pointer and keyboard at desktop/mobile widths and compare contact/hours to SRS.
 - **Completion criteria:** All five routes are reachable, navigation works accessibly, and the shell is responsive and visually consistent.
@@ -312,7 +314,7 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 ### UI-07 - Reservation availability and slot-selection UI with mocked API
 
 - **Objective:** Implement the availability-first reservation start: party size, date, complete daily slots, selection, and invalidation.
-- **Requirements addressed:** SRS FR-06 to FR-08; NFR-03, NFR-06, NFR-08; PRA-006 to PRA-012, PRA-015 to PRA-018, PRA-023, PRA-025; rubric sophisticated logic presentation and working form.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-08; NFR-03, NFR-06, NFR-08; PRA-006 to PRA-012, PRA-015 to PRA-018, PRA-023, PRA-025, PRA-029; rubric sophisticated logic presentation and working form.
 - **Dependencies:** UI-06 complete; API-02 contract; UI-02 states.
 - **Artifacts produced:** Party/date controls; dynamic bound display; availability request state; complete slot schedule; selectable available slots; disabled/labelled unavailable slots; refetch/invalidation behavior; mocks and tests.
 - **Unit tests required:** Date/party validation; full schedule rendering; keyboard selection; non-color unavailable indication; pending/empty/error; changing inputs clears selection; stale response suppression; no arbitrary time entry.
@@ -350,11 +352,11 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 ### INT-01 - Integration environment and contract alignment
 
 - **Objective:** Establish a reproducible full-stack environment and verify configuration/contract alignment before connecting a user workflow.
-- **Requirements addressed:** SRS software/communication/deployment interfaces; NFR-05, NFR-09; baseline INT-01, INT-02, DEP-01, DEP-02; PRA-001 to PRA-005.
+- **Requirements addressed:** SRS software/communication/deployment interfaces; NFR-05, NFR-09; baseline INT-01, INT-02, DEP-01, DEP-02; PRA-001 to PRA-005 and PRA-029.
 - **Dependencies:** DB-07, API-09, and UI-09 approved.
 - **Artifacts produced:** Integrated environment configuration; API base/proxy/CORS decision; test/demo database isolation and reset plan; startup order; contract comparison report; integration smoke checklist.
 - **Unit tests required:** Re-run layer unit suites unchanged to prove integration configuration did not regress them.
-- **Integration tests required:** Database readiness, Flask readiness, React load, one safe read-only API call, and clean test-data reset.
+- **Integration tests required:** Database readiness, Flask readiness, React load, current-hours read-only API call, and clean test-data reset.
 - **Manual verification:** Start all three layers from documented commands and verify no secrets or machine-specific paths are committed.
 - **Completion criteria:** The environment starts reproducibly and the React adapter matches the live Flask contract without business workflow mutation yet.
 - **Approval checkpoint:** Approve integration foundation before connecting newsletter behavior.
@@ -374,12 +376,12 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 ### INT-03 - Reservation availability end-to-end
 
 - **Objective:** Connect party/date selection to live Flask slot discovery and PostgreSQL availability.
-- **Requirements addressed:** SRS FR-06 to FR-08, FR-18; NFR-02, NFR-05, NFR-06; PRA-006 to PRA-013, PRA-015 to PRA-018, PRA-023, PRA-025.
+- **Requirements addressed:** SRS FR-02, FR-06 to FR-08, FR-18; NFR-02, NFR-05, NFR-06; PRA-006 to PRA-013, PRA-015 to PRA-018, PRA-023, PRA-025, PRA-029.
 - **Dependencies:** INT-02 complete.
 - **Artifacts produced:** Live slot integration; controlled date/inventory fixtures; E2E availability tests; timing evidence.
 - **Unit tests required:** Re-run affected availability service and slot UI unit suites.
-- **Integration tests required:** Weekday/Sunday; window/lead boundaries; full schedule; partial/full inventory; multi-table fragmentation; input-change refetch; stale-response handling; database/API/UI agreement.
-- **Manual verification:** Change date/party size and visually compare selectable/unavailable slots with direct database inventory.
+- **Integration tests required:** SRS hours and alternate recurring test schedule; weekday/Sunday; window/lead boundaries; full schedule; partial/full inventory; multi-table fragmentation; input-change refetch; stale-response handling; database/API/UI agreement.
+- **Manual verification:** Change isolated recurring-hours test data, date, and party size; verify displayed hours and selectable/unavailable slots against direct database state; restore the SRS seed.
 - **Completion criteria:** React accurately displays every live authoritative slot status without exposing internal/customer data and within the two-second form-operation target.
 - **Approval checkpoint:** Approve live availability before booking mutation.
 
@@ -434,9 +436,9 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 ### INT-08 - Traceability, repository, deployment, and documentation completion
 
 - **Objective:** Complete the maintained evidence package proving all SRS, rubric, and PRA requirements are implemented and reproducible.
-- **Requirements addressed:** SRS NFR-09 and deployment requirements; baseline DEP-01 to DEP-10; rubric repository, README, AI-tooling, academic-integrity, and score-5 completeness criteria; PRA-001 to PRA-025.
+- **Requirements addressed:** SRS NFR-09 and deployment requirements; baseline DEP-01 to DEP-10; rubric repository, README, AI-tooling, academic-integrity, and score-5 completeness criteria; PRA-001 to PRA-029.
 - **Dependencies:** INT-07 complete; deployment choice and individual/group status resolved.
-- **Artifacts produced:** Final traceability matrix; `README.md`; `ai-tooling.md`; optional `staging.md`; deployment/run/database setup instructions; dependency/configuration inventory; image/source citations; test summary; private repository readiness checklist.
+- **Artifacts produced:** Final traceability matrix; `README.md`; `ai-tooling.md`; optional `staging.md`; deployment/run/database setup instructions; recurring-hours seed/reset instructions; dependency/configuration inventory; image/source citations; test summary; private repository readiness checklist.
 - **Unit tests required:** Full clean-run unit suite using documented setup.
 - **Integration tests required:** Clean-machine/environment rehearsal from README through database initialization, Flask, React, and core E2E workflows.
 - **Manual verification:** Audit every FR, NFR, PRA, DEP, and RUB item; verify repository contains all source and required docs but no secrets/test artifacts; confirm `quantic-grader` collaborator procedure.
@@ -475,6 +477,7 @@ During this phase, API behavior is mocked from the approved Flask contract. Live
 | PRA-019 to PRA-021 | DB-01 to DB-07; API-05, API-06, API-08, API-09; UI-02, UI-06, UI-08, UI-09; INT-02, INT-04 to INT-06 |
 | PRA-022 | DB-01, DB-02, DB-06; API-01, API-08; UI-01, UI-02; INT-08 scope audit |
 | PRA-023 to PRA-025 | DB-03 to DB-07; API-02 to API-09; UI-02 to UI-09; INT-02 to INT-09 |
+| PRA-029 | DB-01 to DB-07; API-01 to API-03, API-07 to API-09; UI-01, UI-04, UI-07, UI-09; INT-01, INT-03, INT-07 to INT-09 |
 | Rubric score-5 implementation | All four phase gates; especially UI-09 and INT-02 to INT-09 |
 | Rubric documentation/submission | INT-08 and INT-09 |
 
@@ -501,7 +504,7 @@ These are technical or presentation decisions, not unresolved Prompt 1 business 
 
 | Decision area | Resolve by |
 |---|---|
-| PostgreSQL types, keys, constraints, indexes, configuration structure, and assignment representation | DB-03 |
+| PostgreSQL types, keys, constraints, indexes, scalar-configuration structure, recurring-operating-hours table design, and assignment representation | DB-03 |
 | Transaction isolation/locking, atomic allocation, and exact retry mechanism | DB-04 |
 | Flask endpoint paths, methods, payloads, status/error codes | API-02 |
 | Flask modules, database access approach, configuration, logging framework, and test fixtures | API-03 |
@@ -515,12 +518,20 @@ These are technical or presentation decisions, not unresolved Prompt 1 business 
 
 ## 10. Scope exclusions
 
-The roadmap does not authorize authentication, verified profiles, automatic prefilling, email-ownership verification, cancellation, modification/rescheduling, no-show handling, administrative reservation management, exceptional-closure configuration, subscription-history/audit events, confirmation email/SMS, table adjacency modeling, more than 30 active Version 1 tables, or customer self-service contact updates.
+The roadmap does not authorize authentication, verified profiles, automatic prefilling, email-ownership verification, cancellation, modification/rescheduling, no-show handling, administrative reservation management, holiday/date-specific exceptional-closure configuration, schedule history, subscription-history/audit events, confirmation email/SMS, table adjacency modeling, more than 30 active Version 1 tables, or customer self-service contact updates. The PostgreSQL-backed recurring weekly schedule required by PRA-029 is active Version 1 scope.
 
 If an approved requirement changes later, perform the supplemental-requirement impact analysis before modifying the roadmap or implementation.
 
 ## 11. Roadmap completion condition
 
 The roadmap is complete when Hard Gates 1 through 4 have been explicitly approved, every active SRS/rubric/PRA requirement has linked implementation and verification evidence, the final demonstration has been rehearsed successfully, and the submission package has passed its access and completeness checks.
+
+## 12. Change log
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0 | 2026-08-14 | Established the complete least-to-most roadmap. |
+| 1.1 | 2026-08-15 | Propagated PRA-029 through PostgreSQL, Flask, React, integration, testing, reset, traceability, and documentation increments. Recurring weekly hours are PostgreSQL-backed and seeded to the SRS schedule; holiday/date-specific exceptions remain inactive. |
+| 1.1.1 | 2026-08-15 | Regenerated the downloadable artifact after PRA-029 propagation. No roadmap decision changed; this packaging revision provides distinct file bytes and an explicit regeneration identifier for repository verification. |
 
 No application code was generated in producing this roadmap.

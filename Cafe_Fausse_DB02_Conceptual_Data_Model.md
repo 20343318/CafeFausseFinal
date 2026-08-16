@@ -1,11 +1,13 @@
 # Cafe Fausse DB-02 Conceptual Data Model
 
-**Document version:** 1.0  
+**Document version:** 1.1.1  
 **Established:** 2026-08-15  
+**Last amended:** 2026-08-15  
+**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
 **Roadmap increment:** DB-02  
-**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.1 (PRA-001 through PRA-028), approved DB-01 Persistent-Data Requirements Analysis 1.1, and the approved least-to-most implementation roadmap  
+**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), approved DB-01 Persistent-Data Requirements Analysis 1.2.1, and the approved least-to-most implementation roadmap 1.1.1  
 **Scope:** Conceptual PostgreSQL data model only  
-**Status:** Ready for DB-02 approval checkpoint  
+**Status:** Ready for DB-02 approval checkpoint; amended by PRA-029  
 **Code status:** No SQL or application code generated
 
 ## 1. Purpose and boundary
@@ -16,23 +18,25 @@ Conceptual names describe business meaning only. They do not finalize PostgreSQL
 
 ## 2. Conceptual-model decision
 
-Five persistent concepts are sufficient for Version 1:
+Six persistent concepts are sufficient for Version 1:
 
 | Conceptual entity | Purpose | Why it is a separate concept |
 |---|---|---|
 | Customer | Authoritative identity, contact information, and current newsletter preference for a person who has been persisted. | A customer may exist without a reservation and may hold many reservations. |
 | Reservation Configuration | The single current set of PostgreSQL-controlled rules used prospectively for availability and new bookings. | Configuration changes independently from transaction data and has no Version 1 history. |
+| Restaurant Operating Hours | The authoritative recurring weekly opening and closing schedule, seeded to the SRS hours. | Day-specific schedule values repeat by weekday and must be data-driven without becoming holiday/date-specific exception history. |
 | Restaurant Table | One identifiable physical table and its current seating capacity. | Tables exist independently and participate in many nonoverlapping reservations over time. |
 | Reservation | One immutable confirmed booking held by one customer, including its occupancy and retry identity. | The reservation is the durable business event that owns party size, occupancy, confirmation identity, and retry facts. |
 | Reservation-Table Assignment | The persistent association of one reservation with one exclusively assigned restaurant table. | It resolves the many-to-many relationship between reservations and tables and supports one-or-more tables without duplicating either entity. |
 
-No separate entity is created for newsletter subscribers, availability, time slots, confirmation, fingerprints, configuration history, reservation status, or customer profiles:
+No separate entity is created for newsletter subscribers, availability, time slots, confirmation, fingerprints, operating-hours exceptions/history, configuration history, reservation status, or customer profiles:
 
 - current newsletter status belongs to Customer;
 - availability and daily slot status are derived;
 - confirmation is assembled from authoritative Customer, Reservation, Assignment, and fixed restaurant information;
 - fingerprint and its semantic version belong to Reservation;
-- only the current Reservation Configuration exists in Version 1;
+- only the current Reservation Configuration and current recurring Restaurant Operating Hours exist in Version 1;
+- holiday/date-specific operating-hour exceptions and schedule history remain inactive future enhancements;
 - confirmed reservations have no cancellation/no-show state machine;
 - authentication and verified profiles are inactive future enhancements.
 
@@ -44,9 +48,10 @@ erDiagram
     RESERVATION ||--|{ RESERVATION_TABLE_ASSIGNMENT : receives
     RESTAURANT_TABLE ||--o{ RESERVATION_TABLE_ASSIGNMENT : participates_in
     RESERVATION_CONFIGURATION ||..o{ RESERVATION : governs_new_booking
+    RESTAURANT_OPERATING_HOURS ||..o{ RESERVATION : governs_new_booking
 ```
 
-The dotted Configuration-to-Reservation relationship is behavioral, not a retained historical association. The current configuration governs validation and creation of new reservations. Each reservation independently preserves its booked occupancy facts, so later configuration changes do not alter it.
+The dotted Configuration-to-Reservation and Operating-Hours-to-Reservation relationships are behavioral, not retained historical associations. The current settings and recurring weekly schedule govern validation and creation of new reservations. Each reservation independently preserves its booked occupancy facts, so later configuration or schedule changes do not alter it.
 
 ### 3.1 Relationship optionality and cardinalities
 
@@ -56,6 +61,7 @@ The dotted Configuration-to-Reservation relationship is behavioral, not a retain
 | Reservation receives Assignment | Each confirmed reservation has one or more assignments. | Each assignment belongs to exactly one reservation. | A confirmed reservation cannot have zero assigned tables or a partial assignment set. |
 | Restaurant Table participates in Assignment | A table participates in zero or many assignments over time. | Each assignment refers to exactly one table. | Assignments for the same table may not overlap in time. |
 | Reservation Configuration governs new Reservation | One current configuration set governs zero or many prospective booking decisions. | Each new reservation is validated using the current set, but no historical configuration relationship is retained. | The immutable booked interval replaces any need to retain the configuration version used at booking. |
+| Restaurant Operating Hours govern new Reservation | One current recurring schedule supplies a weekday rule for each day and governs zero or many prospective booking decisions. | Each new reservation uses the schedule applicable to its weekday, but no historical schedule relationship is retained. | Required seed values match the SRS; controlled alternate test schedules require no Flask logic change. |
 | Reservation and Restaurant Table through Assignment | A reservation has one or many tables; a table serves zero or many reservations over time. | Each reservation-table pair occurs at most once. | This is a constrained many-to-many relationship with full-interval exclusivity. |
 
 ## 4. Conceptual entity and attribute catalogue
@@ -92,9 +98,23 @@ The dotted Configuration-to-Reservation relationship is behavioral, not a retain
 | Same-day minimum lead time | Minimum interval from authoritative current time to a same-day start. | Yes | Default 120 minutes; permitted 0 through 1440 minutes. | Current value only; changes apply prospectively. |
 | Restaurant timezone | IANA timezone used for reservation rules and display. | Yes | Default `America/New_York`; must be a valid IANA identifier. | Relatively fixed; changes must not reinterpret existing canonical reservation instants. |
 
-The fixed weekly operating hours are not attributes of this entity. Monday-Saturday 5:00 PM-11:00 PM and Sunday 5:00 PM-9:00 PM remain fixed SRS rules. No exceptional-closure or configuration-history concept is included.
+Recurring weekly operating hours are normalized into the separate Restaurant Operating Hours concept rather than embedded in this scalar setting set. No configuration-history concept is included.
 
-### 4.3 Restaurant Table
+### 4.3 Restaurant Operating Hours
+
+**Business definition:** The single authoritative recurring weekly schedule used by Flask to display restaurant hours, generate legitimate daily starts, and validate opening/closing boundaries. PostgreSQL stores the schedule so alternate recurring test/demo schedules require no Flask or React business-logic change.
+
+**Authoritative sources:** SRS FR-02, FR-07, FR-18; PRA-008, PRA-009, PRA-023, PRA-025, PRA-026, PRA-029.
+
+| Conceptual attribute | Meaning | Required? | Identity/source-of-truth rule | Lifecycle |
+|---|---|---:|---|---|
+| Weekday identity | The recurring day of week governed by this schedule rule. | Yes | Each weekday has exactly one current Version 1 rule; exact logical representation is deferred. | Retained as current business configuration. |
+| Opening time | The restaurant-local opening boundary for the weekday. | Yes for the SRS seed | Monday-Saturday seed to 5:00 PM; Sunday seeds to 5:00 PM. | May change prospectively in controlled test/demo data. |
+| Closing time | The restaurant-local closing boundary for the weekday. | Yes for the SRS seed | Monday-Saturday seed to 11:00 PM; Sunday seeds to 9:00 PM. | May change prospectively in controlled test/demo data. |
+
+The Version 1 seed and normal demonstration baseline must exactly match the SRS. The exact logical table name, columns, time types, closed-day representation, and support for more than one daily service interval remain DB-03 decisions. Version 1 introduces no holiday/date-specific exception, schedule-history, or effective-dated schedule entity.
+
+### 4.4 Restaurant Table
 
 **Business definition:** One persistent physical table in the current Version 1 bookable inventory.
 
@@ -107,7 +127,7 @@ The fixed weekly operating hours are not attributes of this entity. Monday-Satur
 
 Exactly 30 current table instances is a Version 1 population invariant, not an independently editable count setting. The conceptual structure does not impose 30 as a permanent future schema maximum, but it provides no active/inactive mechanism and does not authorize more than 30 active Version 1 tables.
 
-### 4.4 Reservation
+### 4.5 Reservation
 
 **Business definition:** One immutable, confirmed booking held by exactly one customer for a complete half-open occupancy interval and a specified party size.
 
@@ -125,7 +145,7 @@ Exactly 30 current table instances is a Version 1 population invariant, not an i
 
 No reservation status, cancellation data, modification history, created timestamp, configuration-version relationship, assigned-capacity snapshot, newsletter snapshot, or confirmation-delivery state is required.
 
-### 4.5 Reservation-Table Assignment
+### 4.6 Reservation-Table Assignment
 
 **Business definition:** The durable fact that one restaurant table is assigned exclusively to one confirmed reservation for that reservation's complete occupancy interval.
 
@@ -167,13 +187,17 @@ The conceptual identity is the reservation-table pair. The assignment has no ind
 ### 5.3 Configuration, date, and time constraints
 
 1. One current Reservation Configuration set supplies all five PostgreSQL business settings.
-2. Every setting has one current valid value; no configuration versions or effective dates are retained.
-3. The earliest start is the fixed opening time for the date.
-4. The latest valid start is derived from closing time, current duration, and start interval; it is not stored as configuration.
-5. A new reservation must end no later than the fixed closing time.
-6. Valid dates run from the restaurant-local current date through the configured advance window, inclusive.
-7. Same-day starts must meet the configured lead time using authoritative server/database time, never browser time.
-8. Configuration changes affect new calculations only and do not alter any confirmed reservation.
+2. One current Restaurant Operating Hours schedule supplies exactly one recurring weekday rule for each day under the Version 1 conceptual model.
+3. Initial and normal Version 1 schedule data must match the SRS: Monday-Saturday 5:00 PM-11:00 PM and Sunday 5:00 PM-9:00 PM.
+4. PostgreSQL is the authoritative schedule source. Flask reads the current values; React receives them through Flask and neither layer owns hard-coded authoritative hour values.
+5. Every scalar setting and weekday schedule rule has one current valid value; no configuration or schedule versions/effective dates are retained.
+6. The earliest start is the current PostgreSQL opening time for the applicable weekday.
+7. The latest valid start is derived from the current closing time, current duration, and start interval; it is not stored independently.
+8. A new reservation must end no later than the current PostgreSQL closing time.
+9. Valid dates run from the restaurant-local current date through the configured advance window, inclusive.
+10. Same-day starts must meet the configured lead time using authoritative server/database time, never browser time.
+11. Configuration or recurring-schedule changes affect new calculations only and do not alter any confirmed reservation.
+12. Controlled alternate recurring test/demo schedules are permitted; holiday/date-specific exceptions remain outside Version 1.
 
 ### 5.4 Reservation and assignment constraints
 
@@ -198,13 +222,14 @@ The conceptual identity is the reservation-table pair. The assignment has no ind
 | Customer identity, structured name, canonical email, optional phone | Persistent business data | Customer | A separate profile/account source |
 | Current newsletter status | Persistent business data | Customer | A subscriber entity or event history |
 | Current start interval, duration, window, lead time, timezone | PostgreSQL business configuration | Reservation Configuration | Hard-coded duplicated settings or configuration history |
+| Current recurring weekly opening/closing schedule | PostgreSQL business configuration | Restaurant Operating Hours | Hard-coded Flask/React authority, holiday exceptions, or schedule history |
 | Table identity and current capacity | Persistent/configurable business data | Restaurant Table | A separate total-capacity record |
 | Reservation identity, customer, occupancy, party size, fingerprint/version | Persistent business data | Reservation | Mutable booking state or duplicated confirmation snapshot |
 | Winning table assignments | Persistent business relationship | Reservation-Table Assignment | Seat-sharing or candidate-combination history |
 | Exactly 30 Version 1 tables | Fixed population invariant/derived count | Count of current Restaurant Table instances | A user-editable table-count setting |
 | Total capacity and maximum party size | Derived | Sum of current Restaurant Table capacities | Independent configuration |
-| Weekly hours | Fixed Version 1 rule | SRS/application rule | PostgreSQL business configuration |
-| Legitimate starts, latest start, free tables, eligible combinations, slot availability | Derived/transient | Current request + fixed hours + current Configuration + Tables + Reservations + Assignments | Availability/slot ledger |
+| Required SRS weekly hour values | SRS-controlled initial/default data | Restaurant Operating Hours seed | Duplicated constants outside PostgreSQL |
+| Legitimate starts, latest start, free tables, eligible combinations, slot availability | Derived/transient | Current request + Operating Hours + current Configuration + Tables + Reservations + Assignments | Availability/slot ledger |
 | Confirmation email and submitted newsletter action | Transient input | Request validation/processing | Customer duplicate or audit event |
 | Confirmation display | Derived response | Customer + Reservation + Assignments + fixed address/phone + current newsletter status | Persistent confirmation entity |
 | Fingerprint match result and same-customer overlap result | Derived request outcome | Reservation fingerprint and underlying Customer/start/party facts | Independent retry record |
@@ -218,7 +243,7 @@ Availability is a request-scoped conclusion, not a stored entity or status.
 
 For a requested restaurant-local date and party size, authoritative availability uses:
 
-1. the fixed weekly operating hours;
+1. the current PostgreSQL recurring weekly operating-hours schedule seeded to the SRS baseline;
 2. current Reservation Configuration values;
 3. authoritative current time for same-day lead enforcement;
 4. the 30 current Restaurant Tables and their capacities;
@@ -226,7 +251,7 @@ For a requested restaurant-local date and party size, authoritative availability
 6. retained Reservation-Table Assignments;
 7. the same-customer overlap rule when a booking is submitted.
 
-Legitimate daily starts are derived by aligning starts to the configured interval and retaining only those whose full configured duration fits the applicable hours, date window, and lead-time rule. For each legitimate interval, a table is free only when it has no Assignment whose parent Reservation overlaps that interval. The slot is provisionally available for the requested party size when at least one capacity-sufficient combination exists among the free tables.
+Legitimate daily starts are derived by reading the current PostgreSQL opening/closing boundaries for the requested weekday, aligning starts to the configured interval, and retaining only those whose full configured duration fits those boundaries, the date window, and the lead-time rule. For each legitimate interval, a table is free only when it has no Assignment whose parent Reservation overlaps that interval. The slot is provisionally available for the requested party size when at least one capacity-sufficient combination exists among the free tables.
 
 The full daily slot list and each availability flag are recomputed. They may become stale immediately. Final booking therefore revalidates all rules and chooses/commits assignments authoritatively. The conceptual model supplies the required facts but does not define whether PostgreSQL or Flask performs each calculation, how candidates are enumerated, or how concurrent transactions are controlled.
 
@@ -266,6 +291,7 @@ An exact retry reassembles the same reservation facts while returning the Custom
 |---|---|---|---|---|
 | Customer | Successful reservation or affirmative new newsletter signup | Current newsletter status; limited population of blank middle initial/phone under approved rules | Retained after unsubscribe and after all reservations become past | May be removed only as designated nonproduction data |
 | Reservation Configuration | Initialized with approved defaults | Current valid values may change prospectively | Current set retained; no history | Restored to known approved defaults |
+| Restaurant Operating Hours | Seeded with seven recurring weekday rules matching the SRS hours | Current recurring values may change prospectively in controlled test/demo data | Current schedule retained; no holiday exceptions or history | Restored to the SRS weekly baseline |
 | Restaurant Table | Initialized as exactly 30 tables, each capacity four | Individual capacity may change prospectively; seating is relatively fixed | All 30 retained in normal Version 1 operation | Re-created in the known 30-by-4 baseline |
 | Reservation | Created only after successful authoritative booking | None; immutable | Retained after interval elapses; elapsed interval no longer affects availability | May be removed as designated nonproduction data |
 | Reservation-Table Assignment | Created atomically with its Reservation | None; immutable | Retained with Reservation | Removed/re-created only through controlled nonproduction reset |
@@ -281,7 +307,7 @@ There is no automatic deletion, archive, anonymization, retention-period purge, 
 | Singular Time Slot | Reservation preserves canonical start plus an immutable booked end-or-duration boundary. | It operationalizes the selected slot for closing and overlap protection without changing the required selected start. |
 | Singular Table Number | Each Assignment preserves one concrete Restaurant Table number; a Reservation has one or more Assignments. | A single-table booking still has exactly one Table Number, while larger parties add multiple required table numbers. |
 | Thirty tables but no table inventory/capacity definition | Restaurant Table provides 30 persistent identities and individual capacities, initially four. | It makes the SRS's table assignment and full-slot behavior deterministic without activating more than 30 tables. |
-| No stated configuration fields | Reservation Configuration contains the five approved current settings. | These settings refine SRS validity and availability gaps and do not remove any SRS behavior. |
+| No stated configuration fields or operating-hours storage structure | Reservation Configuration contains the five scalar settings, while Restaurant Operating Hours contains the recurring weekly schedule seeded exactly to the SRS values. | The scalar settings refine validity gaps; database-backed hours preserve literal SRS compliance while preventing duplicated Flask/React authority. |
 | Newsletter signup could imply a separate subscriber list | Current newsletter status belongs only to Customer; the dedicated form remains. | It fulfills the SRS Customers Newsletter Signup field and backend storage while avoiding contradictory sources. |
 | No retry correlation information | Reservation contains a database-generated versioned fingerprint. | It strengthens reliable confirmation and double-booking prevention without changing customer-facing booking inputs. |
 | Success message without specified stable data | Confirmation is assembled from authoritative Customer, Reservation, Assignment, and fixed restaurant facts. | It provides the approved success evidence without duplicating business data. |
@@ -311,7 +337,7 @@ Every DB-01 item has exactly one persistent home or one explicit nonpersistent c
 | CFG-03 | Reservation Configuration | Current maximum advance window |
 | CFG-04 | Reservation Configuration | Current same-day lead time |
 | CFG-05 | Reservation Configuration | Current restaurant timezone |
-| FIX-01 | Fixed application rule | Weekly hours are not database business configuration |
+| FIX-01 | Restaurant Operating Hours | Stable DB-01 identifier retained after PRA-029 reclassification; recurring hours are PostgreSQL business configuration seeded to the SRS schedule |
 | CFG-06 | Future enhancement excluded | No configuration history/effective dates |
 
 ### 11.2 Table, reservation, and assignment items
@@ -372,12 +398,13 @@ Every DB-01 item has exactly one persistent home or one explicit nonpersistent c
 |---|---|---|---|
 | Customer | FR-06, FR-15 through FR-18 | PRA-014, PRA-019 through PRA-024, PRA-027, PRA-028 | Working reservation/newsletter forms, PostgreSQL effects, full-stack integration |
 | Reservation Configuration | FR-07, FR-08, FR-18; NFR-05 | PRA-005 through PRA-013, PRA-015, PRA-023, PRA-025, PRA-026 | Sophisticated reservation logic and data integrity |
+| Restaurant Operating Hours | FR-02, FR-07, FR-18; NFR-05 | PRA-008, PRA-009, PRA-023, PRA-025, PRA-026, PRA-029 | Complete SRS schedule, database-driven slot logic, integration, and direct database effects |
 | Restaurant Table | FR-08, FR-17, FR-18; NFR-05 | PRA-015 through PRA-018, PRA-026, PRA-028 | Thirty-table assignment, PostgreSQL integration, direct database effects |
 | Reservation | FR-06 through FR-09, FR-17, FR-18; NFR-05 | PRA-006 through PRA-018, PRA-022 through PRA-028 | Correct reservation system, confirmation, sophisticated logic, database effects |
 | Reservation-Table Assignment | FR-08, FR-17, FR-18; NFR-05 | PRA-013, PRA-015 through PRA-018, PRA-022, PRA-024, PRA-026, PRA-028 | Assignment evidence, prevention of double/overbooking, sophisticated logic |
 | Customer-to-Reservation | FR-17, FR-18 | PRA-014, PRA-019, PRA-022, PRA-027 | Integrated customer/reservation persistence |
 | Reservation-to-Assignment-to-Table | FR-08, FR-17, FR-18 | PRA-013, PRA-015 through PRA-018, PRA-024, PRA-026 | Direct database proof of single/multi-table assignments and exclusivity |
-| Derived availability | FR-07 through FR-09, FR-18; NFR-05 | PRA-006 through PRA-018, PRA-023, PRA-025 | Working forms, full-slot behavior, sophisticated reservation logic |
+| Derived availability | FR-07 through FR-09, FR-18; NFR-05 | PRA-006 through PRA-018, PRA-023, PRA-025, PRA-029 | Working forms, database-backed hours, full-slot behavior, sophisticated reservation logic |
 | Derived confirmation/retry | FR-09, FR-18; NFR-05, NFR-06 | PRA-014, PRA-024, PRA-027 | Successful confirmation, safe retry, database integrity |
 
 ### 12.2 PRA coverage
@@ -385,14 +412,14 @@ Every DB-01 item has exactly one persistent home or one explicit nonpersistent c
 | PRA ID | DB-02 treatment |
 |---|---|
 | PRA-001 | DB-02 remains inside the PostgreSQL phase; no Flask, React, or integration design is introduced. |
-| PRA-002 | The model uses the smallest normalized set of five persistent concepts. |
+| PRA-002 | The model uses the smallest normalized set of six persistent concepts. |
 | PRA-003 | Non-executable model-review and future integration scenarios are defined. |
 | PRA-004 | All conceptual facts trace to the fixed SRS, rubric, or approved addendum. |
 | PRA-005 | The five approved variable rules belong to Reservation Configuration rather than duplicated hard-coded sources. |
 | PRA-006 | Start-time interval is current configuration; legitimate aligned starts are derived. |
 | PRA-007 | Current duration governs new bookings; each Reservation preserves its immutable booked occupancy. |
-| PRA-008 | Weekly hours are fixed and exceptional closures are excluded. |
-| PRA-009 | Earliest/latest starts are fixed/derived rather than independent stored settings. |
+| PRA-008 | The recurring weekly schedule is seeded to the SRS values; exceptional closures remain excluded. |
+| PRA-009 | Earliest/latest starts derive from current database-backed opening/closing values, duration, and interval. |
 | PRA-010 | Maximum advance window belongs to current Reservation Configuration. |
 | PRA-011 | Same-day lead time belongs to current Reservation Configuration and uses authoritative time. |
 | PRA-012 | Restaurant timezone belongs to current Reservation Configuration; reservation instants remain unambiguous. |
@@ -409,9 +436,10 @@ Every DB-01 item has exactly one persistent home or one explicit nonpersistent c
 | PRA-023 | Conceptual placement of validated persistent values and exclusion of transient confirmation input. |
 | PRA-024 | Confirmation derived from authoritative sources; no delivery claim/entity. |
 | PRA-025 | Availability remains derived and provisional; no slot ledger. |
-| PRA-026 | Prospective configuration/table-capacity changes and controlled known-state reset. |
+| PRA-026 | Prospective scalar-configuration, recurring-hours, and table-capacity changes plus controlled known-state reset. |
 | PRA-027 | Database-generated versioned fingerprint, underlying-fact verification, and newsletter separation. |
 | PRA-028 | Normal-operation retention and no automatic purge/archive. |
+| PRA-029 | Restaurant Operating Hours is the authoritative PostgreSQL recurring schedule; Flask/React do not own hard-coded hour values and holiday exceptions remain excluded. |
 
 ### 12.3 Rubric traceability
 
@@ -420,8 +448,8 @@ Every DB-01 item has exactly one persistent home or one explicit nonpersistent c
 | All SRS requirements implemented | The SRS minimum Customer and Reservation data has an authoritative conceptual home, including additive fields required by the form and approved rules. |
 | Flask and PostgreSQL correctly integrated with React | The model supplies stable authoritative facts for later API/UI contracts without assigning authority to React. |
 | Correct reservation and newsletter database effects | Customer holds the only newsletter state; Reservation and Assignment expose direct persistent effects. |
-| Sophisticated reservation logic | The model supports configurable slots/duration, individual capacities, multi-table allocation, exclusivity, overlap, and safe retry. |
-| Demonstrable backend database state | Customer, Reservation, Restaurant Table, Configuration, and Assignment facts can later be shown directly in PostgreSQL. |
+| Sophisticated reservation logic | The model supports database-backed recurring hours, configurable slots/duration, individual capacities, multi-table allocation, exclusivity, overlap, and safe retry. |
+| Demonstrable backend database state | Customer, Reservation, Restaurant Operating Hours, Restaurant Table, Configuration, and Assignment facts can later be shown directly in PostgreSQL. |
 | Maintainable/documented solution | Entity ownership, exclusions, and traceability prevent duplicated state and preserve NFR-09. |
 
 ## 13. Conceptual model-review scenarios
@@ -444,7 +472,8 @@ These are non-executable review cases. They define expected traversal and invari
 | Back-to-back reservation | New start equals prior end on the same table. | Allowed because half-open intervals do not overlap. |
 | Exact retry | Fingerprint candidate and underlying Customer/start/party facts match. | Return existing Reservation/confirmation; create nothing; return current newsletter state without replaying action. |
 | Fingerprint collision | Opaque fingerprint matches but an underlying fact differs. | Do not treat as exact retry; apply normal conflict/availability behavior. |
-| Configuration change | Current duration or capacity changes after a Reservation was confirmed. | Existing Reservation interval and Assignments remain unchanged; new calculations use current values. |
+| Configuration or recurring-hours change | Current duration, table capacity, or a weekday opening/closing value changes after a Reservation was confirmed. | Existing Reservation interval and Assignments remain unchanged; new calculations and displayed hours use current PostgreSQL values. |
+| Alternate recurring test schedule | Isolated test/demo seed changes one or more weekday hours without introducing date-specific exceptions. | Flask derives different legitimate slots and React receives the updated hours without business-logic changes; reset restores the SRS seed. |
 | Retained past reservation | Reservation end is before authoritative current time. | Record and Assignments remain stored but do not block a later nonoverlapping interval. |
 | Controlled academic-demo reinitialization | Designated nonproduction reservation data is cleared and known defaults restored later through approved tooling. | Environment returns to exactly 30 tables at capacity four and approved configuration defaults; this is not a customer workflow. |
 
@@ -459,6 +488,7 @@ The conceptual model contains no entity or attribute for:
 - no-show handling;
 - administrative users/actions;
 - holiday or exceptional-closure dates;
+- hard-coded authoritative weekly-hour values in Flask or React;
 - newsletter subscription events/history/audit;
 - confirmation email/SMS messages or delivery status;
 - table adjacency, floor plan, or physical combinability;
@@ -482,6 +512,7 @@ The conceptual model contains no entity or attribute for:
 - normalized comparison-value representation;
 - exact representation of booked end versus booked-duration snapshot;
 - exact representation of the five current configuration settings;
+- exact recurring-operating-hours table name, weekday representation, opening/closing columns, time types, constraints, supported daily-period structure, and closed-day behavior;
 - exact representation of the Assignment association;
 - whether Reservation ID is exposed directly or mapped to a separate safe reference;
 - whether optional technical timestamps are justified;
@@ -512,7 +543,7 @@ The conceptual model contains no entity or attribute for:
 
 No genuinely unresolved conceptual-model business decision remains.
 
-The five-entity model resolves the DB-01 conceptual questions without selecting logical or physical structures. The alternative physical representations listed in Section 15 are intentionally scheduled for DB-03 or DB-04 and are not DB-02 blockers.
+The six-entity model resolves the DB-01 conceptual questions, including the PRA-029 operating-hours override, without selecting logical or physical structures. The alternative physical representations listed in Section 15 are intentionally scheduled for DB-03 or DB-04 and are not DB-02 blockers.
 
 ## 17. DB-02 completion assessment and approval checkpoint
 
@@ -520,11 +551,12 @@ The five-entity model resolves the DB-01 conceptual questions without selecting 
 
 | DB-02 criterion | Result |
 |---|---|
-| Smallest normalized conceptual model established | Complete: five persistent concepts |
+| Smallest normalized conceptual model established | Complete: six persistent concepts |
 | Every persistent/configured DB-01 item has one authoritative home | Complete |
 | Derived/transient/fixed/future data separated | Complete |
 | Customer and newsletter source of truth preserved | Complete |
 | Exactly 30 tables and individual capacities preserved | Complete |
+| PostgreSQL-backed recurring weekly schedule and SRS seed preserved | Complete |
 | Reservation occupancy and one-or-more exclusive assignments modeled | Complete |
 | Availability remains derived | Complete |
 | Fingerprint/retry facts modeled without implementation design | Complete |
@@ -539,7 +571,7 @@ The five-entity model resolves the DB-01 conceptual questions without selecting 
 
 ### 17.2 Approval checkpoint
 
-DB-02 is **ready for user review and approval**.
+DB-02 version 1.1.1 is **ready for user review and approval**. Version 1.1.1 is a packaging-only regeneration of the PRA-029-amended model; it introduces no new conceptual decision.
 
 Approval of DB-02 will authorize Prompt 6 / DB-03 logical PostgreSQL schema and integrity design. It will not approve SQL, migrations, transaction/concurrency mechanisms, Flask contracts, React design, or implementation code.
 

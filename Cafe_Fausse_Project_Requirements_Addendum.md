@@ -1,8 +1,9 @@
 # Cafe Fausse Project Requirements Addendum
 
-**Addendum version:** 2.1  
+**Addendum version:** 2.2.1  
 **Established:** 2026-08-13  
-**Last updated:** 2026-08-14  
+**Last updated:** 2026-08-15  
+**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
 **Relationship to baseline:** Supplements but may not contradict `SRS(1).pdf`, `Rubric(1).pdf`, or the Project Requirements Baseline  
 **Change control:** Only explicitly approved decisions become active addendum requirements
 
@@ -139,19 +140,20 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | Field | Value |
 |---|---|
 | Prompt 1 source | P1-RSV-03 |
-| Status / approval | Approved; Abdul, Prompt 1 approval, 2026-08-14 |
-| Exact approved requirement | All calendar days are potentially reservable under the SRS weekly hours: Monday-Saturday 5:00 PM-11:00 PM and Sunday 5:00 PM-9:00 PM. A date remains subject to the advance-booking window, same-day lead time, closing-time rule, and table availability. Version 1 has no holiday or exceptional-closure calendar. |
-| Default / validation | Weekly hours fixed by SRS; dependent limits remain authoritative. |
-| Classification / control | Fixed Version 1 behavior based on SRS hours |
+| Status / approval | Approved; Abdul, Prompt 1 approval, 2026-08-14; recurring-hours storage classification amended by PRA-029 on 2026-08-15 |
+| Exact approved requirement | All calendar days are potentially reservable under the current recurring weekly operating-hours schedule. The schedule is seeded to the SRS hours: Monday-Saturday 5:00 PM-11:00 PM and Sunday 5:00 PM-9:00 PM. A date remains subject to the advance-booking window, same-day lead time, closing-time rule, and table availability. Version 1 has no holiday or date-specific exceptional-closure calendar. |
+| Default / validation | PostgreSQL schedule seed must exactly match the SRS weekly hours; dependent limits remain authoritative. |
+| Classification / control | PostgreSQL recurring weekly business configuration under PRA-029; no date-specific exceptions in Version 1 |
 | Rationale | Defines date eligibility without altering the required weekly schedule. |
 | SRS / rubric refined | SRS restaurant-hours and valid-slot requirements; rubric complete SRS functionality and sophisticated reservation logic. |
-| PostgreSQL impact | No Version 1 exceptional-date data required. |
+| PostgreSQL impact | Persist the recurring weekly schedule under PRA-029; no Version 1 exceptional-date data is required. |
 | Flask/API impact | Apply weekday hours and all dependent rules. |
 | React/UI impact | Permit only dates that Flask can authoritatively validate. |
 | Unit-test impact | Test each weekday, Sunday hours, date/window boundaries, and absence of holiday exceptions. |
 | Integration-test impact | Verify date selection and returned daily slots follow the same schedule. |
 | Demo / documentation | Demonstrate weekday/Sunday differences and document the Version 1 limitation. |
-| Dependencies | PRA-010, PRA-011, PRA-012 |
+| Dependencies | PRA-010, PRA-011, PRA-012, PRA-029 |
+| Amended by | PRA-029 supersedes only the earlier fixed/non-persisted weekly-hours interpretation; the SRS seed values and exclusion of holiday/date-specific exceptions remain active. |
 
 ### PRA-009 - Earliest and latest reservation start
 
@@ -159,18 +161,18 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 |---|---|
 | Prompt 1 source | P1-RSV-04 |
 | Status / approval | Approved; Abdul, Prompt 1 approval, 2026-08-14 |
-| Exact approved requirement | The earliest start is the applicable SRS opening time. A reservation must finish no later than closing. The latest start is derived from closing time, configured duration, and interval; it is not an independent setting. With defaults, the last start is 9:30 PM Monday-Saturday and 7:30 PM Sunday. |
+| Exact approved requirement | The earliest start is the applicable opening time from the current PostgreSQL recurring weekly schedule, initially seeded to the SRS hours. A reservation must finish no later than the corresponding configured closing time. The latest start is derived from closing time, configured duration, and interval; it is not an independent setting. With the required SRS schedule seed and other defaults, the last start is 9:30 PM Monday-Saturday and 7:30 PM Sunday. |
 | Default / validation | Default-derived last starts 9:30 PM and 7:30 PM; end must be at/before close. |
 | Classification / control | Derived behavior |
 | Rationale | Prevents after-close occupancy and avoids inconsistent duplicate settings. |
 | SRS / rubric refined | SRS restaurant-hours and valid-slot requirements; rubric complete functionality and sophisticated reservation logic. |
-| PostgreSQL impact | No independent latest-start value. |
+| PostgreSQL impact | Supply the current weekly opening/closing values under PRA-029; retain no independent latest-start value. |
 | Flask/API impact | Generate only starts whose full duration fits. |
 | React/UI impact | Display API-supplied starts; accept no arbitrary times. |
 | Unit-test impact | Test opening, exact closing, one interval late, and Sunday boundaries. |
 | Integration-test impact | Verify duration/interval changes alter the last displayed and accepted start consistently. |
 | Demo / documentation | Demonstrate and explain the derived default last starts. |
-| Dependencies | PRA-006, PRA-007, PRA-008 |
+| Dependencies | PRA-006, PRA-007, PRA-008, PRA-029 |
 
 ### PRA-010 - Maximum advance-booking window
 
@@ -535,6 +537,26 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | Demo / documentation | Document normal retention and safe demo/test reset procedures. |
 | Dependencies | PRA-020, PRA-022, PRA-026 |
 
+### PRA-029 - PostgreSQL-backed recurring weekly operating hours
+
+| Field | Value |
+|---|---|
+| Prompt 5 source | P5-HRS-01 |
+| Status / approval | Approved; Abdul, explicit DB-02 operating-hours override, 2026-08-15 |
+| Exact approved requirement | The recurring weekly restaurant operating-hours schedule shall be persisted in a dedicated PostgreSQL table, with its exact schema deferred to DB-03. Initial and normal Version 1 seed data must exactly match the SRS: Monday-Saturday 5:00 PM-11:00 PM and Sunday 5:00 PM-9:00 PM. PostgreSQL is the single authoritative source for reservation operating hours. Flask shall read the current schedule for slot generation, closing-time validation, and schedule delivery; it shall not duplicate the authoritative hour values as hard-coded business constants. React shall receive current hours through Flask for display and shall not calculate authoritative schedule or availability. Controlled test or demonstration data may use alternate recurring weekly hours without changing Flask business logic. Changes apply prospectively and never reinterpret or alter confirmed reservations. Version 1 does not include holiday, date-specific exception, or schedule-history behavior unless separately approved. |
+| Default / validation | Required SRS seed: Monday-Saturday 5:00 PM-11:00 PM; Sunday 5:00 PM-9:00 PM. The recurring schedule must provide sufficient current opening/closing information for every weekday. Exact logical validation, closed-day representation, and supported daily-period structure are deferred to DB-03. |
+| Classification / control | Configurable PostgreSQL business configuration; SRS-controlled initial/default values; fixed absence of holiday/date-specific exception behavior |
+| Rationale | Preserves literal SRS compliance while allowing isolated schedule testing and future extension without duplicating operating-hour values in Flask or React. |
+| SRS / rubric refined | SRS FR-02 hours, FR-07 valid slots, FR-18 availability logic, and PostgreSQL/Flask interfaces; rubric complete SRS functionality, sophisticated reservation logic, integration, and direct database effects. |
+| PostgreSQL impact | Persist and seed one authoritative recurring weekly schedule; later migrations/reset tooling must restore the SRS schedule. Exact table, columns, data types, constraints, and indexes belong to DB-03. |
+| Flask/API impact | Query authoritative hours for availability and expose current hours to clients; alternative seeded schedules require no business-logic change. |
+| React/UI impact | Display API-supplied current hours and consume API-supplied slots; do not hard-code authoritative operating-hour values. |
+| Unit-test impact | Test the required SRS seed, each weekday lookup, alternate recurring test schedules, opening/closing boundaries, and absence of hard-coded Flask/React authority. |
+| Integration-test impact | Verify PostgreSQL schedule changes propagate through Flask slot generation and React display without code changes while existing reservations remain unchanged. |
+| Demo / documentation | Demonstrate the SRS schedule in the database and document how isolated test/demo schedules are restored to the SRS baseline. |
+| Dependencies | PRA-002, PRA-005 through PRA-013, PRA-023, PRA-025, PRA-026, PRA-028 |
+| Supersedes | Earlier statements that classified the SRS weekly hours as non-persisted fixed application behavior; it does not activate holiday/date-specific exceptions. |
+
 ## 7. Decision-to-Addendum crosswalk
 
 ### 7.1 Prompt 1 decisions
@@ -570,6 +592,12 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | P4-RTY-01 | PRA-027 |
 | P4-RET-01 | PRA-028 |
 
+### 7.3 Prompt 5 decisions
+
+| Prompt 5 decision | Addendum ID |
+|---|---|
+| P5-HRS-01 | PRA-029 |
+
 ## 8. Authoritative-document compatibility findings
 
 No approved supplemental requirement contradicts the SRS or rubric. These interpretations control:
@@ -580,18 +608,19 @@ No approved supplemental requirement contradicts the SRS or rubric. These interp
 4. **Newsletter signup versus preferences:** the dedicated form still supports signup. Existing-customer unsubscribe and reservation-form preference management are additive; `Customers` remains the source of truth.
 5. **Random assignment:** single-table selection remains random among equally suitable choices. Multi-table minimum-count and least-waste criteria precede random tie-breaking to avoid needless fragmentation.
 6. **Displayed availability:** React's display does not weaken Flask/PostgreSQL authority; every booking is revalidated.
+7. **SRS hours versus database configurability:** the required SRS weekly hours are the mandatory Version 1 seed and normal demonstration baseline. PostgreSQL is the authoritative recurring-schedule source, which permits controlled alternate test data without weakening the required seed or activating holiday/date-specific exception behavior.
 
 ## 9. Remaining unresolved decisions
 
-No genuinely ambiguous operational or persistent-data business rule remains among the approved Prompt 1 and Prompt 4 decisions. These deliberately deferred technical-design decisions belong to later prompts:
+No genuinely ambiguous operational or persistent-data business rule remains among the approved Prompt 1, Prompt 4, and Prompt 5 decisions. These deliberately deferred technical-design decisions belong to later prompts:
 
-- exact PostgreSQL tables, columns, types, keys, constraints, indexes, configuration representation, and multi-table assignment structure;
+- exact PostgreSQL tables, columns, types, keys, constraints, indexes, configuration representation, recurring-operating-hours relation design, and multi-table assignment structure;
 - exact transaction, concurrency-control, locking, and idempotency mechanisms;
 - exact Flask paths, methods, status codes, payloads, error codes, service boundaries, and logging framework;
 - exact React components, routing, state management, debounce/on-blur timing, and visual styling;
 - exact test frameworks, fixtures, controlled clock, and deployment topology.
 
-They must continue to honor PRA-001 through PRA-028.
+They must continue to honor PRA-001 through PRA-029.
 
 ## 10. Future enhancements — inactive and unapproved for Version 1
 
@@ -607,7 +636,7 @@ These are not active supplemental requirements and shall not be implemented with
 | FE-006 | Reservation modification/rescheduling | Inactive; authorization, atomic reassignment, and conflict rules would be required. |
 | FE-007 | No-show handling | Inactive; statuses, timing, operations, and reporting remain undefined. |
 | FE-008 | Administrative reservation management | Inactive; roles, authentication, authorization, audit, and actions remain undefined. |
-| FE-009 | Holiday or exceptional-closure configuration | Inactive; Version 1 uses only the SRS weekly schedule. |
+| FE-009 | Holiday or date-specific exceptional-closure configuration | Inactive; Version 1 uses the PostgreSQL-backed recurring weekly schedule and has no date-specific exceptions. |
 | FE-010 | Subscription-history/audit events | Inactive; Version 1 stores current newsletter state only. |
 | FE-011 | Confirmation email or SMS | Inactive; Version 1 displays confirmation and never claims a message was sent. |
 | FE-012 | Physical table adjacency/combinability | Inactive; Version 1 has no floor-plan constraint. |
@@ -648,3 +677,5 @@ These are not active supplemental requirements and shall not be implemented with
 | 1.0 | 2026-08-13 | Established addendum governance and recorded five already-approved project constraints. No unresolved business rule or optional enhancement was approved. |
 | 2.0 | 2026-08-14 | Preserved PRA-001 through PRA-005; added PRA-006 through PRA-025 from all final Prompt 1 approvals; added the complete crosswalk, compatibility findings, deferred technical decisions, and a separate inactive Future Enhancements register. Obsolete/superseded Prompt 1 proposals were not recorded as active requirements. |
 | 2.1 | 2026-08-14 | Added PRA-026 through PRA-028 from approved Prompt 4 decisions governing prospective configuration changes, database-generated reservation fingerprints, retry/newsletter separation, Version 1 retention, and repeatable nonproduction reset/reinitialization. Added FE-015 through FE-017 as inactive future enhancements. |
+| 2.2 | 2026-08-15 | Added PRA-029 from the approved Prompt 5 operating-hours override. Reclassified recurring weekly hours as authoritative PostgreSQL business configuration seeded to the SRS schedule, preserved holiday/date-specific exceptions as inactive, and updated related traceability and compatibility findings. |
+| 2.2.1 | 2026-08-15 | Regenerated the downloadable artifact after PRA-029 propagation. No requirement changed; this packaging revision provides distinct file bytes and an explicit regeneration identifier for repository verification. |
