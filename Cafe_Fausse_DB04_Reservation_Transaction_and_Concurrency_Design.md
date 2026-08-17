@@ -1,7 +1,9 @@
 # Cafe Fausse DB-04 Reservation Transaction and Concurrency Design
 
-**Document version:** 1.0  
+**Document version:** 1.0.1  
 **Established:** 2026-08-17  
+**Last updated:** 2026-08-17  
+**Artifact regeneration ID:** `2026-08-17-MERMAID-R1`  
 **Roadmap increment:** DB-04  
 **Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), approved DB-01 Persistent-Data Requirements Analysis 1.2.1, approved DB-02 Conceptual Data Model 1.2, approved DB-03 Logical PostgreSQL Schema and Integrity Design 1.1, and approved Least-to-Most Implementation Roadmap 1.1.1  
 **Scope:** Reservation transaction and concurrency behavior only  
@@ -607,12 +609,12 @@ sequenceDiagram
     participant B as PostgreSQL booking operation
     participant D as PostgreSQL tables
     F->>B: Normalized booking request
-    B->>B: Begin; restaurant lock; authoritative validation
-    B->>D: Resolve/lock customer; verify no retry or overlap
+    B->>B: Begin, restaurant lock, authoritative validation
+    B->>D: Resolve and lock customer, verify no retry or overlap
     B->>D: Derive free tables and one-table winner
     B->>D: Apply allowed customer/preference changes
     B->>D: Insert reservation and one assignment
-    B->>B: Assert postconditions; commit
+    B->>B: Assert postconditions, then commit
     B-->>F: Committed confirmation facts
 ```
 
@@ -625,13 +627,13 @@ sequenceDiagram
     participant D as PostgreSQL tables
     F->>B: Normalized larger-party request
     B->>B: Lock and revalidate current rules/inventory
-    B->>D: Resolve customer; check retry and overlap
-    B->>D: Derive free set; exact rank; choose tie
+    B->>D: Resolve customer, then check retry and overlap
+    B->>D: Derive free set, rank exactly, choose tie
     B->>D: Insert one reservation
     loop Winning tables in number order
         B->>D: Insert assignment
     end
-    B->>B: Verify capacity/completeness; commit
+    B->>B: Verify capacity and completeness, then commit
     B-->>F: Confirmation with every table
 ```
 
@@ -643,7 +645,7 @@ sequenceDiagram
     participant B as PostgreSQL booking operation
     participant D as PostgreSQL tables
     F->>B: Resubmitted ordinary data
-    B->>B: Acquire locks; resolve customer; generate fingerprint
+    B->>B: Acquire locks, resolve customer, generate fingerprint
     B->>D: Find candidates and verify underlying tuple
     D-->>B: Existing reservation and assignments
     B->>D: Read current newsletter state
@@ -659,7 +661,7 @@ sequenceDiagram
     participant B as PostgreSQL booking operation
     participant D as PostgreSQL tables
     F->>B: Different overlapping request
-    B->>B: Lock and validate; resolve customer
+    B->>B: Lock and validate, then resolve customer
     B->>D: Fingerprint/tuple is not exact retry
     B->>D: Check retained customer intervals
     D-->>B: Overlap found
@@ -676,7 +678,7 @@ sequenceDiagram
     participant C as Flask request B
     A->>B: Acquire restaurant lock
     C->>B: Wait for restaurant lock
-    B-->>A: Validate, allocate, commit; release
+    B-->>A: Validate, allocate, commit, then release
     B-->>C: Lock granted after A commit
     C->>B: Re-read and revalidate current assignments
     B-->>C: Allocate disjoint capacity or return unavailable
@@ -690,11 +692,11 @@ sequenceDiagram
     participant B as PostgreSQL booking operation
     participant D as PostgreSQL tables
     F->>B: Normalized booking request
-    B->>D: Create/populate customer; change preference
+    B->>D: Create or populate customer, then change preference
     B->>D: Insert reservation and first assignment
     D-->>B: Injected or unexpected failure
-    B->>B: Roll back entire transaction; release locks
-    B-->>F: Classified failure; no partial state
+    B->>B: Roll back entire transaction and release locks
+    B-->>F: Classified failure with no partial state
 ```
 
 ## 24. Database unit-test plan
@@ -946,7 +948,14 @@ The following are DB-04 technical decisions presented for approval in this artif
 | SQL/application code avoided | Complete |
 | Unresolved blocker | None |
 
-DB-04 version 1.0 is complete and ready for Abdul's approval.
+DB-04 version 1.0.1 is complete and ready for Abdul's approval.
+
+### 32.1 Version record
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0 | 2026-08-17 | Established the complete DB-04 reservation transaction and concurrency design. |
+| 1.0.1 | 2026-08-17 | Regenerated Section 23 with Mermaid 11.13-compatible sequence-diagram text. Replaced unescaped semicolons in message labels; no transaction, concurrency, schema, or business decision changed. |
 
 Approval of DB-04 authorizes **DB-05 - Database Foundation Implementation** only. DB-05 will implement customers, scalar configuration, recurring operating hours, exactly 30 initialized tables, foundation constraints/roles, `pgcrypto` readiness, seed/reset/rebuild verification, and foundation tests. It will not yet implement reservations, assignments, allocation, or booking concurrency; those remain DB-06.
 
