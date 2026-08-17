@@ -1,11 +1,14 @@
 # Cafe Fausse DB-03 Logical PostgreSQL Schema and Integrity Design
 
-**Document version:** 1.0  
+**Document version:** 1.1  
 **Established:** 2026-08-15  
+**Last updated:** 2026-08-16  
 **Roadmap increment:** DB-03  
 **Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), approved DB-01 Persistent-Data Requirements Analysis 1.2.1, approved DB-02 Conceptual Data Model 1.2, and approved Least-to-Most Implementation Roadmap 1.1.1  
 **Scope:** Logical PostgreSQL schema and integrity design only  
-**Status:** Ready for DB-03 approval checkpoint  
+**Status:** Approved  
+**Approved by/date:** Abdul, 2026-08-16  
+**Approval source:** Explicit DB-03 approval in the project conversation  
 **Code status:** No SQL or application code generated
 
 ## 1. Purpose and boundary
@@ -621,7 +624,7 @@ The selected one-period-per-weekday structure deliberately implements the smalle
 
 DB-04 must not reinterpret these deliberate omissions as permission to add new business data.
 
-## 22. DB-03 completion assessment and approval checkpoint
+## 22. DB-03 completion assessment and approval record
 
 | DB-03 criterion | Result |
 |---|---|
@@ -649,8 +652,15 @@ DB-04 must not reinterpret these deliberate omissions as permission to add new b
 | SQL/application code avoided | Complete |
 | Unresolved logical-schema decisions | None |
 
-DB-03 version 1.0 is **ready for user review and approval**.
+DB-03 version 1.1 is **approved** by Abdul as of 2026-08-16. Version 1.1 records approval only and does not alter the logical-schema design approved in version 1.0.
 
-Approval of DB-03 will authorize Prompt 7 / DB-04 reservation transaction and concurrency design. It will not approve SQL, migrations, database implementation, Flask contracts, React design, or application code.
+DB-03 approval authorizes Prompt 7 / DB-04 reservation transaction and concurrency design. It does not approve SQL, migrations, database implementation, Flask contracts, React design, or application code.
+
+### 22.1 Version record
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0 | 2026-08-15 | Established the complete DB-03 logical PostgreSQL schema and integrity design. |
+| 1.1 | 2026-08-16 | Recorded Abdul's explicit DB-03 approval and authorization to proceed to Prompt 7 / DB-04. No logical-schema design changed. |
 
 No SQL or application code was generated.
