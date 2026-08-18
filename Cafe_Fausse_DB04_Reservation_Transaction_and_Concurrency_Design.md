@@ -1,13 +1,15 @@
 # Cafe Fausse DB-04 Reservation Transaction and Concurrency Design
 
-**Document version:** 1.0.1  
+**Document version:** 1.1  
 **Established:** 2026-08-17  
 **Last updated:** 2026-08-17  
 **Artifact regeneration ID:** `2026-08-17-MERMAID-R1`  
 **Roadmap increment:** DB-04  
 **Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), approved DB-01 Persistent-Data Requirements Analysis 1.2.1, approved DB-02 Conceptual Data Model 1.2, approved DB-03 Logical PostgreSQL Schema and Integrity Design 1.1, and approved Least-to-Most Implementation Roadmap 1.1.1  
 **Scope:** Reservation transaction and concurrency behavior only  
-**Status:** Complete - awaiting approval  
+**Status:** Approved  
+**Approved by/date:** Abdul, 2026-08-17  
+**Approval source:** Explicit DB-04 approval in the project conversation  
 **Code status:** No SQL or application code generated
 
 ## 1. Executive summary
@@ -948,7 +950,7 @@ The following are DB-04 technical decisions presented for approval in this artif
 | SQL/application code avoided | Complete |
 | Unresolved blocker | None |
 
-DB-04 version 1.0.1 is complete and ready for Abdul's approval.
+DB-04 version 1.1 is **approved** by Abdul as of 2026-08-17. Version 1.1 records approval only and does not alter the transaction, concurrency, schema-compatibility, fingerprint, allocation, retry, rollback, or testing decisions approved in version 1.0.1.
 
 ### 32.1 Version record
 
@@ -956,9 +958,10 @@ DB-04 version 1.0.1 is complete and ready for Abdul's approval.
 |---|---|---|
 | 1.0 | 2026-08-17 | Established the complete DB-04 reservation transaction and concurrency design. |
 | 1.0.1 | 2026-08-17 | Regenerated Section 23 with Mermaid 11.13-compatible sequence-diagram text. Replaced unescaped semicolons in message labels; no transaction, concurrency, schema, or business decision changed. |
+| 1.1 | 2026-08-17 | Recorded Abdul's explicit DB-04 approval and authorization to proceed to DB-05. No design decision changed. |
 
-Approval of DB-04 authorizes **DB-05 - Database Foundation Implementation** only. DB-05 will implement customers, scalar configuration, recurring operating hours, exactly 30 initialized tables, foundation constraints/roles, `pgcrypto` readiness, seed/reset/rebuild verification, and foundation tests. It will not yet implement reservations, assignments, allocation, or booking concurrency; those remain DB-06.
+DB-04 approval authorizes **DB-05 - Database Foundation Implementation** only. DB-05 will implement customers, scalar configuration, recurring operating hours, exactly 30 initialized tables, foundation constraints/roles, `pgcrypto` readiness, seed/reset/rebuild verification, and foundation tests. It will not yet implement reservations, assignments, allocation, or booking concurrency; those remain DB-06.
 
-Do not begin DB-05 until DB-04 is explicitly approved.
+DB-05 is authorized but has not begun.
 
 No SQL or application code was generated.
