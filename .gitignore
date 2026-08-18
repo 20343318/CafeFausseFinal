@@ -1,1 +1,7 @@
 Cafe_Fausse_PRA029_Regeneration_Manifest.md
+
+# Local database environment files and generated test output
+database/.env
+database/.env.*
+!database/.env.example
+database/test-results/
