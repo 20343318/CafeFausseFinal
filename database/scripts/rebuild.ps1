@@ -1,5 +1,10 @@
 param(
-    [switch]$SkipProvisioning
+    [switch]$SkipProvisioning,
+    [ValidateSet(
+        '004_foundation_privileges.sql',
+        '009_reservation_privileges.sql'
+    )]
+    [string]$ThroughMigration = '009_reservation_privileges.sql'
 )
 
 Set-StrictMode -Version Latest
@@ -31,17 +36,35 @@ $migrationFiles = Get-ChildItem -LiteralPath (Join-Path $databaseRoot 'migration
     Sort-Object -Property Name
 
 foreach ($migrationFile in $migrationFiles) {
+    if ($migrationFile.Name -gt $ThroughMigration) {
+        break
+    }
+
     Write-Host "Applying $($migrationFile.Name)"
     Invoke-CafeFaussePsql -PsqlArguments @(
         '-v', 'ON_ERROR_STOP=1',
         '-f', $migrationFile.FullName
     ) | Out-Null
+
+    if ($migrationFile.Name -eq '004_foundation_privileges.sql') {
+        $db05VerificationFile = Join-Path $databaseRoot 'verification\verify_db05.sql'
+        Invoke-CafeFaussePsql -PsqlArguments @(
+            '-v', 'ON_ERROR_STOP=1',
+            '-f', $db05VerificationFile
+        ) | Out-Null
+        Write-Host 'DB-05 checkpoint verification: PASS'
+    }
 }
 
-$verificationFile = Join-Path $databaseRoot 'verification\verify_db05.sql'
+if ($ThroughMigration -eq '004_foundation_privileges.sql') {
+    Write-Host 'DB-05 clean rebuild and verification completed successfully.'
+    return
+}
+
+$verificationFile = Join-Path $databaseRoot 'verification\verify_db06.sql'
 Invoke-CafeFaussePsql -PsqlArguments @(
     '-v', 'ON_ERROR_STOP=1',
     '-f', $verificationFile
 ) | Out-Null
 
-Write-Host 'DB-05 clean rebuild and verification completed successfully.'
+Write-Host 'DB-06 clean rebuild and verification completed successfully.'

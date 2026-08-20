@@ -34,19 +34,41 @@ if ($failureExitCode -eq 0) {
 }
 Write-Host 'Fail-visible psql behavior: PASS'
 
-Write-Host 'Running two complete clean rebuilds.'
-& $rebuildScript
-& $rebuildScript -SkipProvisioning
+Write-Host 'Rebuilding through the approved DB-05 checkpoint for regression tests.'
+& $rebuildScript -ThroughMigration '004_foundation_privileges.sql'
 
-$behaviorTestFile = Join-Path $databaseRoot 'tests\db05_behavior_tests.sql'
+$db05BehaviorTestFile = Join-Path $databaseRoot 'tests\db05_behavior_tests.sql'
 Invoke-CafeFaussePsql -PsqlArguments @(
     '-v', 'ON_ERROR_STOP=1',
-    '-f', $behaviorTestFile
+    '-f', $db05BehaviorTestFile
 ) | Out-Null
 
-$privilegeTestFile = Join-Path $databaseRoot 'tests\runtime_privilege_denials.sql'
+$db05PrivilegeTestFile = Join-Path $databaseRoot 'tests\runtime_privilege_denials.sql'
 Invoke-CafeFaussePsql -PsqlArguments @(
-    '-f', $privilegeTestFile
+    '-f', $db05PrivilegeTestFile
 ) | Out-Null
 
-Write-Host 'DB-05 automated test suite completed successfully.'
+Write-Host 'Approved DB-05 regression suite: PASS'
+
+Write-Host 'Running two complete DB-06 clean rebuilds.'
+& $rebuildScript -SkipProvisioning
+& $rebuildScript -SkipProvisioning
+
+$db06BehaviorTestFile = Join-Path $databaseRoot 'tests\db06_behavior_tests.sql'
+Invoke-CafeFaussePsql -PsqlArguments @(
+    '-v', 'ON_ERROR_STOP=1',
+    '-f', $db06BehaviorTestFile
+) | Out-Null
+
+$db06PrivilegeTestFile = Join-Path $databaseRoot 'tests\db06_runtime_privilege_denials.sql'
+Invoke-CafeFaussePsql -PsqlArguments @(
+    '-f', $db06PrivilegeTestFile
+) | Out-Null
+
+& (Join-Path $PSScriptRoot 'concurrency_test.ps1') -Iterations 3
+& (Join-Path $PSScriptRoot 'performance_test.ps1') -Samples 10
+
+Write-Host 'Restoring and verifying an empty DB-06 baseline after destructive tests.'
+& $rebuildScript -SkipProvisioning
+
+Write-Host 'DB-05 regression and DB-06 automated test suites completed successfully.'
