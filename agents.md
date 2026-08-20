@@ -42,9 +42,9 @@ Before implementing a roadmap increment, read:
 
 
 
-\- `docs/SRS.pdf`
+\- `docs/SRS(1).pdf`
 
-\- `docs/Rubric.pdf`
+\- `docs/Rubric(1).pdf`
 
 \- the applicable documents under `docs/approved-design-artifacts/`
 
