@@ -8,8 +8,8 @@ This prompt continues the PostgreSQL implementation begun in DB-05. Work in the 
 
 Use the following as authoritative, in this order:
 
-1. `docs/SRS.pdf`;
-2. `docs/Rubric.pdf`;
+1. `docs/SRS(1).pdf`;
+2. `docs/Rubric(1).pdf`;
 3. the approved Project Requirements Addendum version 2.2.1, including PRA-001 through PRA-029;
 4. the approved DB-01 Persistent-Data Requirements Analysis version 1.2.1;
 5. the approved DB-02 Conceptual Data Model version 1.2;
