@@ -23,8 +23,8 @@ END
 $function$;
 
 SELECT pg_temp.assert_db06(
-    pg_catalog.current_setting('server_version_num')::integer >= 140000,
-    'supported PostgreSQL version (14 or newer)'
+    pg_catalog.current_setting('server_version_num')::integer = 180003,
+    'required PostgreSQL version 18.3'
 );
 
 SELECT pg_temp.assert_db06(

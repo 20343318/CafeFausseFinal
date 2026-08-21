@@ -29,6 +29,15 @@ COMMIT;
 "@)
 }
 
+function Set-HeterogeneousCapacities {
+    Reset-Reservations
+    [void](Invoke-ScalarSql @"
+SET ROLE cafe_fausse_test;
+UPDATE cafe_fausse.restaurant_tables
+SET seating_capacity = 2 + (table_number % 7);
+"@)
+}
+
 function Measure-SqlSamples {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -51,6 +60,7 @@ function Measure-SqlSamples {
     $p95Index = [math]::Ceiling(0.95 * $ordered.Count) - 1
     return [pscustomobject]@{
         Measurement = $Name
+        Metric = 'individual client-observed call'
         Samples = $ordered.Count
         MinimumMilliseconds = [math]::Round($ordered[0], 2)
         P50Milliseconds = [math]::Round($ordered[$p50Index], 2)
@@ -67,6 +77,7 @@ function Measure-ConcurrentSamples {
     )
 
     $measurements = [System.Collections.Generic.List[double]]::new()
+    $individualMeasurements = [System.Collections.Generic.List[double]]::new()
     $totalBooked = 0
     $totalRetryable = 0
     for ($sample = 1; $sample -le $Samples; $sample++) {
@@ -95,6 +106,9 @@ function Measure-ConcurrentSamples {
                 $process.Kill()
                 throw 'Concurrent measurement exceeded its 20-second bound.'
             }
+            $individualMeasurements.Add(
+                ($process.ExitTime - $process.StartTime).TotalMilliseconds
+            )
             $output = $process.StandardOutput.ReadToEnd().Trim()
             $errorOutput = $process.StandardError.ReadToEnd().Trim()
             if ($process.ExitCode -eq 0 -and $output -match '^booked$') {
@@ -122,18 +136,34 @@ function Measure-ConcurrentSamples {
     }
 
     $ordered = $measurements | Sort-Object
+    $individualOrdered = $individualMeasurements | Sort-Object
     Write-Host "$Name outcomes across $Samples samples: booked=$totalBooked retryable=$totalRetryable"
-    return [pscustomobject]@{
-        Measurement = $Name
-        Samples = $ordered.Count
-        MinimumMilliseconds = [math]::Round($ordered[0], 2)
-        P50Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.50 * $ordered.Count) - 1], 2)
-        P95Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.95 * $ordered.Count) - 1], 2)
-        P99Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.99 * $ordered.Count) - 1], 2)
-        MaximumMilliseconds = [math]::Round($ordered[$ordered.Count - 1], 2)
-        BookedOutcomes = $totalBooked
-        RetryableOutcomes = $totalRetryable
-    }
+    return @(
+        [pscustomobject]@{
+            Measurement = $Name
+            Metric = 'group completion'
+            Samples = $ordered.Count
+            MinimumMilliseconds = [math]::Round($ordered[0], 2)
+            P50Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.50 * $ordered.Count) - 1], 2)
+            P95Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.95 * $ordered.Count) - 1], 2)
+            P99Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.99 * $ordered.Count) - 1], 2)
+            MaximumMilliseconds = [math]::Round($ordered[$ordered.Count - 1], 2)
+            BookedOutcomes = $totalBooked
+            RetryableOutcomes = $totalRetryable
+        },
+        [pscustomobject]@{
+            Measurement = $Name
+            Metric = 'individual request process lifetime'
+            Samples = $individualOrdered.Count
+            MinimumMilliseconds = [math]::Round($individualOrdered[0], 2)
+            P50Milliseconds = [math]::Round($individualOrdered[[math]::Ceiling(0.50 * $individualOrdered.Count) - 1], 2)
+            P95Milliseconds = [math]::Round($individualOrdered[[math]::Ceiling(0.95 * $individualOrdered.Count) - 1], 2)
+            P99Milliseconds = [math]::Round($individualOrdered[[math]::Ceiling(0.99 * $individualOrdered.Count) - 1], 2)
+            MaximumMilliseconds = [math]::Round($individualOrdered[$individualOrdered.Count - 1], 2)
+            BookedOutcomes = $totalBooked
+            RetryableOutcomes = $totalRetryable
+        }
+    )
 }
 
 $slotText = Invoke-ScalarSql @"
@@ -180,6 +210,18 @@ $results.Add((Measure-SqlSamples 'uncontended single-table booking' {
     "SET ROLE cafe_fausse_test; SELECT outcome FROM cafe_fausse.book_reservation_test('Perf', NULL, 'Single', 'perf-single-$sample@example.com', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 4, 'no_change', 1, NULL);"
 } { Reset-Reservations }))
 
+$results.Add((Measure-SqlSamples 'production booking through general equal-capacity allocation' {
+    param($sample)
+    "SET ROLE cafe_fausse_app; SELECT outcome FROM cafe_fausse.book_reservation('Perf', NULL, 'GeneralEqual', 'perf-general-equal-$sample@example.com', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 61, 'no_change');"
+} { Reset-Reservations }))
+
+$results.Add((Measure-SqlSamples 'production booking through general heterogeneous-capacity allocation' {
+    param($sample)
+    "SET ROLE cafe_fausse_app; SELECT outcome FROM cafe_fausse.book_reservation('Perf', NULL, 'GeneralHeterogeneous', 'perf-general-heterogeneous-$sample@example.com', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 73, 'no_change');"
+} { Set-HeterogeneousCapacities }))
+
+Reset-Reservations
+
 Reset-Reservations
 [void](Invoke-ScalarSql (& $bookingSql 1))
 $results.Add((Measure-SqlSamples 'exact retry' {
@@ -201,9 +243,15 @@ $results.Add((Measure-SqlSamples 'unavailable full outcome' {
     "SET ROLE cafe_fausse_test; SELECT outcome FROM cafe_fausse.book_reservation_test('Perf', NULL, 'Unavailable', 'perf-unavailable-$sample@example.com', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 1, 'no_change', 1, NULL);"
 }))
 
-$results.Add((Measure-ConcurrentSamples 'two concurrent submissions' 2))
-$results.Add((Measure-ConcurrentSamples 'five concurrent submissions' 5))
-$results.Add((Measure-ConcurrentSamples 'short burst of eight submissions' 8))
+foreach ($result in @(Measure-ConcurrentSamples 'two concurrent submissions' 2)) {
+    $results.Add($result)
+}
+foreach ($result in @(Measure-ConcurrentSamples 'five concurrent submissions' 5)) {
+    $results.Add($result)
+}
+foreach ($result in @(Measure-ConcurrentSamples 'short burst of eight submissions' 8)) {
+    $results.Add($result)
+}
 
 # Retained history is inserted through the test role, then the normal booking
 # path is measured against the production overlap indexes.

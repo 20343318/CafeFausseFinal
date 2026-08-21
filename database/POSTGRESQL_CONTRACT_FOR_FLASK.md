@@ -4,7 +4,7 @@ Status: DB-07 candidate, frozen for Hard Gate 1 approval. This is a database-fac
 
 ## Platform, namespace, and caller rules
 
-- PostgreSQL 14 or newer is supported; verification used PostgreSQL 18.3. `pgcrypto` is the only required extension (besides built-in `plpgsql`).
+- PostgreSQL 18.3 is the required, implemented, and verified Version 1 database version. `pgcrypto` is required; built-in `plpgsql` is also present. Compatibility with PostgreSQL 14-17 or any version other than 18.3 is outside this verified contract.
 - Business objects live only in `cafe_fausse`. `cafe_fausse_owner`, `cafe_fausse_app`, and `cafe_fausse_test` are passwordless, non-login, non-superuser group roles.
 - Production Flask code uses `cafe_fausse_app`, calls only the three production operations below, and does not reproduce allocation, overlap, exact-retry, fingerprint, or concurrency logic in process-local code.
 - Each volatile operation owns its PostgreSQL transaction-level advisory locks. Call it at `READ COMMITTED`; do not place booking in another isolation level. A call may be the only statement in an explicit caller transaction or may run in autocommit. The caller must commit on a returned result and roll back after an exception before retrying.
@@ -69,7 +69,7 @@ Stable outcomes are `booked`, `booked_phone_notice`, `exact_retry`, `same_custom
 
 - Rebuild: `database/scripts/rebuild.ps1`; read-only catalog/readiness verification: `database/scripts/verify.ps1`; full gate: `database/scripts/test.ps1`.
 - The rebuild requires explicit nonproduction `PGDATABASE`, `CAFE_FAUSSE_ENVIRONMENT`, and `CAFE_FAUSSE_ALLOW_RESET=YES`. It applies migrations lexically and restores one configuration row, seven hours rows, and 30 capacity-four tables.
-- Reference measurements are in `DB07_VERIFICATION_REPORT.md`. Proposed database contribution budget for approval: uncontended production booking and availability should remain below 1,000 ms at p95 on the DB-07 reference host, excluding caller/network time; lock wait is separately bounded at 3 seconds and is a retryable technical failure, not a latency success.
-- The coarse restaurant-wide booking lock intentionally prioritizes correctness over throughput. Five-request groups and short bursts can exceed the full-stack two-second expectation as a group even when individual database calls remain correct.
+- Reference measurements are in `DB07_VERIFICATION_REPORT.md`. The proposed database contribution budget is p95 below 1,000 ms for uncontended production booking and availability on the DB-07 reference host, excluding caller/network time. The fast-path and ordinary-result cases meet it, but measured production bookings that require the general exact equal-capacity or heterogeneous-capacity allocator do not (p95 1,265.04 ms and 1,135.29 ms). The proposal therefore is not met by every production allocation path and is not an approved guarantee.
+- The coarse restaurant-wide booking lock intentionally prioritizes Version 1 correctness over throughput. Measurements distinguish whole-group completion from individual child-process lifetime. Five-request contention has exceeded two seconds in recorded runs, and the eight-request burst exceeded two seconds in both group and individual p95 in the targeted rerun. This accepted Version 1 limitation requires later full-stack validation. Lock wait is separately bounded at 3 seconds and is a retryable technical failure, not a latency success.
 
 Changing an operation signature, result shape, stable outcome/detail, grant expectation, temporal meaning, retry rule, or transaction semantic requires an explicit PostgreSQL Contract revision after approval. This contract defines no endpoint, HTTP, JSON, CORS, Flask architecture, or UI decision.

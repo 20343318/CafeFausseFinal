@@ -14,7 +14,7 @@ The final gate evidence consists of the DB-05/DB-06 regression tests, DB-07 cata
 
 - Authoritative files were present: SRS, rubric, Addendum 2.2.1, DB-01 1.2.1, DB-02 1.2, DB-03 1.1, DB-04 1.1, roadmap 1.1.1, and approved DB-05/DB-06 reports.
 - Approved migration boundary was 001–009; all matched committed bytes and remain immutable.
-- Supported baseline was PostgreSQL 14+, `pgcrypto`, schema `cafe_fausse`, and owner/app/test non-login roles. Verification ran on PostgreSQL 18.3.
+- PostgreSQL 18.3 is the required, implemented, and verified Version 1 database version. `pgcrypto` is required; schema `cafe_fausse` and the owner/app/test non-login roles are the implemented boundary. Compatibility with other PostgreSQL versions is outside the verified Version 1 contract.
 - The initial suite passed the reset guard, fail-visible error check, DB-05 verifier/behavior/denial tests, two DB-06 rebuilds, DB-06 behavior/denial tests, and all 23 then-configured concurrency iterations. Its preliminary performance stage failed only because a correct `55P03` was treated as a harness failure; committed-state invariants remained intact.
 
 ## Defect register
@@ -57,6 +57,8 @@ Concurrency uses explicit session markers plus `pg_stat_activity` lock-wait obse
 
 The final `database/scripts/test.ps1` run completed in 409.1 seconds with exit code 0: 51 distinct catalog/invariant checks, 123 behavior assertions, 12 expected privilege denials, two harness safety checks, and 75 barrier-synchronized concurrency scenario iterations all passed (263 distinct checks/scenarios), with no skips. It included two consecutive complete DB-07 rebuilds, query-plan execution, and a final rebuild/read-only verification of the empty approved baseline.
 
+This targeted correction pass reran only affected evidence on a fresh disposable PostgreSQL 18.3 cluster. `rebuild.ps1` and `verify.ps1` passed with the exact 18.3 assertions; `performance_test.ps1 -Samples 20` passed after adding individual concurrent-request and general-production-booking measurements; the documented weekday/Sunday/opening/alignment SQL returned the exact expected outcomes; the deterministic capacity test returned `booked` with 30 assignments, then `unavailable` with rejected-state counts `0|0|0|0`; and a final rebuild plus read-only verification restored the approved empty baseline. No schema object or migration changed.
+
 ## Failure and recovery matrix
 
 | Case | Database result | State/retry rule |
@@ -79,38 +81,179 @@ Owner/app/test roles have no login, superuser, create-db, create-role, replicati
 
 ## Query-plan and performance assessment
 
-Reference host: Windows 10 build 26100, Intel Family 6 Model 141, 8 logical processors, PostgreSQL 18.3, local loopback, warm/mixed cache, 20 samples, one local `psql` process per observed call. Client-observed figures conservatively include process startup. A rollback-only 200-reservation history fixture was analyzed for plans.
+Reference host: Windows 10 build 26100, Intel Family 6 Model 141, 8 logical processors, required PostgreSQL 18.3, local loopback, warm/mixed cache, 20 samples, one local `psql` process per observed call. Client-observed figures conservatively include process startup. Concurrent group duration runs from launching the first child through observing every child exit; individual-request duration is each child process's `ExitTime - StartTime`, so it includes connection/process startup, lock wait, database execution, and result delivery to local `psql`. A rollback-only 200-reservation history fixture was analyzed for plans.
 
-Representative plan execution: canonical email 0.058 ms via `customers_email_uq`; fingerprint 0.025 ms via its lookup index; same-customer lookup 0.077 ms via `reservations_customer_interval_idx`; global interval 0.044 ms via `reservations_interval_idx`; assignment-by-table 0.040 ms via its index; free-table derivation 0.107 ms with the interval index. Sequential scans on deliberately tiny 30-row inventory are appropriate. Before fast paths, the general 30-table allocator plan was 934.386 ms; general equal/heterogeneous fixtures remain about 1.0 s by client observation, while production single/all-table bookings use the exact fast paths.
+Representative plan execution: canonical email 0.058 ms via `customers_email_uq`; fingerprint 0.025 ms via its lookup index; same-customer lookup 0.077 ms via `reservations_customer_interval_idx`; global interval 0.044 ms via `reservations_interval_idx`; assignment-by-table 0.040 ms via its index; free-table derivation 0.107 ms with the interval index. Sequential scans on deliberately tiny 30-row inventory are appropriate. Before fast paths, one general 30-table allocator plan executed in 934.386 ms. The exact fast paths cover sufficient-single-table and necessarily-all-table cases; general exact allocation remains the approved meet-in-the-middle implementation.
 
-Post-correction 20-sample client-observed p50/p95/p99: availability 417.00/531.49/555.18 ms; single booking 442.92/524.84/532.34 ms; all-table booking 439.82/485.91/533.69 ms; exact retry 523.29/655.19/732.73 ms; overlap 437.07/500.04/646.12 ms; unavailable 463.19/560.85/566.31 ms; retained-history booking 456.45/556.90/562.40 ms. Groups of 2, 5, and 8 were 823.20/901.85/1,365.64, 2,048.68/2,424.18/2,427.34, and 3,254.49/3,361.94/3,399.17 ms respectively, with only booked or explicitly retryable outcomes and committed-count agreement. The full observed min/max table is reproducible with `performance_test.ps1 -Samples 20`.
+The targeted 20-sample rerun produced these client-observed p50/p95/p99 values (milliseconds):
+
+| Operation/path | p50 | p95 | p99 |
+|---|---:|---:|---:|
+| Provisional availability day | 342.14 | 433.50 | 438.89 |
+| General exact allocation, 30 equal-capacity tables | 813.50 | 863.08 | 892.64 |
+| General exact allocation, 30 heterogeneous-capacity tables | 739.73 | 863.64 | 1,019.60 |
+| Uncontended all-tables fast-path booking | 347.19 | 440.46 | 445.63 |
+| Uncontended single-table fast-path booking | 352.64 | 454.32 | 490.48 |
+| Production booking through general equal-capacity allocation | 1,124.99 | 1,265.04 | 1,370.08 |
+| Production booking through general heterogeneous-capacity allocation | 1,015.54 | 1,135.29 | 1,157.33 |
+| Exact retry | 347.00 | 446.20 | 471.41 |
+| Same-customer overlap result | 338.95 | 427.58 | 445.07 |
+| Unavailable/full result | 342.86 | 451.46 | 487.60 |
+| Booking with 100 retained-history rows | 341.59 | 446.10 | 457.63 |
+
+Concurrent evidence distinguishes group completion from individual child-request lifetime:
+
+| Concurrent group | Metric | Observations | p50 | p95 | p99 |
+|---|---|---:|---:|---:|---:|
+| 2 requests | Group completion | 20 | 644.56 | 684.30 | 847.23 |
+| 2 requests | Individual request | 40 | 548.26 | 673.23 | 826.81 |
+| 5 requests | Group completion | 20 | 1,507.61 | 1,606.22 | 1,720.56 |
+| 5 requests | Individual request | 100 | 936.26 | 1,528.69 | 1,591.50 |
+| 8 requests | Group completion | 20 | 2,410.85 | 2,619.48 | 2,626.82 |
+| 8 requests | Individual request | 160 | 1,423.82 | 2,397.74 | 2,600.18 |
+
+All 300 concurrent requests in this rerun booked successfully (40/100/160 for groups 2/5/8), no retryable outcome occurred, and committed counts matched outcomes. The eight-request group and individual p95 exceed two seconds. Five-request contention is variable: the original gate recorded group p95 2,424.18 ms, and the first individual-latency rerun recorded group/individual p95 2,429.22/2,080.20 ms, all above two seconds; the final targeted rerun was below two seconds at 1,606.22/1,528.69 ms. Therefore five-request contention has exceeded two seconds in recorded evidence and cannot be represented as reliably below the SRS threshold.
 
 The controlled timeout case separately observed 3,012.49 ms of waiter duration and 3,019.92 ms of holder lock-hold duration, consistent with the configured three-second booking lock timeout. That `55P03` transaction rolled back; the holder alone committed, and the final invariant check passed.
 
-Proposed DB-07 budget for explicit approval is p95 under 1,000 ms for uncontended production booking and availability on this reference class of host, leaving at least half the SRS two-second expectation for later Flask/network/UI work. The approved 3-second lock timeout is measured/classified separately and is not a successful latency result. Coarse-lock group throughput is a known Version 1 limitation, not a correctness failure.
+The proposed DB-07 budget of uncontended p95 below 1,000 ms is met by availability, ordinary outcome paths, and single/all-table fast-path production bookings, but it is **not met by every production allocation path**: full production bookings through the general equal-capacity and heterogeneous-capacity paths measured p95 1,265.04 ms and 1,135.29 ms. The budget remains a proposal rather than an approved guarantee, and these are documented exceptions. The approved restaurant-wide lock remains the Version 1 correctness strategy; five/eight-request throughput and latency require later full-stack validation. The approved 3-second lock timeout is classified separately as retryable and is not a successful latency result.
 
 ## Traceability matrix
 
-| Requirement group | Implementation | Automated/manual evidence | Result / later layer |
+The following tables identify every SRS and PRA requirement separately, including database-inapplicable requirements that remain assigned to later layers.
+
+### SRS requirements
+
+| ID | Applicability / later layer | Implementation object | Specific automated or repeatable evidence | Manual evidence | Result / limitation or deferral |
+|---|---|---|---|---|---|
+| FR-01 | React content only | None in PostgreSQL | DB-07 scope/exclusion audit | None at DB gate | Not database-applicable; React later. |
+| FR-02 | Hours are database-applicable; address/phone display is later | `restaurant_operating_hours`; migration 003; availability/booking routines | `verify_db05.sql` `exact seven-row SRS operating-hours seed`; DB-06 weekday/Sunday closing cases | Foundation and schedule-boundary sections | Database schedule complete; React displays content through later Flask work. |
+| FR-03 | UI imagery/theme only | None | DB-07 exclusion audit | None | React/content later. |
+| FR-04 | UI navigation only | None | DB-07 exclusion audit | None | React later. |
+| FR-05 | Menu content/UI only | None | DB-07 exclusion audit | None | React/content later. |
+| FR-06 | Persistence/booking inputs apply; form is later | `customers`, `reservations`; `book_reservation` | DB-05 customer-column/constraint cases; DB-06 reservation column/type cases | Ordinary booking | Database representation complete; Flask/React own request/form behavior. |
+| FR-07 | Validity/availability applies | Configuration, hours, tables, reservations/assignments; `provisional_availability`; booking revalidation | DB-06 `provisional availability exposes future bookable slots`, past-date, DST, alignment/duration and closing cases | Schedule-boundary and full-capacity sections | PostgreSQL complete; Flask exposes and React renders later. |
+| FR-08 | Thirty-table exact/random assignment applies | `restaurant_tables`; `select_table_allocation`; `book_reservation`; migrations 003/006/008/011 | Seed verifier; allocator `minimum table count`, `least waste`, `production randomness`; single/multi/last-table concurrency | One-, multi-, and all-table bookings | PostgreSQL complete; later layers invoke/display. |
+| FR-09 | Durable success/full outcomes apply; wording/display is later | Booking outcomes `booked`, `exact_retry`, `unavailable` | DB-06 authoritative-booking case; performance full outcome; last-table concurrency | Deterministic full-capacity section | Database outcomes complete; Flask/React message mapping later. |
+| FR-10 | About content only | None | DB-07 exclusion audit | None | React/content later. |
+| FR-11 | Founder/mission content only | None | DB-07 exclusion audit | None | React/content later. |
+| FR-12 | Gallery imagery only | None | DB-07 exclusion audit | None | React later. |
+| FR-13 | Lightbox interaction only | None | DB-07 exclusion audit | None | React later. |
+| FR-14 | Awards/reviews content only | None | DB-07 exclusion audit | None | React/content later. |
+| FR-15 | Preference identity/persistence applies; form syntax/UI later | `customers.email`, `newsletter_subscribed`; `set_newsletter_preference` | DB-05 email constraints; DB-06 standalone opt-in/out and newsletter concurrency | Customer/newsletter inspection | Database complete; Flask full syntax and React form later. |
+| FR-16 | Database-applicable | Customer email/preference columns and controlled preference routine | DB-06 `standalone newsletter opt-in creates an identified customer`; unique-email concurrency | Newsletter inspection | Complete. |
+| FR-17 | Database-applicable | Six-table schema; migrations 002/005 | DB-05 exact foundation columns; DB-06 exact reservation/assignment columns, types, constraints and indexes | Catalog inspection | Complete additive representation of SRS minimum fields. |
+| FR-18 | PostgreSQL operations apply; Flask logic is later | Three production routines and six tables | DB-06 39-case suite; 75 concurrency scenarios; privilege denials | Booking/full/rollback demonstrations | PostgreSQL complete; Flask orchestration/response mapping deferred. |
+| NFR-01 | Full website-load timing is not database-verifiable | Relevant indexes only | `query_plans_db07.sql` contribution evidence | None | Browser/network/full-stack measurement later. |
+| NFR-02 | Reservation/newsletter form-submission performance; DB contribution applies | Production routines, indexes, performance harness | `performance_test.ps1 -Samples 20`, including production general paths and individual contention latency | Performance tables above | General production allocation exceeds proposed 1,000 ms p95 budget; contention can exceed SRS two seconds; full-stack validation later. |
+| NFR-03 | UI usability only | None | DB-07 exclusion audit | None | React usability review later. |
+| NFR-04 | Brand/UI design only | None | DB-07 exclusion audit | None | React/UI later. |
+| NFR-05 | Reliability, integrity, prevention of double/overbooking | PK/FK/UQ/checks; restaurant/email locks; atomic booking | DB-06 overlap/assignment/rollback cases; 75 concurrency scenarios; committed-state verifiers | Half-open, full-capacity, rollback and concurrency sections | Complete at PostgreSQL layer; later integration must preserve contract. |
+| NFR-06 | Stable failure classification applies; friendly messaging later | Routine outcome/detail codes and retryable SQLSTATEs | DB-06 invalid/readiness/rollback cases; concurrency `55P03`/`40P01` | Rejected schedule/full cases | Database classification complete; Flask/React wording/accessibility later. |
+| NFR-07 | Browser compatibility only | None | DB-07 exclusion audit | None | React/browser matrix later. |
+| NFR-08 | Responsive UI only | None | DB-07 exclusion audit | None | React/device testing later. |
+| NFR-09 | Maintainability and documentation apply | Lexical migrations; scripts; README; report; contract; manual guide; named objects | `rebuild.ps1`, `verify.ps1`, `test.ps1`; static and immutable-migration audits | Guide/contract review | Complete for PostgreSQL; later modules need their own documentation. |
+| NFR-10 | Cross-browser/mobile consistency only | None | DB-07 exclusion audit | None | React/full-stack later. |
+| NFR-11 | React/CSS UI only | None | DB-07 exclusion audit | None | React later. |
+| NFR-12 | HTTP/HTTPS and REST are outside DB-07 | Database contract only; no endpoints | Repository audit confirms no Flask/REST work | None | API design/implementation later; not claimed complete. |
+| DB-01 | Persistent customer/reservation management applies | `cafe_fausse` schema and six tables | Clean rebuild; exact-table verifiers | Catalog inspection | Complete. |
+| DB-02 | SRS Customers fields apply | Structured `customers` columns | DB-05 exact columns/constraints/behavior | Customer inspection | Complete through approved normalization. |
+| DB-03 | SRS Reservations fields apply | `reservations` and normalized assignments | DB-06 exact columns/FKs/indexes | Reservation/assignment inspection | Complete; multiple assignment rows support larger parties. |
+| DB-04 | Customer persistence during booking applies | `book_reservation` insert/reuse | New/reuse/identity/rollback cases; same-email concurrency | Booking and rejected-full state query | Complete and atomic. |
+| DB-05 | Newsletter persistence applies | Customer Boolean and preference routine | Standalone opt-in/out and newsletter races | Newsletter inspection | Complete. |
+| DB-06 | Integrity/no-overbooking applies | Constraints, locks, controlled routines | Overlap/allocation/rollback cases and 75 concurrency scenarios | Full/concurrency proof | Complete. |
+| DB-07 | Rubric database-effect demonstration | Manual guide and test-role inspection | Repeatable manual SQL plus full gate | Ordinary/full/rollback sections | Complete at DB layer; final presentation later. |
+
+Security evidence is not attributed to NFR-09. It traces to the DB-07 role/security gate and approved DB-03/DB-04 responsibility/capability decisions: migrations 004, 009 and 010; the DB-05 role/grant verifier; DB-06 routine ownership, search-path and grant checks; DB-07 current/future `PUBLIC` denials; and both runtime denial suites. Result: least-privilege boundary complete with no current bypass.
+
+### PRA-001 through PRA-029
+
+| ID | Applicability / responsibility | Implementation object | Specific automated or repeatable evidence | Manual evidence | Result / limitation or deferred layer |
+|---|---|---|---|---|---|
+| PRA-001 | Ordering/gate control | Repository DB-only boundary | Git path/status audit; no backend/frontend changes | Report scope | Complete; API-01/Flask/React not begun. |
+| PRA-002 | Least-to-most database delivery | Versioned migrations; three production routines | Clean lexical rebuild in `rebuild.ps1` | Foundation steps | Complete for DB-07. |
+| PRA-003 | Testing throughout | Verification, behavior, denial, concurrency, performance and plan files | `test.ps1`; 263 full-gate checks/scenarios | Manual guide | Complete, no skips. |
+| PRA-004 | Authoritative baseline control | Migrations 001-011 and approved artifacts | Git immutable-boundary audit; exact catalog verifiers | Catalog inspection | Complete; migrations 001-011 unchanged in this pass. |
+| PRA-005 | Configurable supplemental rules | Configuration, hours and tables | DB-05 configuration constraints; DB-06 alternate configuration/hour/capacity cases | Configuration/schedule inspection | Complete; no duplicate persistent constants. |
+| PRA-006 | Start interval | `start_interval_minutes`; alignment validation | DB-05 permitted/invalid values; DB-06 15/60-minute cases | Manual 17:15 rejection | Complete. |
+| PRA-007 | Duration/occupancy | Duration setting; immutable start/end; duration check | DB-06 60/90/120 and prospective-change cases | Closing-boundary demonstrations | Complete. |
+| PRA-008 | Valid calendar dates/weekly schedule | Seven hours rows; no exceptions | Exact seed verifier; availability past-date case | Weekday/Sunday selection | Complete; holiday exceptions excluded. |
+| PRA-009 | Opening/latest derived start | Hours plus duration/alignment validation | Weekday/Sunday closing cases | Opening, exact-close, after-close SQL | Complete. |
+| PRA-010 | Advance window | Window constraint/default and routine validation | DB-05 range cases; DB-06 past/window availability | Availability query | Complete. |
+| PRA-011 | Same-day lead | Lead constraint/default and database clock | DB-05 boundaries; DB-06 availability/booking boundary coverage | Availability query | Complete. |
+| PRA-012 | Timezone/clock authority | Timezone setting; local candidates; timestamptz facts | Timezone catalogue verifier; DST nonexistent/ambiguous cases | Offset derived from authoritative slots | Complete; Flask supplies selected offset later. |
+| PRA-013 | Half-open overlap | Immutable interval; strict predicates/indexes | `half-open interval predicate...`; committed overlap verifiers; back-to-back concurrency | Back-to-back/overlap | Complete. |
+| PRA-014 | Duplicate/retry safety | Exact-identity UQ; fingerprint lookup; retry-before-overlap | Exact retry/collision; identical request 20 iterations; lost response | Repeat unchanged booking | Complete. |
+| PRA-015 | Party bounds/derived capacity | Positive party check; capacity sums derived | Party bound and insufficient allocator cases | Party 120/rejected overlap | Complete. |
+| PRA-016 | Thirty tables | Seeded table identities 1-30 | `exact 30 x 4 table seed`; readiness checks | Inventory aggregate | Complete. |
+| PRA-017 | Individual capacities | Positive `seating_capacity`; controlled writer | Capacity constraints; prospective capacity and writer race | Inventory/full-capacity demo | Complete. |
+| PRA-018 | Exclusive exact multi-table assignment | Assignment table; allocator; restaurant lock | Min-count/least-waste/random tests; single/multi/mixed/last-table races | Multi-table/all-30 demo | Complete; coarse-lock throughput limitation accepted. |
+| PRA-019 | Identity/contact/preference | Canonical email, structured names, optional fields, controlled routines | Name/middle/phone cases; mismatch and blank-field races | Customer inspection | Database complete; full syntax/normalization remains Flask. |
+| PRA-020 | Newsletter source of truth | Sole customer Boolean | Exact schema/no-extra-object verifiers; opt-in/out | Newsletter inspection | Complete; no subscriber/history table. |
+| PRA-021 | Concurrent/retry-safe preference | Email advisory lock and preference routine | Newsletter race, same-email race, retry nonmutation | Retry/current preference | Complete; Flask bounded retry later. |
+| PRA-022 | No cancellation/modification | No status/lifecycle columns or operations | No-unapproved-columns verifier; retained overlap behavior | Catalog/exclusions | Complete Version 1 exclusion. |
+| PRA-023 | Authoritative validation | Constraints and current-fact routine revalidation | DB-05 constraint matrix; DB-06 invalid/boundary/readiness cases | Boundary/full rejection | Database defense complete; Flask/React validation later. |
+| PRA-024 | Confirmation/error/log support | Stable results/outcomes/details and reservation ID | Success/retry/failure cases; contract audit | Booking outputs | Database facts complete; messages/logging later. |
+| PRA-025 | Provisional availability/revalidation | Availability and authoritative booking routines | Provisional case; stale-availability concurrency | Availability then booking/full | Complete at DB layer; UI schedule later. |
+| PRA-026 | Prospective changes/reset | Immutable bookings; controlled writers; guarded reset | Prospective configuration/hour/capacity cases; reset guard/rebuilds | Rebuild around demos | Complete. |
+| PRA-027 | DB fingerprint/retry separation | Versioned fingerprint; SHA-256 helpers; nonunique index | Serialization verifier; collision/retry/lost-response cases | Repeat booking | Complete; clients never generate it. |
+| PRA-028 | Retention until reset | No purge/archive; RESTRICT FKs; guarded reset | Retained-history fixture/behavior; reset guard | Final rebuild | Complete; no automatic deletion. |
+| PRA-029 | PostgreSQL recurring hours | Dedicated table, exact seed, controlled writer | Seven-row verifier; alternate-hours/writer-race cases | Foundation/boundary sections | Complete; later layers must consume, not duplicate. |
+
+### DB-03 logical-schema decisions
+
+| DB-03 decision | Implementation | Specific evidence | Result |
 |---|---|---|---|
-| SRS customer/reservation PostgreSQL and FR-06–FR-09/FR-15–FR-18 | Tables, booking/newsletter/availability routines | DB-05/06 behavior, concurrency, demo | PostgreSQL complete; Flask owns request/API and messages. |
-| SRS NFR-02 reliability, NFR-05 performance, NFR-09 security | Transactions/locks, plans/measurements, least privilege | rollback/races, performance/plans, denial suites | Database support complete; full-stack verification later. |
-| Rubric PostgreSQL integration, sophisticated logic, tests/demo | Rebuild, exact allocator, controlled routines | full gate and demo guide | Complete at database layer. |
-| PRA-001–004 | Ordered increments, versioned baseline, continuous tests | Git/migration audit and suite | Complete. |
-| PRA-005–012, PRA-029 | Scalar configuration, intervals, duration, window/lead/timezone, recurring hours | schema checks; availability/booking boundary and DST tests | Complete. |
-| PRA-013–018 | Half-open overlap, retry, capacity, 30 tables, multi-table exclusivity | DB-06 behavior/concurrency/plans | Complete. |
-| PRA-019–021, PRA-023 | Identity/contact/newsletter validation and concurrency | behavior, rollback, denials, population race | Database enforcement complete; full syntax/UI validation later. |
-| PRA-022, PRA-026, PRA-028 | Retained immutable bookings, prospective settings, controlled reset | constraints/tests/rebuild | Complete. |
-| PRA-024–025 | Stable database outcomes, provisional availability/revalidation | contract and behavior tests | Database support complete; wording/UI/API later. |
-| PRA-027 | DB-generated versioned fingerprint and retry separation | collision/exact/lost-response tests | Complete. |
-| DB-03 full catalogue/source authority | Migrations 001–005 and 009–010 | 51 catalog/invariant checks plus catalogue above | Complete. |
-| DB-04 transaction/locking/allocation/randomness/recovery | Migrations 006–008 and semantics-preserving 011 | behavior, 75 concurrency iterations, plans | Complete. |
-| DB-05/DB-06 completion criteria | Approved artifacts/migrations/tests | clean checkpoint, two final builds, full regressions | Reproduced. |
+| Six tables and every column/type/null/default (§§4-5) | Migrations 002/005 | DB-05 four exact-column cases; DB-06 exact six tables and reservation/assignment column/type cases | Exact match. |
+| Primary/natural keys and RESTRICT FKs (§6) | Named PK/UQ/FK constraints | DB-06 exact constraint names and `all foreign keys use explicit restrict actions`; invalid FK/key cases | Complete. |
+| Declarative and cross-row invariants (§7) | 31 named constraints plus booking postconditions | DB-05 81 assertions; DB-06 duration/party/fingerprint and committed-state cases | Complete. |
+| Nullability/default catalogue (§8) | DDL in migrations 002/005 | Information-schema verifier rows and DB-05 null/default cases | Complete. |
+| Five constraint plus seven access-path indexes (§9) | Migrations 002/005 | `exact nonredundant index set`; `query_plans_db07.sql` | Complete; no speculative index. |
+| PostgreSQL/Flask responsibility (§10) | Controlled routines; denied direct app mutation | Runtime denial suites; contract operations/grants | PostgreSQL complete; Flask deferred. |
+| Availability/overlap/retry support (§11) | Interval/fingerprint/customer indexes and assignments | Plans plus availability, collision, retry and overlap cases | Complete. |
+| Normalization/authoritative homes (§12) | No duplicated schedule/capacity/newsletter/availability/candidate facts | Exact table/column verifier; no-unapproved-column case | Complete 1NF/2NF/3NF and source authority. |
+| SRS minimum-field reconciliation (§13) | Structured customer and normalized assignments | Exact catalogue and manual row inspection | Complete additive compliance. |
+| Role/default-privilege safety supporting schema boundary | Owner/app/test roles; migrations 004/009/010 | DB-05/06/07 privilege verifiers and 12 expected denials | Complete; security is not NFR-09. |
+
+### DB-04 transaction and concurrency decisions
+
+| DB-04 decision | Implementation | Specific evidence | Result / limitation |
+|---|---|---|---|
+| `READ COMMITTED` plus transaction restaurant lock (§3) | Booking core; `ADVISORY_LOCKS.md` | `requires_read_committed`; lock barriers and timeout scenario | Complete; coarse serialization retained. |
+| Atomic new/retry boundary (§4) | Single controlled routine/subtransaction | Five rollback stages; exact-retry nonmutation | Complete. |
+| Input/normalization boundary (§5) | Routine validation and constraints | DB-05 normalization; DB-06 identity/middle/phone cases | Database defense complete; full syntax remains Flask. |
+| Deterministic lock order (§6) | Restaurant, ordered foundation/table, email and row locks | Writer/same-email races; forced deadlock classification | Complete. |
+| Provisional nonpromise (§7) | Read-only availability routine | Availability case and stale-availability race | Complete. |
+| Authoritative validation order (§8) | Locked re-read of current config/hours/tables | Boundary/readiness cases and three writer races | Complete. |
+| Customer creation/reuse (§9) | Email lock plus unique key/row lock | Same-email 20 iterations, mismatch and blank-population races | Complete. |
+| Fingerprint/retry/collision (§10) | Versioned SHA-256; nonunique lookup then tuple equality | Serialization, exact retry, collision, lost-response cases | Complete. |
+| Same-customer overlap (§11) | Strict half-open check after retry | Overlap shapes and same-customer race | Complete. |
+| Free-table exclusivity (§12) | Assignment/reservation overlap derivation | Last-table, single/multi/mixed races; committed-overlap verifier | Complete. |
+| Exact ranking (§13) | Meet-in-the-middle plus exact fast paths | Min-table, least-waste, insufficient and DB-07 path tests | Semantics complete; general path exceeds proposed p95 budget. |
+| Random tie/test seam (§14) | Random equal-best choice; restricted rank seam | Every-rank/random cases and app seam denial | Complete; no rank/seed persistence. |
+| Configuration consistency (§15) | Coordinated controlled writers | Three writer races and prospective-change cases | Complete. |
+| Newsletter in booking (§16) | Atomic action and independent email-locked writer | Newsletter rollback/race/retry-state cases | Complete. |
+| Postconditions/rollback (§§17/19) | Capacity/fingerprint/assignment checks and injection seams | Five named rollback cases; no-missing-assignment verifier | Complete. |
+| Retry recovery (§18) | 3-second timeout; `55P03`/`40P01`/`40001` contract | Timeout and forced-deadlock scenarios | DB classification complete; Flask retry later. |
+| Network ambiguity (§20) | Ordinary exact resubmission | `connection loss after commit and ordinary resubmission` | Complete without client key. |
+| Capability/privileges (§22) | `pgcrypto`; roles/grants; fixed search paths | Extension/routine/default-ACL verifiers and denials | Complete on required PostgreSQL 18.3 only. |
+| Performance/explainability (§26) | Performance harness and plan fixture | `performance_test.ps1 -Samples 20`; `query_plans_db07.sql` | Correctness complete; general-path/contention limitations documented. |
+
+### Rubric and approved implementation checkpoints
+
+| Source | Implementation/evidence | Result |
+|---|---|---|
+| Rubric - complete SRS coverage | Individual SRS table and explicit later-layer deferrals | Complete for database-applicable scope without overclaim. |
+| Rubric - Flask/PostgreSQL integration | Frozen contract and three controlled entry points | Database side ready; Flask later. |
+| Rubric - sophisticated reservation logic | Exact allocation, random ties, collision-safe retry, concurrency and rollback | Complete at database layer. |
+| Rubric - direct database effects/demo | Manual customer/newsletter/reservation/assignment and rollback queries | Repeatable without Flask. |
+| DB-05 checkpoint | Clean 004 rebuild, 21 verifier checks, 81 behaviors, five denials | Reproduced. |
+| DB-06 checkpoint | 25 verifier checks, 39 behaviors, seven denials, 75 concurrency scenarios | Reproduced. |
 
 ## Known nonblocking limitations and exclusions
 
-- The restaurant-wide advisory lock serializes bookings and coordinated writers. This preserves correctness but limits burst throughput; later Flask must implement the bounded retry policy. Evidence shows no invalid committed state.
-- Exact general 30-table heterogeneous/equal subset allocation is CPU-intensive (~1.0 s client observed); production one-table/all-table cases are fast-pathed. The 30-table Version 1 bound keeps it finite and exact.
+- The restaurant-wide advisory lock serializes bookings and coordinated writers. This approved Version 1 strategy preserves correctness but limits contention throughput: five-request observations have exceeded two seconds, and the eight-request targeted p95 exceeded two seconds for group completion and individual requests. Later Flask must implement bounded retry and later full-stack work must validate the two-second expectation. No invalid committed state was observed.
+- General exact 30-table allocation is CPU-intensive. Full production equal-capacity and heterogeneous-capacity booking paths measured p95 1,265.04 ms and 1,135.29 ms, above the proposed 1,000 ms database budget; single/all-table cases are fast-pathed. The 30-table Version 1 bound keeps the approved general algorithm finite and exact.
 - Population invariants and IANA timezone membership are readiness/controlled-operation checks rather than impossible cross-row CHECK constraints.
 - PostgreSQL does not implement full email syntax, confirmation matching, HTTP/user messaging, or Unicode-aware request normalization; later approved Flask work owns them.
 

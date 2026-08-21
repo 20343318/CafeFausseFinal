@@ -7,7 +7,9 @@ guarded reset tooling, and the DB-07 verification and Hard Gate 1 evidence.
 
 ## Prerequisites
 
-- PostgreSQL 14 or newer; DB-05 was developed against PostgreSQL 18.3.
+- PostgreSQL 18.3. This is the required, implemented, and verified Version 1
+  database version; compatibility with other PostgreSQL versions is outside
+  the verified Version 1 contract.
 - `psql` on `PATH`, or `CAFE_FAUSSE_PSQL` set to its executable path.
 - An isolated database whose name matches
   `cafe_fausse_dev*`, `cafe_fausse_test*`, or `cafe_fausse_demo*`.
@@ -65,7 +67,7 @@ shell or use a properly secured PostgreSQL password file outside the repo.
 | `tests/db06_runtime_privilege_denials.sql` | Proves the runtime cannot bypass controlled DB-06 operations or invoke test seams. |
 | `tests/db07_behavior_tests.sql` | Regresses the two exact allocator fast paths and the unchanged general path. |
 | `scripts/concurrency_test.ps1` | Runs barrier-synchronized, database-observable multi-session races repeatedly. |
-| `scripts/performance_test.ps1` | Reports DB-07 minimum/p50/p95/p99/maximum database-path measurements and contention outcomes. |
+| `scripts/performance_test.ps1` | Reports DB-07 minimum/p50/p95/p99/maximum database-path measurements, group completion, individual concurrent-request latency, and contention outcomes. |
 | `scripts/*.ps1` | Locates `psql`, enforces targeting, rebuilds, verifies, and runs the full suite. |
 | `ADVISORY_LOCKS.md` | Documents the implemented collision-separated lock namespaces and email key derivation. |
 | `DB05_IMPLEMENTATION_REPORT.md` | Records technical decisions, traceability, exclusions, and the approval checkpoint. |
