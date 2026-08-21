@@ -150,7 +150,7 @@ serialization and is an explicit DB-07 measurement/optimization input.
 
 | Source | DB-06 evidence |
 |---|---|
-| SRS FR-02 | Customer identity and contact are persisted atomically with booking; returned outcome supports later confirmation. |
+| SRS FR-02 | PostgreSQL-backed recurring hours are seeded to the SRS schedule; provisional availability and authoritative booking read the current schedule and enforce its opening and closing boundaries. |
 | SRS FR-06-FR-09 | Provisional availability, booking-window/lead/hours/alignment validation, party capacity, and exact table assignment. |
 | SRS FR-15-FR-18 | Thirty seeded tables remain authoritative; allocation supports one or several tables, randomized equal-best choice, and no overbooking. |
 | SRS NFR-02 | Preliminary p50/p95 evidence is recorded without claiming the later end-to-end gate. |
