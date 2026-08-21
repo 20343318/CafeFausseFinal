@@ -26,6 +26,15 @@ DB-01 through DB-06 are approved. DB-06 was explicitly approved by Abdul on 2026
 
 The current repository is authoritative for approved DB-05 and DB-06 implementation details such as migration numbers, schema names, role names, routine names and signatures, advisory-lock identifiers, timeout configuration, test-harness conventions, and reset commands. The approved requirement and design artifacts remain authoritative for business behavior.
 
+## Accepted repository-history notes
+
+Treat the following as accepted historical facts, not defects, blockers, or reasons to rename approved files:
+
+- The approved DB-05 and DB-06 prompt filenames and headers both identify themselves as “Prompt 8.” This reflects how those two prompts were generated and used. Their database increment identifiers, repository contents, implementation reports, and approval records distinguish them.
+- Two roadmap references say Project Requirements Addendum version 2.2. The authoritative addendum header and downstream approved artifacts use version 2.2.1. Version 2.2.1 is the regenerated downloadable copy of the materially unchanged 2.2 content and is authoritative for DB-07.
+- DB-05 and DB-06 implementation reports may retain “ready” or “paused at approval checkpoint” wording written before approval. Those historical completion statements are superseded by Abdul’s later explicit approvals: DB-05 on 2026-08-19 and DB-06 on 2026-08-20.
+- Prompt filenames in this repository do not include document-version suffixes. The authoritative DB-07 prompt path is `docs/prompts/Cafe_Fausse_Prompt_9_DB07_PostgreSQL_Verification_and_Phase_Gate.md`.
+
 ## DB-07 objective and hard boundary
 
 Prove that the PostgreSQL layer is:
@@ -629,4 +638,4 @@ DB-07 is complete only when all of the following are true:
 - no blocking defect remains;
 - no unapproved business behavior or later-layer implementation was introduced.
 
-Stop at the Hard Gate 1 approval checkpoint. Do not begin DB-08, API-01, Flask, REST, or React work.
+Stop at the Hard Gate 1 approval checkpoint. Do not begin API-01, Flask, REST, or React work.
