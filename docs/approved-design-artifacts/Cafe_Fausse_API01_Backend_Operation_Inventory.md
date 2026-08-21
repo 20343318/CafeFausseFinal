@@ -1,6 +1,6 @@
 # Cafe Fausse API-01 Backend Operation Inventory
 
-**Document version:** 1.0  
+**Document version:** 1.0.1
 **Date:** 2026-08-21  
 **Roadmap increment:** API-01 - Backend Operation Inventory  
 **Status:** Ready for review; not approved  
@@ -115,8 +115,8 @@ OP-06 answers only whether the Flask process can respond. OP-07 separately check
 | OP-03 | Look up customer newsletter status | Read-only snapshot | Public client; both forms | SRS FR-06, FR-15 to FR-18; PRA-019, PRA-020, PRA-023 to PRA-025 |
 | OP-04 | Set newsletter preference | Frozen controlled transaction | Public client; dedicated preferences form | SRS FR-15 to FR-18; PRA-019 to PRA-024 |
 | OP-05 | Create or reconstruct reservation | Frozen controlled transaction | Public client; reservation submit/retry | SRS FR-06 to FR-09, FR-17/FR-18; PRA-006 to PRA-025 |
-| OP-06 | Check process liveness | Process-local technical check | Infrastructure supervisor | API-04 roadmap foundation and reliable deployment support |
-| OP-07 | Check service readiness | Read-only technical check | Infrastructure supervisor | API-04 roadmap foundation, DB-07 gate, frozen deployment contract |
+| OP-06 | Check process liveness | Process-local technical check | Infrastructure supervisor | Roadmap API-01 required health/readiness concern; API-04 later implementation; reliable deployment support |
+| OP-07 | Check service readiness | Read-only technical check | Infrastructure supervisor | Roadmap API-01 required health/readiness concern; API-04 later implementation; DB-07 gate and frozen deployment contract |
 
 ## 7. Minimization analysis
 
@@ -230,13 +230,13 @@ OP-06 answers only whether the Flask process can respond. OP-07 separately check
 | Provenance | Caller supplies ordinary facts; Flask normalizes/validates/compares confirmation; PostgreSQL resolves customer, timezone instant, end, fingerprint, current rules, overlap, capacity, allocation, identity, and current newsletter state. |
 | Flask normalization | Apply every shared rule in Section 12, including local-start/offset handling. Never accept or generate database identity, end, fingerprint, duration, table, availability, capacity, or configuration facts. |
 | Flask validation | Validate request shape and syntax before SQL. Early context checks aid users but do not replace locked PostgreSQL validation. |
-| PostgreSQL interaction | Execute exactly `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` at `READ COMMITTED`. Stable outcomes: `booked`, `booked_phone_notice`, `exact_retry`, `same_customer_overlap`, `customer_identity_mismatch`, `middle_initial_conflict`, `unavailable`, `invalid_request`, `invalid_database_configuration`. Frozen details are `requires_read_committed`, `invalid_normalized_input`, `configuration_row_count`, `operating_hours_population`, `restaurant_table_population`, `invalid_timezone`, `nonexistent_local_start`, `ambiguous_local_start`, `utc_offset_mismatch`, `date_outside_booking_window`, `insufficient_same_day_lead`, `start_before_opening`, `misaligned_start`, `end_after_closing`, `duration_or_party_size_out_of_range`, `no_capacity_sufficient_combination`, and `time_boundary_crossed_during_booking`. These remain internal traceability facts, not public error identifiers. |
-| Transaction character | One controlled atomic transaction per attempt; the call is the only statement in its explicit transaction or runs in autocommit. Commit a returned result; after exception roll back before any retry. |
-| Successful result | Confirmation reference, customer display name composed from approved identity input/authoritative match, immutable restaurant-local/canonical start/end, party size, all sorted assigned table numbers, current newsletter state, optional differing-phone notice, and fixed SRS restaurant address/phone. Do not claim delivery. |
+| PostgreSQL interaction | First execute exactly `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` at `READ COMMITTED`. Stable outcomes: `booked`, `booked_phone_notice`, `exact_retry`, `same_customer_overlap`, `customer_identity_mismatch`, `middle_initial_conflict`, `unavailable`, `invalid_request`, `invalid_database_configuration`. Frozen details are `requires_read_committed`, `invalid_normalized_input`, `configuration_row_count`, `operating_hours_population`, `restaurant_table_population`, `invalid_timezone`, `nonexistent_local_start`, `ambiguous_local_start`, `utc_offset_mismatch`, `date_outside_booking_window`, `insufficient_same_day_lead`, `start_before_opening`, `misaligned_start`, `end_after_closing`, `duration_or_party_size_out_of_range`, `no_capacity_sufficient_combination`, and `time_boundary_crossed_during_booking`. After `booked`, `booked_phone_notice`, or `exact_retry`, use the existing migration-004 authorized read of `cafe_fausse.customers` by the same canonical email and project only stored `first_name`, `middle_initial`, and `last_name`. These database strings and columns remain internal traceability facts, not public field/error identifiers. |
+| Transaction character | Each booking attempt is one controlled atomic transaction; the routine call is the only statement in its explicit caller transaction or runs in autocommit. Commit a returned result; after exception roll back before any retry. Only after a successful booking or exact-retry result, perform the separate minimal read-only customer-name lookup; it neither changes nor extends the booking transaction. |
+| Successful result | Confirmation reference; customer display name composed deterministically from the stored first name, optional middle initial, and last name obtained by the post-success canonical-email read; immutable restaurant-local/canonical start/end; party size; all sorted assigned table numbers; current newsletter state; optional differing-phone notice; and fixed SRS restaurant address/phone. The stored name is used for both a new booking and an exact retry, so a resubmission with different accepted letter casing reconstructs the same authoritative display spelling rather than echoing request casing. Do not claim delivery. |
 | Internal-only result facts | Contract `fingerprint_version` and `reservation_fingerprint` are database evidence/recovery internals. They are not required public confirmation facts, client identifiers, or caller inputs. Exact `outcome`/`detail_code` strings are database-to-Flask contract facts; API-02 will decide their public representation. |
 | Outcomes | New success; success with phone notice; exact-retry success; validation/configuration failure; generic identity/middle conflict; same-customer overlap; authoritative unavailable/stale; transient SQL conflict; retry exhaustion; timeout; ambiguous commit; unexpected failure. |
 | Retry/idempotency | Retry only `55P03`, `40P01`, `40001` as complete transactions, at most three total attempts in one deadline, with bounded backoff/jitter and fresh authoritative reads. Exact retry is success and performs no newsletter/contact mutation. Ordinary resubmission is safe after unknown commit. |
-| Privacy/minimization/logging | Confirmation email never reaches PostgreSQL. Return no customer ID, fingerprint, free/candidate tables, capacity internals, stored phone, unrelated customer facts, or SQL diagnostics. Logs minimize/redact all PII and never record confirmation email or secrets. |
+| Privacy/minimization/logging | Confirmation email never reaches PostgreSQL. The post-success name read projects only stored first name, optional middle initial, and last name. Return no customer ID, email, phone, profile data, fingerprint, free/candidate tables, capacity internals, unrelated customer facts, or SQL diagnostics. Logs minimize/redact all PII and never record confirmation email or secrets. |
 | Freshness | OP-02 is never trusted. A successful commit/exact retry returns durable reservation/assignment facts; newsletter state is current at transaction time and may later change independently. |
 | Unit cases | UT-05 group in Section 17. |
 | PostgreSQL integration cases | IT-14 to IT-21 in Section 18. |
@@ -247,7 +247,7 @@ OP-06 answers only whether the Flask process can respond. OP-07 separately check
 | Item | Specification |
 |---|---|
 | Purpose and workflow | Tell infrastructure whether the Flask process can respond, independently of database readiness. |
-| Traceability | Roadmap API-04 health/readiness foundation; NFR-06/NFR-09; technical necessity for reliable deployment. |
+| Traceability | Roadmap API-01 required health/readiness concern; roadmap API-04 later implementation; NFR-06/NFR-09; technical necessity for reliable deployment. |
 | Initiator/consumer | Infrastructure supervisor, not a customer workflow. |
 | Conceptual inputs/provenance | None; process-local state only. |
 | Flask normalization/validation | None. The check must remain lightweight and nonbusiness. |
@@ -265,7 +265,7 @@ OP-06 answers only whether the Flask process can respond. OP-07 separately check
 | Item | Specification |
 |---|---|
 | Purpose and workflow | Tell infrastructure whether the live service can safely serve the frozen PostgreSQL-backed workflows. |
-| Traceability | Roadmap API-04; DB-07 Hard Gate 1; PostgreSQL Contract lifecycle/readiness; NFR-05/NFR-06/NFR-09. |
+| Traceability | Roadmap API-01 required health/readiness concern; roadmap API-04 later implementation; DB-07 Hard Gate 1; PostgreSQL Contract lifecycle/readiness; NFR-05/NFR-06/NFR-09. |
 | Initiator/consumer | Infrastructure supervisor. Public exposure, if any, remains minimal and is decided later. |
 | Conceptual inputs/provenance | None from caller. Deployment connection and database facts are server-controlled. |
 | Flask normalization/validation | None for caller. Internally compare exact target 18.3 and required frozen object/population expectations. |
@@ -289,7 +289,7 @@ Conceptual check timing is intentionally narrow: each OP-06 probe performs only 
 | OP-02 | `cafe_fausse.provisional_availability(date, integer)` | Current rule/clock/inventory/reservation calculation and canonical interval facts | Flask-generated authoritative slots; reads of reservations/assignments |
 | OP-03 | Read `customers` by canonical `email` under migration-004 `SELECT`; project only name/middle/current Boolean needed for matching | Persisted identity spelling and current newsletter Boolean | Profile lookup, customer identifier, mutation |
 | OP-04 | `cafe_fausse.set_newsletter_preference(text,text,text,text,boolean)` | Customer create/reuse, email serialization, identity/middle rule, current Boolean, atomicity | Direct customer DML or second subscriber store |
-| OP-05 | `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` | Every final business validation, customer concurrency, fingerprint, retry identity, overlap, exact allocation, assignments, optional update, newsletter atomicity, commit/rollback | Direct reservation/assignment access or Flask allocation/retry identity |
+| OP-05 | `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)`, followed only after `booked`, `booked_phone_notice`, or `exact_retry` by the migration-004 authorized `customers` read using canonical email and projecting stored first/middle/last name | Routine retains every final business validation, customer concurrency, fingerprint, retry identity, overlap, exact allocation, assignments, optional update, newsletter atomicity, and commit/rollback; `customers` remains authoritative for display spelling | Direct reservation/assignment access, Flask allocation/retry identity, or reading customer ID/email/phone/profile data for confirmation |
 | OP-06 | No PostgreSQL interaction | Not applicable | Treating liveness as database readiness |
 | OP-07 | Read-only connection/system-catalog privilege/object checks plus the four permitted foundation reads | Installed/versioned deployment and current usable foundation state | Calling mutating routines, admin/test helpers, or exposing diagnostics |
 
@@ -323,7 +323,7 @@ The controlled production routine result shapes remain internal database-to-Flas
 | Daily start intervals and provisional state | OP-02 | Slot schedule | All legitimate rows; no free tables/candidates/reservations |
 | Minimal status-match state/current Boolean | OP-03 | Checkbox synchronization/recovery | No profile/contact or mismatch cause |
 | Authoritative preference state | OP-04 | Dedicated form confirmation | Boolean plus minimal operation outcome |
-| Stable booking confirmation | OP-05 | Distinct confirmation view/retry recovery | Reference, name, start/end, party, all tables, newsletter, phone notice, fixed contact facts |
+| Stable booking confirmation | OP-05 | Distinct confirmation view/retry recovery | Reference; stored first/optional middle/last name from the post-success canonical-email read; start/end; party; all tables; newsletter; phone notice; fixed contact facts. Stored spelling, not resubmitted casing, is authoritative on exact retry. |
 | Database fingerprint facts | OP-05 contract only | Internal trace/recovery evidence | Not needed by public client; never an identity mechanism |
 | Live/ready state | OP-06/07 | Infrastructure | Minimal status; no internals |
 
@@ -418,7 +418,7 @@ These are design cases only. Executable automation belongs to the roadmap increm
 | UT-02 OP-02 availability | Valid future date/party; every legitimate aligned start; unavailable rows retained; weekday/Sunday latest starts; alternate hours/settings; exact/short same-day lead; both advance-window boundaries; malformed/out-of-range input; no available combination; stale snapshot label; no persistent slot/candidate data | Exact frozen-routine mapping and provisional-only semantics | API-07/API-09 |
 | UT-03 OP-03 status | Existing subscribed/unsubscribed; nonexistent; case-insensitive name; generic first/last mismatch; omitted middle with stored; blank stored plus supplied without mutation; conflicting populated middle; malformed/noncanonical input; technical failure -> indeterminate; no contact/profile return/mutation | Minimal current status or safe category | API-05/API-09 |
 | UT-04 OP-04 preference | New selected creates subscribed; new unselected creates none; matching existing subscribe/unsubscribe; same-state idempotency; generic mismatch; middle conflict; unique-email race category; transient retry eligibility; unexpected failure no partial state | Controlled set semantics and minimal result | API-06/API-09 |
-| UT-05 OP-05 booking | Single/multi-table; differing phone success/notice/no overwrite; exact retry same confirmation/current newsletter/no mutation; same-customer overlap; different-customer overlap with capacity; back-to-back; stale availability -> unavailable; party above current max; invalid local time/offset/window/lead/alignment/open/close; identity/middle conflicts; subscribe/unsubscribe/no-change; transient retry, exhaustion, timeout/loss before/after commit; unexpected failure no partial state; complete confirmation/no delivery claim | Frozen routine outcome and safe recovery mapping | API-08/API-09 |
+| UT-05 OP-05 booking | Single/multi-table; differing phone success/notice/no overwrite; new booking confirmation name comes from stored first/middle/last; exact retry with different accepted request casing returns the same stored display spelling, same reservation confirmation/current newsletter, and no mutation; post-success name lookup projects no customer ID/email/phone/profile data; same-customer overlap; different-customer overlap with capacity; back-to-back; stale availability -> unavailable; party above current max; invalid local time/offset/window/lead/alignment/open/close; identity/middle conflicts; subscribe/unsubscribe/no-change; transient retry, exhaustion, timeout/loss before/after commit; unexpected failure no partial state; complete confirmation/no delivery claim | Frozen routine outcome, deterministic authoritative-name reconstruction, and safe recovery mapping | API-08/API-09 |
 | UT-06 OP-06 liveness | Live process with ready DB; live process with unavailable DB | Both report live because DB is deliberately excluded | API-04/API-09 |
 | UT-07 OP-07 readiness | Ready DB; unavailable DB; wrong/unsupported target versus exact PostgreSQL 18.3; missing/inaccessible schema/routines/extension; unusable foundation; safe nondiagnostic failure; no mutation | Ready only when frozen prerequisites are usable | API-04/API-09 |
 
@@ -441,14 +441,14 @@ Every row defines fixture, operation, exact source, outcome, persisted state, un
 | IT-11 | No customer; selected/unselected | OP-04; `set_newsletter_preference` | Subscribed or no-customer/no-change | One subscribed customer or none | No reservations/assignments | API-06 |
 | IT-12 | Existing matching/mismatch/middle variants | OP-04; same routine | Subscribed/unsubscribed/idempotent/conflict | Boolean/middle only per approved path | Name, phone, reservations | API-06 |
 | IT-13 | Concurrent matching new customer and preference writes | OP-04; same routine through app role | Stable serialized outcomes/transient retry | One customer; last valid commit wins | No duplicates/history | API-06/API-09 |
-| IT-14 | Empty target interval with eligible single/multi combinations | OP-05; `book_reservation` | Booked/phone notice | One customer, reservation, complete winning assignments, applicable newsletter | Existing customer protected fields | API-08 |
-| IT-15 | Exact first result deliberately ignored/lost | Repeat OP-05; same routine | Exact-retry success | Exactly original rows; current newsletter read | Contact/newsletter action not replayed | API-08 |
+| IT-14 | Empty target interval with eligible single/multi combinations | OP-05; `book_reservation`, then canonical-email `customers` projection of first/middle/last | Booked/phone notice with stored display name | One customer, reservation, complete winning assignments, applicable newsletter | Existing customer protected fields; name read exposes no ID/email/phone/profile facts | API-08 |
+| IT-15 | Exact first result deliberately ignored/lost; repeat uses accepted casing variants of the same first/last name | Repeat OP-05; same routine, then the same minimal canonical-email name read | Exact-retry success with the original stored display spelling | Exactly original rows; current newsletter and stored name read | Contact/name/newsletter action not replayed; no non-name customer facts exposed | API-08 |
 | IT-16 | Execute as `cafe_fausse_app` | OP-01 to OP-05 approved paths | Permitted results | Only controlled OP-04/05 writes | No direct DML | API-09 |
 | IT-17 | Attempt app direct reservation/assignment read and direct business DML | No public operation; privilege proof | Denied | None | All business data | API-09 |
 | IT-18 | Preference-vs-booking same email concurrently | OP-04 and OP-05 controlled routines | Serialized stable outcomes/retry if needed | One customer; booking atomic; last valid preference commit wins | No history/duplicates | API-09 |
 | IT-19 | Same-customer overlap, different customers, full/fragmented, back-to-back | OP-05 | Overlap/unavailable or valid booked | Only permitted winners complete | No overbooking/partial assignment | API-08/API-09 |
 | IT-20 | Inject or induce `55P03`, `40P01`, `40001` | OP-04/05 full-operation retry | Success/stable business outcome or retry exhaustion | At most one logical effect | No failed-attempt partial state | API-09 |
-| IT-21 | Connection loss before/during/after commit | OP-05 then ordinary repeat | New/unknown then exact retry or fresh current result | Zero or one logical reservation, never duplicate | Newsletter nonreplay after exact commit | API-08/API-09 |
+| IT-21 | Connection loss before/during/after commit, with an accepted casing variant on ordinary repeat | OP-05 then ordinary repeat and post-success minimal name read | New/unknown then exact retry or fresh current result; success uses stored display spelling | Zero or one logical reservation, never duplicate | Name/contact/newsletter nonreplay after exact commit; no customer ID/email/phone/profile exposure | API-08/API-09 |
 | IT-22 | Live Flask process with ready/unavailable DB fixture | OP-06; no SQL | Live in both | None | All data | API-04 |
 | IT-23 | Normal DB-07 baseline | OP-07; read-only catalog/foundation checks | Ready | None | All data | API-04/API-09 |
 | IT-24 | Missing/unusable foundation or privilege/routine/extension fixture in isolated DB | OP-07 | Not ready | None | No repair/mutation attempted | API-04/API-09 |
@@ -586,8 +586,8 @@ PRA-001 to PRA-005 govern ordering, least-to-most scope, testing, authority, and
 | Status synchronization | OP-03 | PRA-019/PRA-023/PRA-025; authorized customer read |
 | Independent preferences | OP-04 | FR-15/FR-16; PRA-020/PRA-021; frozen routine |
 | Booking/confirmation/exact retry | OP-05 | FR-06 to FR-09/FR-18; PRA-014/PRA-018/PRA-024; frozen routine |
-| Process liveness | OP-06 | API-04 technical foundation |
-| Database-backed readiness | OP-07 | API-04 and DB-07/frozen deployment gate |
+| Process liveness | OP-06 | Roadmap API-01 required health/readiness concern; API-04 later implementation |
+| Database-backed readiness | OP-07 | Roadmap API-01 required health/readiness concern; API-04 later implementation; DB-07/frozen deployment gate |
 
 Every operation therefore has an approved user requirement or necessary technical-gate justification, and every Version 1 user workflow has a complete operation path.
 
@@ -656,6 +656,7 @@ The wire/architecture/timing/presentation choices in Section 23 are deliberate r
 | Every operation has approved justification | Complete |
 | Hours, context/limits, availability, status, preference, booking/retry, liveness/readiness covered | Complete |
 | Every database-backed operation maps to authorized read/routine | Complete |
+| OP-05 customer display name has one deterministic authorized source for new booking and exact retry | Complete: post-success `customers` read by canonical email projects stored first/middle/last only |
 | No duplicated PostgreSQL authority/new source of truth | Complete |
 | Inputs, normalization, results, outcomes, retries, privacy, tests defined | Complete |
 | React/mobile/third-party ordinary clients need no integrity trust | Complete |
@@ -664,7 +665,7 @@ The wire/architecture/timing/presentation choices in Section 23 are deliberate r
 | Contradictions escalated | Not applicable; none found |
 | Approval pause before API-02 | Required and recorded below |
 
-API-01 version 1.0 is ready for review. It is not approved merely by creation of this artifact.
+API-01 version 1.0.1 is ready for review. It is not approved merely by creation of this artifact.
 
 ## 27. Approval checkpoint
 
