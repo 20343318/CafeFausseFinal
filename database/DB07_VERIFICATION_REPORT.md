@@ -8,7 +8,7 @@ Scope: DB-07 only; no Flask, REST, React, or API-01 work
 
 The approved DB-05/DB-06 implementation reproduced from an empty isolated PostgreSQL 18.3 database and matched the approved DB-03/DB-04 architecture. DB-07 found one major privilege defect and one measured performance concern. Both were corrected by forward migrations, with migrations 001–009 preserved byte-for-byte. No approved table, column, constraint, index, fingerprint, locking, isolation, or allocation decision changed.
 
-The final gate evidence consists of the DB-05/DB-06 regression tests, DB-07 catalog and behavior checks, role-denial tests, barrier-synchronized concurrency tests, rollback/failure injection, ambiguous-response recovery, rollback-safe query plans, and measured latency. The contract is frozen in `POSTGRESQL_CONTRACT_FOR_FLASK_v1.0.md` and the PostgreSQL-only demonstration is in `DB07_MANUAL_DEMONSTRATION.md`.
+The final gate evidence consists of the DB-05/DB-06 regression tests, DB-07 catalog and behavior checks, role-denial tests, barrier-synchronized concurrency tests, rollback/failure injection, ambiguous-response recovery, rollback-safe query plans, and measured latency. The PostgreSQL Contract for Flask v1.0 is frozen in `POSTGRESQL_CONTRACT_FOR_FLASK.md`, and the PostgreSQL-only demonstration is in `DB07_MANUAL_DEMONSTRATION.md`.
 
 ## Initial read-only audit
 

@@ -71,7 +71,7 @@ shell or use a properly secured PostgreSQL password file outside the repo.
 | `DB05_IMPLEMENTATION_REPORT.md` | Records technical decisions, traceability, exclusions, and the approval checkpoint. |
 | `DB06_IMPLEMENTATION_REPORT.md` | Records DB-06 traceability, concurrency, rollback, privileges, measurements, and approval checkpoint. |
 | `DB07_VERIFICATION_REPORT.md` | Records the final audit, catalogues, evidence, traceability, defects, limitations, and phase-gate assessment. |
-| `POSTGRESQL_CONTRACT_FOR_FLASK_v1.0.md` | Freezes the database-facing contract for later approved Flask design work. |
+| `POSTGRESQL_CONTRACT_FOR_FLASK.md` | Freezes the versioned database-facing contract for later approved Flask design work. |
 | `DB07_MANUAL_DEMONSTRATION.md` | Gives a repeatable PostgreSQL-only Hard Gate 1 demonstration. |
 
 Migrations are intentionally psql-native and contain no migration metadata
