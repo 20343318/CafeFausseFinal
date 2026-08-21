@@ -1,6 +1,6 @@
 # PostgreSQL Contract for Flask v1.0
 
-Status: DB-07 candidate, frozen for Hard Gate 1 approval. This is a database-facing contract, not a REST contract.
+Status: Version 1.0 approved by Abdul at DB-07 Hard Gate 1 on 2026-08-20 and frozen as the database-facing contract for later Flask design. This is not a REST contract.
 
 ## Platform, namespace, and caller rules
 
@@ -72,4 +72,10 @@ Stable outcomes are `booked`, `booked_phone_notice`, `exact_retry`, `same_custom
 - Reference measurements are in `DB07_VERIFICATION_REPORT.md`. The proposed database contribution budget is p95 below 1,000 ms for uncontended production booking and availability on the DB-07 reference host, excluding caller/network time. The fast-path and ordinary-result cases meet it, but measured production bookings that require the general exact equal-capacity or heterogeneous-capacity allocator do not (p95 1,265.04 ms and 1,135.29 ms). The proposal therefore is not met by every production allocation path and is not an approved guarantee.
 - The coarse restaurant-wide booking lock intentionally prioritizes Version 1 correctness over throughput. Measurements distinguish whole-group completion from individual child-process lifetime. Five-request contention has exceeded two seconds in recorded runs, and the eight-request burst exceeded two seconds in both group and individual p95 in the targeted rerun. This accepted Version 1 limitation requires later full-stack validation. Lock wait is separately bounded at 3 seconds and is a retryable technical failure, not a latency success.
 
-Changing an operation signature, result shape, stable outcome/detail, grant expectation, temporal meaning, retry rule, or transaction semantic requires an explicit PostgreSQL Contract revision after approval. This contract defines no endpoint, HTTP, JSON, CORS, Flask architecture, or UI decision.
+Changing an operation signature, result shape, stable outcome/detail, grant expectation, temporal meaning, retry rule, or transaction semantic requires an explicitly approved PostgreSQL Contract revision. Hard Gate 1 approval does not authorize such a change. This contract defines no endpoint, HTTP, JSON, CORS, Flask architecture, or UI decision.
+
+## Approval record
+
+Abdul explicitly approved this PostgreSQL Contract for Flask v1.0 as part of DB-07 Hard Gate 1 on 2026-08-20. That approval includes the documented database performance envelope, the general exact-allocation p95 measurements, and the accepted coarse-lock contention limitation. Complete validation of the two-second form-submission expectation remains assigned to the later Flask and full-stack integration performance gates.
+
+The approval authorizes only API-01, a design-only backend operation inventory, after a separate instruction. It does not authorize Flask implementation, REST-contract design, API-02 or later increments, React work, or changes to this approved contract.

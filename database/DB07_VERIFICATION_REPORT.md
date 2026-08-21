@@ -4,6 +4,8 @@ Date: 2026-08-20
 Baseline: `main` at `82ab9d1bb6b9363a84dc6b4828a96549f9045ed8`, initially clean and synchronized with upstream  
 Scope: DB-07 only; no Flask, REST, React, or API-01 work
 
+Status: Approved by Abdul at Hard Gate 1 on 2026-08-20
+
 ## Executive assessment
 
 The approved DB-05/DB-06 implementation reproduced from an empty isolated PostgreSQL 18.3 database and matched the approved DB-03/DB-04 architecture. DB-07 found one major privilege defect and one measured performance concern. Both were corrected by forward migrations, with migrations 001–009 preserved byte-for-byte. No approved table, column, constraint, index, fingerprint, locking, isolation, or allocation decision changed.
@@ -261,4 +263,14 @@ DB-07 introduces no authentication, profile prefill/update workflow, cancellatio
 
 ## Approval checkpoint
 
-No blocking correctness, atomicity, security, reproducibility, or contract defect remains. DB-07 is ready for explicit approval at Hard Gate 1. It is not approved until Abdul explicitly approves it. Approval authorizes only the next increment, **API-01 — Backend Operation Inventory**, a design-only inventory; it does not by itself authorize Flask implementation, REST-contract design, or React work.
+DB-07 was explicitly approved by Abdul at Hard Gate 1 on 2026-08-20. The approval accepts:
+
+- PostgreSQL 18.3 as the required and verified Version 1 database;
+- the PostgreSQL Contract for Flask v1.0;
+- the documented database performance envelope and general exact-allocation p95 measurements;
+- the documented coarse-lock contention limitation, including that five- and eight-request contention may exceed two seconds; and
+- deferral of complete two-second form-submission validation to the later Flask and full-stack integration performance gates.
+
+The performance limitations are accepted as nonblocking Version 1 tradeoffs because committed-state correctness, atomicity, retry safety, and prevention of double and overbooking remain intact.
+
+Hard Gate 1 approval authorizes only **API-01 — Backend Operation Inventory**, a design-only increment. API-01 has not begun and requires a separate instruction. This approval does not authorize Flask implementation, REST-contract design, API-02 or later increments, React work, or changes to the approved PostgreSQL Contract for Flask v1.0.

@@ -1,5 +1,11 @@
 # Cafe Fausse PostgreSQL layer through DB-07
 
+DB-07 was explicitly approved by Abdul at Hard Gate 1 on 2026-08-20. The next
+authorized increment is API-01, a design-only backend operation inventory, but
+it must not begin without a separate instruction. Flask implementation,
+REST-contract design, API-02 or later increments, React work, and changes to the
+approved PostgreSQL Contract for Flask v1.0 remain unauthorized.
+
 This directory preserves the approved DB-05 PostgreSQL foundation and extends
 it with DB-06 reservation persistence, provisional availability, authoritative
 booking, exact table allocation, transaction locking, hardened role boundaries,
