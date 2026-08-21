@@ -1,6 +1,6 @@
 # Cafe Fausse API-03 Flask Architecture, Configuration, and Test Strategy
 
-**Document version:** 1.0
+**Document version:** 1.0.1
 
 **Date:** 2026-08-21
 
@@ -14,11 +14,11 @@
 
 ## 1. Executive summary
 
-Cafe Fausse Version 1 will be one modular Flask application backed directly by the frozen PostgreSQL 18.3 contract. The application uses an application factory, a single bounded Psycopg 3 connection pool, one versioned Flask blueprint, operation-specific services and gateways, pure validation/serialization functions, and a small dependency container held in `app.extensions`. It does not use an ORM, schema creation, Flask-side business-rule reimplementation, or a generic repository abstraction.
+Cafe Fausse Version 1 will be one modular Flask application on Windows Server 2025 using standard GIL-enabled CPython 3.14.x, with CPython 3.14.3 as the required initial implementation and verification target, backed directly by the frozen PostgreSQL 18.3 contract. The application uses an application factory, a single bounded Psycopg 3 connection pool, one versioned Flask blueprint, operation-specific services and gateways, pure validation/serialization functions, and a small dependency container held in `app.extensions`. It does not use an ORM, schema creation, Flask-side business-rule reimplementation, or a generic repository abstraction.
 
 The HTTP boundary remains exactly API-02 version 1.0.1. Each of its seven endpoints maps one-to-one to one API-01 operation. PostgreSQL remains authoritative for current configuration, operating hours, inventory, availability, booking, allocation, overlap prevention, exact retry, and persisted newsletter state. Flask owns protocol parsing, caller-visible validation, orchestration, bounded technical retry, safe outcome translation, confirmation shaping, response policy, and observability.
 
-This document chooses the Python/dependency families, logical source tree, lifecycle, complete configuration surface, numeric timeout/retry policy, transaction ownership, health design, error policy, logging/redaction boundary, deterministic test seams, and test strategy needed by API-04 through API-09. It creates no Flask implementation and does not begin API-04.
+This document chooses the Python/dependency families, logical source tree, lifecycle, complete configuration surface, numeric timeout/retry policy, transaction ownership, health design, error policy, logging/redaction boundary, deterministic test seams, and test strategy needed by API-04 through API-09. Node.js 24.15.0 is an installed platform fact reserved for future React implementation and verification; it is not a Flask runtime dependency, is not used by API-03 or API-04, and creates no Node.js package or frontend compatibility decision here. This document creates no Flask implementation and does not begin API-04.
 
 ## 2. Authority and accepted baseline
 
@@ -37,8 +37,9 @@ The following repository sources are authoritative for this design:
 | `Cafe_Fausse_API01_Backend_Operation_Inventory.md` | 1.0.1, approved | Seven operations and database-access responsibilities |
 | `Cafe_Fausse_API02_Flask_REST_Contract.md` | 1.0.1, approved | Exact routes, methods, media types, fields, statuses, errors, flags, and 36 examples |
 | `Cafe_Fausse_Least_to_Most_Implementation_Roadmap.md` | 1.1.1 | API-03 objective and API-04 through API-09 boundaries |
+| User-authorized implementation-platform correction | 2026-08-21 | Windows Server 2025; standard GIL-enabled CPython 3.14.x with 3.14.3 as the initial required/tested target; PostgreSQL 18.3; Node.js 24.15.0 for the later React phase only |
 
-Accepted facts include PostgreSQL 18.3; `pgcrypto`; six approved business tables; thirty Version 1 tables; the `cafe_fausse_owner`, `cafe_fausse_app`, and `cafe_fausse_test` NOLOGIN roles; the application-role least-privilege grants; recurring database-owned hours; the three callable production routines; `READ COMMITTED` booking; a restaurant-wide advisory lock; three total attempts for only the approved retry classes; and the database performance limitations accepted at DB-07.
+Accepted platform facts are Windows Server 2025, standard GIL-enabled CPython 3.14.x with CPython 3.14.3 as the required initial implementation and verification patch, PostgreSQL 18.3, and Node.js 24.15.0 reserved for future React work. Accepted database facts include `pgcrypto`; six approved business tables; thirty Version 1 tables; the `cafe_fausse_owner`, `cafe_fausse_app`, and `cafe_fausse_test` NOLOGIN roles; the application-role least-privilege grants; recurring database-owned hours; the three callable production routines; `READ COMMITTED` booking; a restaurant-wide advisory lock; three total attempts for only the approved retry classes; and the database performance limitations accepted at DB-07.
 
 API-03 does not reinterpret the SRS two-second expectation as a guarantee. DB-07 recorded ordinary general-allocation p95 near 1.14-1.27 seconds and contended five/eight-request cases over two seconds. The approved lock and exact allocation remain unchanged; API-09 and later full-stack gates will measure end-to-end behavior.
 
@@ -66,6 +67,21 @@ API-03 does not reinterpret the SRS two-second expectation as a guarantee. DB-07
 | Authorized artifact | This path did not exist at gate time | PASS |
 
 No missing source, approval mismatch, upstream contradiction, existing implementation overlap, dirty worktree, or unsafe repository state was found.
+
+### 3.2 Version 1.0.1 correction verification
+
+The correction pass began on a clean `main...origin/main` worktree at `73eb9a106753c65c4abbda7d791aa6182905e6a3`. Read-only platform checks produced:
+
+| Platform check | Evidence observed in the correction environment | Assessment |
+|---|---|---|
+| Operating system | Windows Server 2025 Standard, 24H2, build `26100.33158`, Server installation | MATCH |
+| Python implementation | `platform.python_implementation()` returned `CPython` | Family MATCH |
+| Python GIL mode | `sys._is_gil_enabled()` returned `True`; `Py_GIL_DISABLED` was `0` | Standard GIL-enabled build MATCH |
+| Exact Python patch | The sole registered/PATH interpreter was `C:\Python314\python.exe`, CPython `3.14.6`; no Python launcher or separate 3.14.3 registration/known-location install was found | **MISMATCH** - the required initial target remains CPython 3.14.3 and must be made available before API-04 implementation/verification evidence is accepted |
+| PostgreSQL client | `C:\Program Files\PostgreSQL\18\bin\psql.exe --version` and file metadata both reported PostgreSQL 18.3; `psql` itself was not on PATH | MATCH; PATH discovery is nonblocking and authorizes no installation/change |
+| Node.js | `node --version` reported `v24.15.0` | MATCH; future React phase only |
+
+The exact Python mismatch is reported, not normalized away: this correction environment has standard GIL-enabled CPython 3.14.6 while the authoritative initial implementation and verification target is standard GIL-enabled CPython 3.14.3. API-03 can document the approved target and package compatibility, but API-04 must not claim target-conforming execution evidence until commands run under CPython 3.14.3. No software was installed, removed, upgraded, downgraded, or reconfigured during verification.
 
 ## 4. Scope and API-04 boundary
 
@@ -249,7 +265,7 @@ backend/
 | Module | Single responsibility |
 |---|---|
 | `application.py` | Create/configure the Flask app, construct production dependencies, register handlers/blueprint, start the pool, and expose explicit resource close. |
-| `config.py` | Parse environment values into immutable `Settings`; validate required values, types, ranges, cross-field rules, and environment restrictions. |
+| `config.py` | Parse environment values into immutable `Settings`; validate required values, types, ranges, cross-field rules, environment restrictions, and the Windows Server 2025 / standard GIL-enabled CPython 3.14.3 runtime gate. |
 | `dependencies.py` | Define the immutable app-local container and narrow callable/protocol types for injected gateways, clocks, timers, sleepers, randomness, and IDs. |
 | `http/blueprint.py` | Create and register the single `/api/v1` blueprint and the exact endpoint rules. |
 | `http/parsing.py` | Enforce body/media/UTF-8/JSON/object/duplicate-key/GET-body rules and return untrusted Python values only. |
@@ -284,7 +300,7 @@ Route modules are deliberately separate from operation services. Tests may repla
 | Planned entry | Responsibility |
 |---|---|
 | `backend/` | Sole Flask project root; contains no database migrations or React code. |
-| `pyproject.toml` | API-04 build metadata, supported Python constraint, direct dependency bounds, pytest configuration, markers, and coverage settings. |
+| `pyproject.toml` | API-04 build metadata with `requires-python = ">=3.14,<3.15"`, direct dependency bounds, pytest configuration, markers, and coverage settings. |
 | `README.md` | API-04 local setup/run/test/configuration instructions and safety boundary; no credentials. |
 | `src/` | Importable-source root, preventing accidental imports from the repository working directory. |
 | Every `__init__.py` | Declares a package and exports only its intentionally public construction/types; performs no connection or registration side effect at import time. |
@@ -339,7 +355,7 @@ Tests may supply a validated `Settings` and/or a complete `Dependencies` object.
 
 ### 10.2 Startup behavior
 
-- Missing, malformed, contradictory, or production-unsafe local configuration raises a configuration error before serving and fails startup.
+- Missing, malformed, contradictory, or production-unsafe local configuration, or a host/interpreter/GIL mismatch from the initial Windows Server 2025 / standard GIL-enabled CPython 3.14.3 target, raises a configuration/platform error before serving and fails startup.
 - A temporarily unavailable PostgreSQL server does not fail process construction. The pool starts reconnecting in the background; liveness remains true and readiness remains false.
 - A permanent local contract mismatch detected on the first readiness check remains not ready and is logged safely. It is not repaired.
 - No migration, reset, seed, verification suite, test helper, or write occurs at startup.
@@ -354,22 +370,39 @@ Pool leases and transactions use nested context managers. They are released befo
 
 ### 11.1 Runtime
 
-- Version 1 supports CPython 3.12.x only. API-04 records the tested patch and constrains the project metadata to `>=3.12,<3.13`.
+- Version 1 supports standard GIL-enabled CPython 3.14.x only. CPython 3.14.3 is the installed-platform specification and the required initial implementation and verification target. API-04 must record the exact tested patch as CPython 3.14.3 and constrain future project metadata to `>=3.14,<3.15`.
+- Free-threaded CPython builds, PyPy, and other Python implementations are outside the initial verified target. API-04 verifies `platform.python_implementation() == "CPython"`, the exact `3.14.3` patch, and an enabled GIL before accepting setup/test evidence.
 - The service is a WSGI Flask application. Production server/topology selection is deployment scope; Flask's development server is never a production requirement.
 - Source uses type annotations and immutable dataclasses where they make boundaries explicit. Runtime type checking is not added.
+- The initial implementation, dependency verification, automated-test evidence, manual evidence, and performance evidence run on Windows Server 2025.
+- Node.js 24.15.0 is not a Flask runtime or test dependency and is not used by API-03 or API-04. No Node.js package, npm setting, JavaScript tool, frontend dependency, or React compatibility choice is selected here; those decisions remain assigned to the later React phase.
 
 ### 11.2 Minimum dependencies
 
 | Class | Family selected | Purpose | Version policy |
 |---|---|---|---|
-| Runtime | Flask 3.1.x | WSGI app, routing, request/response, test client | Compatible release `>=3.1,<3.2`; exact tested resolution recorded by API-04 |
-| Runtime | Psycopg 3.2.x with binary and pool support | PostgreSQL protocol, parameter binding, transactions, connection pool | `psycopg` and `psycopg_pool` compatible `>=3.2,<3.3`; exact tested resolution recorded by API-04 |
-| Test | pytest 9.x | Test discovery, fixtures, markers, parametrization | Compatible `>=9,<10`; exact tested resolution recorded by API-04 |
-| Test | pytest-cov 7.x | Coverage reporting only | Compatible `>=7,<8`; exact tested resolution recorded by API-04 |
+| Runtime | Flask 3.1.x | WSGI app, routing, request/response, test client | `>=3.1,<3.2`; official metadata is Python 3 compatible, requires Python >=3.9, and publishes an OS-independent wheel; exact tested resolution recorded by API-04 |
+| Runtime | Psycopg 3.2.x with synchronized binary support | PostgreSQL protocol and parameter binding | `>=3.2.10,<3.3`; 3.2.10 is the first 3.2 patch whose official release notes add Python 3.14 support; API-04 resolves a matching `psycopg-binary` patch that publishes a CPython 3.14 Windows x86-64 wheel |
+| Runtime | `psycopg_pool` 3.2.x | Bounded PostgreSQL connection pool | `>=3.2.8,<3.3`; official 3.2.8 metadata explicitly classifies Python 3.14, CPython, and Microsoft Windows and is compatible with the selected Psycopg 3.2 family |
+| Test | pytest 9.x | Test discovery, fixtures, markers, parametrization | `>=9,<10`; official metadata explicitly classifies Python 3.14 and Microsoft Windows; exact tested resolution recorded by API-04 |
+| Test | pytest-cov 7.x | Coverage reporting only | `>=7,<8`; official metadata explicitly classifies Python 3.14, CPython, and Microsoft Windows; exact tested resolution recorded by API-04 |
 
 No ORM, migration framework, schema-validation library, Flask-CORS, retry library, timezone package, fake-data package, task queue, or pytest-Flask plugin is justified. The standard library supplies JSON decoding, `zoneinfo`, dataclasses, enums, logging, UUID generation, random jitter, clocks, email-shape helpers supplemented by the approved rules, and sleeping.
 
-Direct dependency families are bounded to one minor/major compatibility series. API-04 must resolve and record exact installed versions reproducibly; patch upgrades require the API-04/API-09 test suites, while a new major/minor family requires an explicit design review. No dependency is auto-updated at runtime.
+Direct dependency families are bounded to one minor/major compatibility series. API-04 must resolve and record exact installed versions reproducibly under standard GIL-enabled CPython 3.14.3 on Windows Server 2025; patch upgrades require the API-04/API-09 test suites, while a new major/minor family requires an explicit design review. No dependency is auto-updated at runtime.
+
+### 11.3 Authoritative dependency-compatibility evidence
+
+| Family | Official metadata/documentation evidence | CPython 3.14.3 on Windows Server 2025 conclusion |
+|---|---|---|
+| Flask 3.1.x | [Flask 3.1.3 PyPI metadata](https://pypi.org/project/Flask/3.1.3/) requires Python >=3.9, classifies the distribution as OS Independent, and publishes `py3-none-any`; [official 3.1.x changes](https://flask.palletsprojects.com/en/stable/changes/) preserve the 3.1 family | Compatible: 3.14.3 satisfies the Python range and the universal wheel has no Windows/CPython ABI restriction |
+| Psycopg 3.2.x | [Official Psycopg release notes](https://www.psycopg.org/psycopg3/docs/news.html#psycopg-3-2-10) state that 3.2.10 added Python 3.14 support; [Psycopg 3.2.13 metadata](https://pypi.org/project/psycopg/3.2.13/) classifies Python 3.14, CPython, and Microsoft Windows | Compatible only from 3.2.10 within the selected family; the lower bound is tightened accordingly |
+| Psycopg binary | [Psycopg Binary 3.2.13 files](https://pypi.org/project/psycopg-binary/3.2.13/) include `psycopg_binary-3.2.13-cp314-cp314-win_amd64.whl` | Compatible with standard 64-bit CPython 3.14 on Windows; API-04 must keep the binary patch synchronized with `psycopg` |
+| `psycopg_pool` 3.2.x | [`psycopg_pool` 3.2.8 metadata](https://pypi.org/project/psycopg-pool/3.2.8/) requires Python >=3.8, explicitly classifies Python 3.14/CPython/Microsoft Windows, and publishes `py3-none-any` | Compatible with CPython 3.14.3 on Windows Server 2025 and the selected Psycopg 3.2 family |
+| pytest 9.x | [pytest 9.1.1 metadata](https://pypi.org/project/pytest/9.1.1/) requires Python >=3.10, explicitly classifies Python 3.14 and Microsoft Windows, and publishes `py3-none-any` | Compatible |
+| pytest-cov 7.x | [pytest-cov 7.1.0 metadata](https://pypi.org/project/pytest-cov/7.1.0/) requires Python >=3.9, explicitly classifies Python 3.14/CPython/Microsoft Windows, and publishes `py3-none-any` | Compatible |
+
+This is metadata/documentation compatibility evidence, not substituted runtime evidence. API-04 must verify the resolved dependency set by importing it and running its tests under the exact required CPython 3.14.3 Windows Server 2025 environment. No package was installed or changed during this API-03 verification.
 
 ## 12. Runtime configuration catalogue
 
@@ -413,6 +446,8 @@ The database-owned lock timeout (3 seconds), routine statement timeout (15 secon
 
 | Concern | Development | Test | Production |
 |---|---|---|---|
+| Host operating system | Windows Server 2025 | Windows Server 2025; required evidence platform | Windows Server 2025 |
+| Python runtime | Standard GIL-enabled CPython 3.14.3 | Standard GIL-enabled CPython 3.14.3; exact implementation/version/GIL assertions run before tests | Standard GIL-enabled CPython 3.14.3 initial deployment target |
 | `CAFE_FAUSSE_ENVIRONMENT` | `development` | `test` | `production` |
 | Flask debug/reloader | May be enabled by local entry command; never inferred from secret values | off | off |
 | Log default | `DEBUG`, text | `INFO`, text unless log-format tests select JSON | `INFO`, JSON |
@@ -424,6 +459,7 @@ The database-owned lock timeout (3 seconds), routine statement timeout (15 secon
 | CORS | Same-origin; frontend dev proxy later | Same-origin | Same-origin |
 | Startup config failures | Fatal | Fatal | Fatal |
 | Database unavailable at startup | App live, not ready | Fixture decides expected behavior | App live, not ready |
+| Node.js | Not used by Flask/API-04 | Not used by Flask/API tests | Not a Flask runtime dependency; Node.js 24.15.0 remains reserved for later React work |
 
 `CAFE_FAUSSE_ALLOW_RESET` belongs exclusively to existing guarded database scripts. It is not an application setting and Flask never reads it.
 
@@ -714,6 +750,7 @@ Tests fail on unknown markers. Test names carry stable IDs in docstrings/paramet
 
 | Scope | Fixture | Responsibility |
 |---|---|---|
+| session | `platform_guard` | Fail before test collection evidence is accepted unless the host is Windows Server 2025 and the interpreter is standard GIL-enabled CPython 3.14.3; report values without changing software |
 | session | `validated_settings` | Build immutable test settings without secrets in reports |
 | session | `postgres_test_database` | Verify target guard, rebuild through approved scripts/migrations, verify PostgreSQL 18.3/contract, and yield connection facts without printing credentials |
 | session | `admin_connection` | Test-management connection using approved nonproduction authority only |
@@ -728,7 +765,7 @@ Tests fail on unknown markers. Test names carry stable IDs in docstrings/paramet
 
 ### 22.3 Isolation and teardown
 
-The PostgreSQL suite runs only against a database whose name matches `cafe_fausse_test_*` and passes the existing nonproduction/reset guards. It performs a clean session rebuild using `database/scripts/rebuild.ps1` and the approved migration sequence, followed by verification. Production databases and roles are refused.
+The PostgreSQL suite runs on Windows Server 2025 under standard GIL-enabled CPython 3.14.3 and only against a PostgreSQL 18.3 database whose name matches `cafe_fausse_test_*` and passes the existing nonproduction/reset guards. It performs a clean session rebuild using `database/scripts/rebuild.ps1` and the approved migration sequence, followed by verification. Production databases, roles, other PostgreSQL versions, other Python patches/implementations/GIL modes, and other host operating systems are refused as initial acceptance evidence.
 
 Function scenarios use unique canonical emails and controlled future slots. After each mutating test, an external test-management connection using the approved `cafe_fausse_test` boundary removes assignments before reservations before customers and restores configuration/hours/table capacities through approved controlled test tooling; it then asserts the baseline. The Flask application's app-role connection never cleans data. Full rebuild is the fallback after a failed test or failed cleanup and before subsequent DB tests.
 
@@ -743,6 +780,7 @@ Minimum planned pure tests:
 | Area | Required cases |
 |---|---|
 | Configuration | Every required value; defaults; each boundary/invalid type; min<=max; cap>=base; production log restrictions; test DB guard; unknown application variable; secret-free error text |
+| Platform guard | Windows Server 2025 identity; exact CPython 3.14.3; CPython implementation; enabled GIL; clear mismatch output; no installation/remediation side effect |
 | JSON parsing | Missing/empty, malformed, non-UTF-8, duplicate nested/top-level keys, non-finite number, scalar/array root, oversized body, wrong media type, GET body/query extras |
 | Common validation | Strict Boolean rejection for integer fields; ordinary integers; exact integral/non-integral decimal and exponent forms; Unicode/name rules; whitespace; lengths; email; phone; date/time/offset forms; party bounds; deterministic field ordering |
 | Identity/newsletter | Canonical email; stored identity match/mismatch; absent/present middle initial; subscribe/unsubscribe/no-change rules; no phone identity |
@@ -796,7 +834,7 @@ After each integration case, assertions use the external test role to inspect co
 
 ## 26. Performance-measurement plan
 
-API-09 will run performance tests against a clean, local PostgreSQL 18.3 test database with Flask configured as production-like except for the nonproduction database. Environment evidence records CPU/OS/PostgreSQL/Python/direct dependency versions, pool size, test data volume, warm-up count, and concurrency. PII-free unique tokens identify test records only inside the test database and are not logged by Flask.
+API-09 will run performance tests on Windows Server 2025 under standard GIL-enabled CPython 3.14.3 against a clean, local PostgreSQL 18.3 test database with Flask configured as production-like except for the nonproduction database. Environment evidence records Windows edition/build, enabled-GIL proof, exact CPython 3.14.3, PostgreSQL 18.3, CPU, exact direct/transitive dependency versions, pool size, test data volume, warm-up count, and concurrency. Node.js is excluded from Flask performance execution and dependency accounting. PII-free unique tokens identify test records only inside the test database and are not logged by Flask.
 
 ### 26.1 Scenarios and samples
 
@@ -836,12 +874,12 @@ Read-only Phase 0 independently found 36 fenced JSON examples in API-02 and pars
 
 | Increment | First implementation ownership | Tests first owned or completed | Explicit boundary |
 |---|---|---|---|
-| API-04 foundation/connectivity | `pyproject.toml`, `README.md`, package init, `application.py`, `config.py`, `dependencies.py`, HTTP blueprint/parsing/responses/error handlers, health route/service/gateway, DB pool/exceptions, observability modules, shared result/retry scaffolding | Config, lifecycle, protocol/common policy, safe errors/logs, connectivity/privileges, transaction wrapper, OP-06/07 | No OP-01 through OP-05 business implementation |
+| API-04 foundation/connectivity | `pyproject.toml` with `requires-python = ">=3.14,<3.15"`, `README.md`, package init, `application.py`, `config.py`, `dependencies.py`, HTTP blueprint/parsing/responses/error handlers, health route/service/gateway, DB pool/exceptions, observability modules, shared result/retry/platform-guard scaffolding | Windows Server 2025 and exact standard GIL-enabled CPython 3.14.3 evidence; resolved-family compatibility; config, lifecycle, protocol/common policy, safe errors/logs, connectivity/privileges, transaction wrapper, OP-06/07 | No OP-01 through OP-05 business implementation; no Node.js/npm/React work |
 | API-05 identity/status | `validation/common.py`, `validation/identity.py`, `services/newsletter_status.py`, `db/customer_gateway.py`, `http/routes/newsletter_status.py`, needed common serializer | Identity validation/normalization and OP-03 unit/API/DB tests | No preference mutation |
 | API-06 preferences | `validation/newsletter.py`, `services/newsletter_preferences.py`, `db/newsletter_gateway.py`, `http/routes/newsletter_preferences.py` | OP-04 idempotency, concurrency, mutation ambiguity, direct-state tests | No availability/booking |
 | API-07 slot discovery | `validation/reservation.py` portions for date/party, context/availability routes/services/gateways, slot serializer | OP-01/02 schedule/config/timezone/DST/inventory/full-slot tests | No reservation mutation |
 | API-08 reservations | Remaining reservation/identity/phone validation, `services/reservations.py`, `db/reservation_gateway.py`, reservation route/confirmation serializer | OP-05 exact retry, concurrency, atomicity, ambiguity, post-commit confirmation, direct-state tests | No broad hardening claim |
-| API-09 verification/gate | No new business capability; only narrowly justified verification support/docs | Complete UT/AT/IT/PT catalogues, contract examples, coverage, timing, redaction, manual evidence | Hard Gate 2; no React until explicit approval |
+| API-09 verification/gate | No new business capability; only narrowly justified verification support/docs | Complete UT/AT/IT/PT catalogues, contract examples, coverage, timing, redaction, manual evidence on Windows Server 2025 with exact standard GIL-enabled CPython 3.14.3 and PostgreSQL 18.3 | Hard Gate 2; no React or Node.js dependency decision until explicit approval |
 
 API-04 may adjust file grouping only if responsibilities and dependency direction remain identical and the review records the path mapping. It may not change the approved behavioral decisions silently.
 
@@ -861,6 +899,7 @@ API-04 may adjust file grouping only if responsibilities and dependency directio
 | Rubric correct Flask/database integration | Real integration tests and direct committed-state assertions |
 | Rubric sophisticated reservation logic | Delegated to approved exact DB allocator, exercised at API boundary rather than duplicated |
 | Project Requirements Baseline 1.0 | One incremental modular application; no unapproved feature/infrastructure |
+| Authoritative implementation platform | Windows Server 2025; standard GIL-enabled CPython 3.14.3 with future metadata `>=3.14,<3.15`; PostgreSQL 18.3; Node.js 24.15.0 recorded only for the later React phase |
 
 ### 30.2 PRA-001 through PRA-029
 
@@ -936,14 +975,18 @@ No derived/transient business data is persisted or cached by Flask. In-memory va
 7. A failed post-commit name read is a known booking with `reservation_confirmation_unavailable`; an uncertain commit is `reservation_outcome_unknown`.
 8. No secret, PII, internal database fact, or second persistent source is added to the public contract or Flask architecture.
 9. This increment creates only this Markdown document; no Flask source, test, SQL, manifest, React, or deployment file is created.
+10. The selected Flask/Psycopg/pytest families have authoritative Python 3.14 and Windows compatibility evidence; Psycopg is constrained to 3.2.10 or newer within 3.2 because that is where official Python 3.14 support begins.
+11. The initial Flask implementation and verification platform is Windows Server 2025 with standard GIL-enabled CPython 3.14.3 and PostgreSQL 18.3. Node.js 24.15.0 is only a recorded future-React platform fact and is absent from the Flask dependency/runtime/test graph.
 
 Therefore API-03 is compatible with API-01 1.0.1, API-02 1.0.1, DB-07 Hard Gate 1, and PostgreSQL Contract for Flask 1.0 without revision.
 
 ## 34. Unresolved issues and deviations
 
-No implementation-blocking issue, contradiction, or deviation remains within API-03.
+No dependency-family incompatibility, upstream-contract contradiction, or API-03 design deviation remains. Official metadata supports the selected dependency families on CPython 3.14 and Windows, with Psycopg's minimum corrected to 3.2.10 within the already selected 3.2 family.
 
-The accepted database performance limitations remain explicit evidence items for API-09 and full-stack verification. They are not an API-03 deviation and do not authorize a database redesign. Exact dependency patch resolutions and production deployment topology are intentionally assigned to their future implementation/deployment checkpoints; their compatibility families and application-facing decisions are fixed here.
+One local environment-conformance deviation remains: read-only correction verification found standard GIL-enabled CPython 3.14.6 at `C:\Python314\python.exe`, not the authoritative required CPython 3.14.3 initial target. This does not change or downgrade the approved platform. CPython 3.14.3 must be made available through separately authorized environment management before API-04 implementation or verification results can be accepted; API-03 performs no installation or reconfiguration.
+
+The accepted database performance limitations remain explicit evidence items for API-09 and full-stack verification. They are not an API-03 deviation and do not authorize a database redesign. Exact dependency patch resolutions and production deployment topology are intentionally assigned to their future implementation/deployment checkpoints; their compatibility families and application-facing decisions are fixed here. Node.js package/frontend compatibility choices remain assigned to the later React phase.
 
 ## 35. API-03 completion assessment
 
@@ -956,15 +999,27 @@ The accepted database performance limitations remain explicit evidence items for
 | Safe errors, privacy, logging, and health explicit | Complete |
 | Clock/randomness/lifecycle test seams explicit | Complete |
 | Unit/API/PostgreSQL/concurrency/performance plans complete | Complete |
+| Windows Server 2025 / standard GIL-enabled CPython 3.14.3 target and `>=3.14,<3.15` metadata policy explicit | Complete |
+| Dependency-family compatibility verified from authoritative metadata/documentation | Complete; Psycopg lower bound corrected to 3.2.10 |
+| PostgreSQL 18.3 preserved as sole Version 1 target | Complete |
+| Node.js 24.15.0 recorded only for future React work | Complete |
+| Local exact CPython patch conformance | Pending environment correction: observed 3.14.6, required 3.14.3 |
 | Seven operations and API-02 contract covered one-to-one | Complete |
 | API-04 through API-09 ownership bounded | Complete |
 | Upstream database/API contracts preserved | Complete |
 | API-04 implementation absent | Complete |
 
-API-03 is complete as a design artifact and is ready for human review. Completion does not equal approval and does not authorize implementation by itself.
+API-03 version 1.0.1 is complete as a corrected design artifact and is ready for human review. Completion does not equal approval and does not authorize implementation by itself. The local exact-Python mismatch must be resolved before API-04 execution evidence can be accepted.
 
-## 36. Approval checkpoint
+## 36. Version record
 
-**Current checkpoint:** Awaiting Abdul's explicit approval of API-03 version 1.0.
+| Version | Date | Change |
+|---|---|---|
+| 1.0 | 2026-08-21 | Initial API-03 Flask architecture, configuration, and test strategy prepared for review. |
+| 1.0.1 | 2026-08-21 | Corrected the implementation platform to Windows Server 2025 and standard GIL-enabled CPython 3.14.x with exact initial target 3.14.3 and future metadata `>=3.14,<3.15`; verified dependency-family compatibility from official metadata, tightened Psycopg 3.2 to 3.2.10+, preserved PostgreSQL 18.3, recorded Node.js 24.15.0 only for future React work, and recorded the local observed-3.14.6 mismatch. No API/database/architecture behavior changed. |
+
+## 37. Approval checkpoint
+
+**Current checkpoint:** Awaiting Abdul's explicit review and approval of API-03 version 1.0.1. Status remains ready for review / pending approval.
 
 If approved, this checkpoint authorizes exactly **API-04 - Flask Foundation and PostgreSQL Connectivity**: application creation, configuration, database connectivity, health/readiness, transaction scaffolding, safe errors, common response policy, and backend logging with their foundational tests. It does not authorize API-05 customer identity/newsletter-status work, API-06 through API-09, React, integration, deployment, or PostgreSQL changes.
