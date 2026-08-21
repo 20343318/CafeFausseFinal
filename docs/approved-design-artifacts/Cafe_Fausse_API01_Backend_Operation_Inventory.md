@@ -665,16 +665,16 @@ The wire/architecture/timing/presentation choices in Section 23 are deliberate r
 | Contradictions escalated | Not applicable; none found |
 | Approval pause before API-02 | Required and recorded below |
 
-API-01 version 1.0.1 is ready for review. It is not approved merely by creation of this artifact.
+API-01 version 1.0.1 was approved by Abdul on 2026-08-21. The approval authorizes only API-02 REST Contract Design.
 
 ## 27. Approval checkpoint
 
 | Item | Value |
 |---|---|
 | Current increment | API-01 - Backend Operation Inventory |
-| Current status | Ready for review; approval pending |
+| Current status | Approved on 2026-08-21 |
 | Approver | Abdul |
-| Approval effect | Authorizes API-02 REST Contract Design only |
+| Approval effect | API-02 REST Contract Design is the next authorized increment |
 | Not authorized | Flask implementation, API-03 or later work, React, integration, or PostgreSQL changes |
 
-> **API-01 approval is required before API-02 may begin. Approval authorizes only API-02 REST Contract Design. It does not authorize Flask implementation, React work, or changes to the approved PostgreSQL layer.**
+> **API-01 was approved on 2026-08-21. This approval authorizes only API-02 REST Contract Design. It does not authorize Flask implementation, React work, or changes to the approved PostgreSQL layer.**
