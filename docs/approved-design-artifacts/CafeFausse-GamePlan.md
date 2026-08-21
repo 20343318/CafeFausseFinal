@@ -14,7 +14,7 @@ These should control everything we do.
 
 **Fixed authoritative requirements**
 
-SRS.pdf and Rubric.pdf remain the authoritative baseline documents.
+SRS(1).pdf and Rubric(1).pdf remain the authoritative baseline documents.
 
 We **do not change an explicit SRS requirement** merely because another approach seems preferable.
 
@@ -153,7 +153,7 @@ That is the least-to-most strategy I would use.
 
 You can prepend this to major prompts:
 
-Use SRS.pdf and Rubric.pdf as the fixed authoritative baseline requirements for the Café Fausse project.
+Use SRS(1).pdf and Rubric(1).pdf as the fixed authoritative baseline requirements for the Café Fausse project.
 
 Also use all supplemental requirements and design decisions that I have explicitly approved and that are recorded in the Project Requirements Addendum.
 
@@ -183,7 +183,7 @@ Maintain traceability from:
 
 **Prompt 0 — Establish the project baseline**
 
-Read Rubric.pdf and SRS.pdf completely.
+Read Rubric(1).pdf and SRS(1).pdf completely.
 
 Do not generate code.
 
@@ -851,8 +851,8 @@ That manipulated-slot test is important: the calendar/slot control improves UX, 
 
 Perform a complete requirements audit using:
 
-1.  Rubric.pdf
-2.  SRS.pdf
+1.  Rubric(1).pdf
+2.  SRS(1).pdf
 3.  the approved Project Requirements Addendum
 
 Build a matrix:
