@@ -52,8 +52,11 @@ function Measure-SqlSamples {
     return [pscustomobject]@{
         Measurement = $Name
         Samples = $ordered.Count
+        MinimumMilliseconds = [math]::Round($ordered[0], 2)
         P50Milliseconds = [math]::Round($ordered[$p50Index], 2)
         P95Milliseconds = [math]::Round($ordered[$p95Index], 2)
+        P99Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.99 * $ordered.Count) - 1], 2)
+        MaximumMilliseconds = [math]::Round($ordered[$ordered.Count - 1], 2)
     }
 }
 
@@ -64,6 +67,8 @@ function Measure-ConcurrentSamples {
     )
 
     $measurements = [System.Collections.Generic.List[double]]::new()
+    $totalBooked = 0
+    $totalRetryable = 0
     for ($sample = 1; $sample -le $Samples; $sample++) {
         Reset-Reservations
         $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
@@ -73,7 +78,7 @@ function Measure-ConcurrentSamples {
             $sql = "SET ROLE cafe_fausse_app; SELECT outcome FROM cafe_fausse.book_reservation('Perf', NULL, 'Concurrent', '$email', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 4, 'no_change');"
             $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
             $startInfo.FileName = $psqlPath
-            $startInfo.Arguments = "-X -qAt -v ON_ERROR_STOP=1 -c `"$sql`""
+            $startInfo.Arguments = "-X -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c `"$sql`""
             $startInfo.UseShellExecute = $false
             $startInfo.RedirectStandardOutput = $true
             $startInfo.RedirectStandardError = $true
@@ -83,6 +88,8 @@ function Measure-ConcurrentSamples {
             if (-not $process.Start()) { throw 'Unable to start concurrent measurement process.' }
             $processes.Add($process)
         }
+        $bookedCount = 0
+        $retryableCount = 0
         foreach ($process in $processes) {
             if (-not $process.WaitForExit(20000)) {
                 $process.Kill()
@@ -90,21 +97,42 @@ function Measure-ConcurrentSamples {
             }
             $output = $process.StandardOutput.ReadToEnd().Trim()
             $errorOutput = $process.StandardError.ReadToEnd().Trim()
-            if ($process.ExitCode -ne 0 -or $output -notmatch '^booked$') {
+            if ($process.ExitCode -eq 0 -and $output -match '^booked$') {
+                $bookedCount++
+            }
+            elseif ($process.ExitCode -ne 0 -and $errorOutput -match '(55P03|40P01|40001)') {
+                $retryableCount++
+            }
+            else {
                 throw "Concurrent measurement failed: output '$output'; error '$errorOutput'."
             }
             $process.Dispose()
         }
         $stopwatch.Stop()
+        if ($bookedCount + $retryableCount -ne $SubmissionCount -or $bookedCount -lt 1) {
+            throw 'Concurrent measurement produced an invalid outcome count.'
+        }
+        $committedCount = [int](Invoke-ScalarSql 'SELECT count(*) FROM cafe_fausse.reservations;')
+        if ($committedCount -ne $bookedCount) {
+            throw "Concurrent outcome count did not match committed reservations."
+        }
+        $totalBooked += $bookedCount
+        $totalRetryable += $retryableCount
         $measurements.Add($stopwatch.Elapsed.TotalMilliseconds)
     }
 
     $ordered = $measurements | Sort-Object
+    Write-Host "$Name outcomes across $Samples samples: booked=$totalBooked retryable=$totalRetryable"
     return [pscustomobject]@{
         Measurement = $Name
         Samples = $ordered.Count
+        MinimumMilliseconds = [math]::Round($ordered[0], 2)
         P50Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.50 * $ordered.Count) - 1], 2)
         P95Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.95 * $ordered.Count) - 1], 2)
+        P99Milliseconds = [math]::Round($ordered[[math]::Ceiling(0.99 * $ordered.Count) - 1], 2)
+        MaximumMilliseconds = [math]::Round($ordered[$ordered.Count - 1], 2)
+        BookedOutcomes = $totalBooked
+        RetryableOutcomes = $totalRetryable
     }
 }
 
@@ -147,6 +175,11 @@ $bookingSql = {
 }
 $results.Add((Measure-SqlSamples 'uncontended worst-case multi-table booking' $bookingSql { Reset-Reservations }))
 
+$results.Add((Measure-SqlSamples 'uncontended single-table booking' {
+    param($sample)
+    "SET ROLE cafe_fausse_test; SELECT outcome FROM cafe_fausse.book_reservation_test('Perf', NULL, 'Single', 'perf-single-$sample@example.com', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 4, 'no_change', 1, NULL);"
+} { Reset-Reservations }))
+
 Reset-Reservations
 [void](Invoke-ScalarSql (& $bookingSql 1))
 $results.Add((Measure-SqlSamples 'exact retry' {
@@ -170,6 +203,7 @@ $results.Add((Measure-SqlSamples 'unavailable full outcome' {
 
 $results.Add((Measure-ConcurrentSamples 'two concurrent submissions' 2))
 $results.Add((Measure-ConcurrentSamples 'five concurrent submissions' 5))
+$results.Add((Measure-ConcurrentSamples 'short burst of eight submissions' 8))
 
 # Retained history is inserted through the test role, then the normal booking
 # path is measured against the production overlap indexes.
@@ -212,5 +246,5 @@ $operatingSystem = [System.Environment]::OSVersion.VersionString
 $logicalProcessors = [System.Environment]::ProcessorCount
 
 Write-Host "Environment: PostgreSQL $serverVersion; $operatingSystem; $processor; $logicalProcessors logical processors; local psql process per sample."
-$results | Format-Table -AutoSize
-Write-Host 'These are preliminary DB-06 measurements, not the DB-07 performance gate or a two-second guarantee.'
+$results | Format-Table -AutoSize | Out-String -Width 240 | Write-Host
+Write-Host 'Measurements are conservative local client-observed database calls and include psql startup; they are DB-07 evidence, not a full-stack two-second guarantee.'

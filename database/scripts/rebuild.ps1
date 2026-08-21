@@ -2,9 +2,11 @@ param(
     [switch]$SkipProvisioning,
     [ValidateSet(
         '004_foundation_privileges.sql',
-        '009_reservation_privileges.sql'
+        '009_reservation_privileges.sql',
+        '010_default_function_privileges.sql',
+        '011_allocator_exact_fast_paths.sql'
     )]
-    [string]$ThroughMigration = '009_reservation_privileges.sql'
+    [string]$ThroughMigration = '011_allocator_exact_fast_paths.sql'
 )
 
 Set-StrictMode -Version Latest
@@ -68,3 +70,15 @@ Invoke-CafeFaussePsql -PsqlArguments @(
 ) | Out-Null
 
 Write-Host 'DB-06 clean rebuild and verification completed successfully.'
+
+if ($ThroughMigration -eq '009_reservation_privileges.sql') {
+    return
+}
+
+$db07VerificationFile = Join-Path $databaseRoot 'verification\verify_db07.sql'
+Invoke-CafeFaussePsql -PsqlArguments @(
+    '-v', 'ON_ERROR_STOP=1',
+    '-f', $db07VerificationFile
+) | Out-Null
+
+Write-Host 'DB-07 clean rebuild and verification completed successfully.'

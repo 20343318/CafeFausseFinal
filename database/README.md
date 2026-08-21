@@ -1,9 +1,9 @@
-# Cafe Fausse DB-05 foundation and DB-06 reservations
+# Cafe Fausse PostgreSQL layer through DB-07
 
 This directory preserves the approved DB-05 PostgreSQL foundation and extends
 it with DB-06 reservation persistence, provisional availability, authoritative
 booking, exact table allocation, transaction locking, hardened role boundaries,
-guarded reset tooling, and database-focused verification.
+guarded reset tooling, and the DB-07 verification and Hard Gate 1 evidence.
 
 ## Prerequisites
 
@@ -53,18 +53,26 @@ shell or use a properly secured PostgreSQL password file outside the repo.
 | `migrations/007_availability_and_controlled_writers.sql` | Adds provisional availability, newsletter preference, and lock-compatible test/admin writers. |
 | `migrations/008_authoritative_booking.sql` | Adds the authoritative booking transaction, restricted deterministic seam, and rollback injection points. |
 | `migrations/009_reservation_privileges.sql` | Grants only controlled operations to runtime and reserves direct persistence/test seams for the test role. |
+| `migrations/010_default_function_privileges.sql` | Corrects the owner-wide future-function default so `PUBLIC` receives no implicit execute privilege. |
+| `migrations/011_allocator_exact_fast_paths.sql` | Adds measured, semantics-preserving one-table and all-tables exact allocator fast paths. |
 | `verification/verify_db05.sql` | Verifies schema, columns, constraints, five constraint-owned indexes, extension, roles, and exact populations. |
 | `verification/verify_db06.sql` | Verifies the six-table schema, 31 constraints, 12 indexes, routines, hardened ownership/grants, and committed invariants. |
+| `verification/verify_db07.sql` | Verifies DB-07 default privileges with a rollback-only future-function probe and final population/integrity facts. |
+| `verification/query_plans_db07.sql` | Collects rollback-safe `EXPLAIN (ANALYZE, BUFFERS, SETTINGS)` evidence using 200 retained-history rows. |
 | `tests/db05_behavior_tests.sql` | Exercises valid and invalid writes transactionally and rolls business-row changes back. |
 | `tests/runtime_privilege_denials.sql` | Uses the ordinary runtime role and proves five prohibited writes/DDL operations fail. |
 | `tests/db06_behavior_tests.sql` | Exercises allocation, DST, availability, booking, retry, customer, newsletter, and rollback behavior. |
 | `tests/db06_runtime_privilege_denials.sql` | Proves the runtime cannot bypass controlled DB-06 operations or invoke test seams. |
+| `tests/db07_behavior_tests.sql` | Regresses the two exact allocator fast paths and the unchanged general path. |
 | `scripts/concurrency_test.ps1` | Runs barrier-synchronized, database-observable multi-session races repeatedly. |
-| `scripts/performance_test.ps1` | Reports preliminary DB-06 p50/p95 database-path measurements. |
+| `scripts/performance_test.ps1` | Reports DB-07 minimum/p50/p95/p99/maximum database-path measurements and contention outcomes. |
 | `scripts/*.ps1` | Locates `psql`, enforces targeting, rebuilds, verifies, and runs the full suite. |
 | `ADVISORY_LOCKS.md` | Documents the implemented collision-separated lock namespaces and email key derivation. |
 | `DB05_IMPLEMENTATION_REPORT.md` | Records technical decisions, traceability, exclusions, and the approval checkpoint. |
 | `DB06_IMPLEMENTATION_REPORT.md` | Records DB-06 traceability, concurrency, rollback, privileges, measurements, and approval checkpoint. |
+| `DB07_VERIFICATION_REPORT.md` | Records the final audit, catalogues, evidence, traceability, defects, limitations, and phase-gate assessment. |
+| `POSTGRESQL_CONTRACT_FOR_FLASK_v1.0.md` | Freezes the database-facing contract for later approved Flask design work. |
+| `DB07_MANUAL_DEMONSTRATION.md` | Gives a repeatable PostgreSQL-only Hard Gate 1 demonstration. |
 
 Migrations are intentionally psql-native and contain no migration metadata
 table, because DB-05 does not authorize an additional persistent table. A
@@ -96,8 +104,8 @@ The sequence is:
 2. provision/validate the three passwordless group roles;
 3. drop only `cafe_fausse` after both script and SQL guards pass;
 4. apply migrations `001` through `004` and run the unchanged DB-05 verifier;
-5. apply migrations `005` through `009` with `ON_ERROR_STOP`;
-6. run the complete DB-06 verification query.
+5. apply migrations `005` through `011` with `ON_ERROR_STOP`;
+6. run the DB-06 and DB-07 verification queries.
 
 The seed uses ordinary inserts. It never overwrites unexpected state: replay
 without a clean rebuild fails on existing schema/keys, while the documented
@@ -105,15 +113,15 @@ guarded rebuild returns the exact approved baseline.
 
 ## Verify and test
 
-Read-only verification of an existing DB-06 build:
+Read-only verification of an existing DB-07 build:
 
 ```powershell
 pwsh -File database/scripts/verify.ps1
 ```
 
 Full automated suite, including the complete DB-05 checkpoint regression, two
-DB-06 clean rebuilds, behavior and privilege tests, repeated concurrency tests,
-preliminary measurements, and a final empty-baseline rebuild:
+DB-07 clean rebuilds, behavior and privilege tests, 20 critical concurrency
+iterations, measurements, query plans, and a final empty-baseline rebuild:
 
 ```powershell
 pwsh -File database/scripts/test.ps1
@@ -130,13 +138,14 @@ configuration changes. The full test script is destructive only to the fixed
 Individual DB-06 evidence commands are:
 
 ```powershell
-pwsh -File database/scripts/concurrency_test.ps1 -Iterations 3
-pwsh -File database/scripts/performance_test.ps1 -Samples 10
+pwsh -File database/scripts/concurrency_test.ps1 -Iterations 20
+pwsh -File database/scripts/performance_test.ps1 -Samples 20
 ```
 
 Both require the same reset guard because they delete test rows. Concurrency
 uses explicit PostgreSQL lock-wait observations as barriers. Performance data
-is preliminary and is not the later DB-07 gate or a two-second guarantee.
+is a local database contribution measurement, not a full-stack two-second
+guarantee.
 
 To reproduce the exact approved DB-05 checkpoint without applying DB-06:
 
@@ -214,7 +223,7 @@ WHERE schemaname = 'cafe_fausse'
 ORDER BY tablename, indexname;
 ```
 
-Expected clean DB-06 baseline: one configuration row `(1,30,90,60,120,
+Expected clean DB-07 baseline: one configuration row `(1,30,90,60,120,
 America/New_York)`; weekdays 1-6 at `17:00-23:00`; weekday 7 at
 `17:00-21:00`; table numbers 1-30, every capacity four, total 120; five
 foundation indexes plus seven DB-06 indexes; and empty `customers`,
@@ -310,5 +319,5 @@ PostgreSQL enforces persisted canonical form, reservation integrity, exact
 retry identity, interval exclusivity through the controlled transaction, and
 complete capacity-sufficient assignments. Later Flask work remains responsible
 for full email syntax, Unicode-aware request normalization, and the bounded
-caller retry loop. DB-07, Flask, React, and end-to-end integration remain
-explicitly deferred.
+caller retry loop. Flask, React, and end-to-end integration remain explicitly
+deferred pending the applicable approval gates.

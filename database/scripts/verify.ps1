@@ -13,4 +13,10 @@ Invoke-CafeFaussePsql -PsqlArguments @(
     '-f', $verificationFile
 ) | Out-Null
 
-Write-Host 'DB-06 verification completed successfully.'
+$db07VerificationFile = Join-Path $databaseRoot 'verification\verify_db07.sql'
+Invoke-CafeFaussePsql -PsqlArguments @(
+    '-v', 'ON_ERROR_STOP=1',
+    '-f', $db07VerificationFile
+) | Out-Null
+
+Write-Host 'DB-07 verification completed successfully.'

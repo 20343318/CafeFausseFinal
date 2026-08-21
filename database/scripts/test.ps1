@@ -50,7 +50,7 @@ Invoke-CafeFaussePsql -PsqlArguments @(
 
 Write-Host 'Approved DB-05 regression suite: PASS'
 
-Write-Host 'Running two complete DB-06 clean rebuilds.'
+Write-Host 'Running two complete DB-07 clean rebuilds.'
 & $rebuildScript -SkipProvisioning
 & $rebuildScript -SkipProvisioning
 
@@ -65,10 +65,22 @@ Invoke-CafeFaussePsql -PsqlArguments @(
     '-f', $db06PrivilegeTestFile
 ) | Out-Null
 
-& (Join-Path $PSScriptRoot 'concurrency_test.ps1') -Iterations 3
-& (Join-Path $PSScriptRoot 'performance_test.ps1') -Samples 10
+$db07BehaviorTestFile = Join-Path $databaseRoot 'tests\db07_behavior_tests.sql'
+Invoke-CafeFaussePsql -PsqlArguments @(
+    '-v', 'ON_ERROR_STOP=1',
+    '-f', $db07BehaviorTestFile
+) | Out-Null
 
-Write-Host 'Restoring and verifying an empty DB-06 baseline after destructive tests.'
+& (Join-Path $PSScriptRoot 'concurrency_test.ps1') -Iterations 20
+& (Join-Path $PSScriptRoot 'performance_test.ps1') -Samples 20
+
+$queryPlanFile = Join-Path $databaseRoot 'verification\query_plans_db07.sql'
+Invoke-CafeFaussePsql -PsqlArguments @(
+    '-v', 'ON_ERROR_STOP=1',
+    '-f', $queryPlanFile
+) | Out-Null
+
+Write-Host 'Restoring and verifying an empty DB-07 baseline after destructive tests.'
 & $rebuildScript -SkipProvisioning
 
-Write-Host 'DB-05 regression and DB-06 automated test suites completed successfully.'
+Write-Host 'DB-05/DB-06 regression and DB-07 automated gate suites completed successfully.'

@@ -151,14 +151,18 @@ function Get-BookSql {
         [datetime]$LocalStart,
         [int]$Offset,
         [int]$PartySize,
-        [string]$NewsletterAction = 'no_change'
+        [string]$NewsletterAction = 'no_change',
+        [string]$MiddleInitial,
+        [string]$Phone
     )
 
     $localText = $LocalStart.ToString('yyyy-MM-dd HH:mm:ss')
+    $middleSql = if ([string]::IsNullOrEmpty($MiddleInitial)) { 'NULL' } else { "'$MiddleInitial'" }
+    $phoneSql = if ([string]::IsNullOrEmpty($Phone)) { 'NULL' } else { "'$Phone'" }
     return @"
 SELECT outcome || COALESCE('|' || reservation_id::text, '')
 FROM cafe_fausse.book_reservation_test(
-    '$FirstName', NULL, '$LastName', '$Email', NULL,
+    '$FirstName', $middleSql, '$LastName', '$Email', $phoneSql,
     TIMESTAMP '$localText', ($Offset)::smallint, $PartySize,
     '$NewsletterAction', 1, NULL
 )
@@ -289,6 +293,17 @@ $mismatchB = Get-BookSql 'Different' 'Identity' 'same-new-email@example.com' $ov
 Invoke-LockedPair 'matching versus mismatching names' $differentA $mismatchB '^booked\|' '^customer_identity_mismatch$' `
     -FinalPredicate "(SELECT count(*) = 1 FROM cafe_fausse.customers) AND (SELECT count(*) = 1 FROM cafe_fausse.reservations)"
 
+$blankFieldSetup = @"
+SET ROLE cafe_fausse_test;
+INSERT INTO cafe_fausse.customers(first_name, last_name, email)
+VALUES ('Populate', 'Race', 'populate-race@example.com');
+"@
+$populateA = Get-BookSql 'Populate' 'Race' 'populate-race@example.com' $start $offset 4 'no_change' 'P' '202-555-0199'
+$populateB = Get-BookSql 'Populate' 'Race' 'populate-race@example.com' $backToBack $offset 4 'no_change' 'P' '2025550199'
+Invoke-LockedPair 'blank middle-initial and phone population race' $populateA $populateB '^booked\|' '^booked\|' `
+    -SetupSql $blankFieldSetup `
+    -FinalPredicate "(SELECT count(*) = 1 FROM cafe_fausse.customers WHERE middle_initial = 'P' AND phone = '202-555-0199') AND (SELECT count(*) = 2 FROM cafe_fausse.reservations)"
+
 $lastSetup = "UPDATE cafe_fausse.restaurant_tables SET seating_capacity = CASE WHEN table_number = 1 THEN 120 ELSE 1 END;"
 $lastA = Get-BookSql 'Last' 'TableA' 'last-a@example.com' $start $offset 120
 $lastB = Get-BookSql 'Last' 'TableB' 'last-b@example.com' $start $offset 120
@@ -362,17 +377,21 @@ $timeoutB = New-PsqlSession 'db06_timeout_waiter'
 try {
     Send-SessionSql $timeoutA "BEGIN; SET LOCAL ROLE cafe_fausse_test; $singleA; \echo TIMEOUT_A_READY"
     [void](Wait-SessionMarker $timeoutA 'TIMEOUT_A_READY')
+    $lockHoldStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $lockWaitStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     Send-SessionSql $timeoutB "\set VERBOSITY verbose`nBEGIN; SET LOCAL ROLE cafe_fausse_test; $singleB;"
     Wait-ForDatabaseLockWait 'db06_timeout_waiter'
     if (-not $timeoutB.WaitForExit(6000)) {
         throw 'Lock-timeout waiter did not terminate within its database bound.'
     }
+    $lockWaitStopwatch.Stop()
     $timeoutError = $timeoutB.StandardError.ReadToEnd()
     if ($timeoutB.ExitCode -eq 0 -or $timeoutError -notmatch '55P03') {
         throw "Expected retryable SQLSTATE 55P03, received: $timeoutError"
     }
     Send-SessionSql $timeoutA "COMMIT; \echo TIMEOUT_A_COMMITTED"
     [void](Wait-SessionMarker $timeoutA 'TIMEOUT_A_COMMITTED')
+    $lockHoldStopwatch.Stop()
 }
 finally {
     foreach ($session in @($timeoutA, $timeoutB)) {
@@ -386,6 +405,8 @@ finally {
 Assert-CommonCommittedState "(SELECT count(*) = 1 FROM cafe_fausse.customers) AND (SELECT count(*) = 1 FROM cafe_fausse.reservations)"
 $script:ScenarioCount++
 Write-Host 'bounded restaurant-lock timeout and retryable classification: PASS'
+Write-Host ("Observed timeout scenario: advisory-lock wait {0:N2} ms; holder lock-hold {1:N2} ms." -f `
+    $lockWaitStopwatch.Elapsed.TotalMilliseconds, $lockHoldStopwatch.Elapsed.TotalMilliseconds)
 
 # Force a conventional row-lock deadlock solely inside the test role. This
 # proves the multi-session driver preserves PostgreSQL's retryable 40P01 class;
