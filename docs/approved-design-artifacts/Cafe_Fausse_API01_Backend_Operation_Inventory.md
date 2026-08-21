@@ -3,9 +3,9 @@
 **Document version:** 1.0.1
 **Date:** 2026-08-21  
 **Roadmap increment:** API-01 - Backend Operation Inventory  
-**Status:** Ready for review; not approved  
+**Status:** Approved  
 **Author:** Codex, prepared for Abdul  
-**Approval record:** Pending Abdul's explicit API-01 approval. Approval would authorize API-02 only.
+**Approval record:** Approved by Abdul on 2026-08-21. This approval authorizes only API-02 REST Contract Design. It does not authorize Flask implementation, React work, integration work, or PostgreSQL changes.
 
 ## 1. Executive summary
 
