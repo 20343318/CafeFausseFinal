@@ -30,6 +30,31 @@ root in Windows PowerShell unless a step says otherwise.
   credentialed logins in one process, Steps 11 and 12 require `PGPASSFILE`.
 - Stop immediately if a guard, version check, role audit, rebuild, verifier, or
   test command fails.
+- Every numbered step is restartable. A rerun must inspect and reuse valid
+  state, repair only task-owned partial state, and produce the same `STEP n
+  PASS` marker. It must not treat "already exists", "already running", or
+  "already stopped" as a failure when the existing state matches this guide.
+
+## Rerun behavior
+
+| Step | Repeatable behavior |
+|---|---|
+| 1 | Reassigns the same task variables and redetects the approved tools. |
+| 2 | Reuses a valid marked cluster, adopts exact-path legacy state, recreates marker-owned partial data, or starts a stopped cluster. |
+| 3 | Replaces the active credential source; passfile entries are updated in place without duplicates. |
+| 4 | Creates a missing database or validates the existing database, owner, and version. |
+| 5 | Guardedly rebuilds the fixed schema and verifies the baseline. |
+| 6 | Creates missing logins, repairs their nonprivileged attributes, preserves existing passwords, and reapplies grants. |
+| 7 | Repeats read-only role and authentication audits. |
+| 8 | Repeats the destructive nonproduction PostgreSQL gate and restores its baseline. |
+| 9 | Reuses a valid environment or safely recreates a partial/wrong-version `.venv`, then refreshes dependencies. |
+| 10 | Repeats unit/API tests and always restores the caller's directory. |
+| 11 | Ensures PostgreSQL is running, then repeats integration/recovery tests and restores the caller's directory. |
+| 12 | Reestablishes all test variables, then repeats coverage and restores the caller's directory. |
+| 13 | Reuses healthy Flask, or replaces only a task-owned unhealthy Flask process. |
+| 14 | Repeats the guarded final rebuild and exact baseline-count proof. |
+| 15 | Repeats compilation/Git checks from the repository root. |
+| 16 | Stops only recognized task processes; already-stopped state succeeds. |
 
 ## 1. Define the isolated target
 
@@ -41,6 +66,12 @@ $CafePgBin = 'C:\Program Files\PostgreSQL\18\bin'
 $CafeClusterRoot = Join-Path $env:TEMP 'CafeFausse-api04-local'
 $CafeDataDir = Join-Path $CafeClusterRoot 'data'
 $CafeLogFile = Join-Path $CafeClusterRoot 'postgres.log'
+$CafeClusterMarker = Join-Path $CafeClusterRoot '.cafe-fausse-api04-test-cluster'
+$CafeFlaskPidFile = Join-Path $CafeClusterRoot 'flask.pid'
+$CafeFlaskOutputLog = Join-Path $CafeClusterRoot 'flask-output.log'
+$CafeFlaskErrorLog = Join-Path $CafeClusterRoot 'flask-error.log'
+$CafeVenvRoot = Join-Path $CafeRepo 'backend\.venv'
+$CafeVenvPython = Join-Path $CafeVenvRoot 'Scripts\python.exe'
 $CafePort = '55435'
 $CafeDatabase = 'cafe_fausse_test_api04'
 $CafeAdminLogin = 'cafe_fausse_admin'
@@ -56,39 +87,61 @@ if (-not (Test-Path -LiteralPath (Join-Path $CafeRepo 'backend\pyproject.toml'))
     throw 'Run this guide from the Cafe Fausse repository root.'
 }
 
-foreach ($CafeProgram in @('initdb.exe', 'pg_ctl.exe', 'psql.exe', 'createdb.exe')) {
+foreach ($CafeProgram in @('initdb.exe', 'pg_ctl.exe', 'pg_isready.exe', 'psql.exe', 'createdb.exe')) {
     $CafeProgramPath = Join-Path $CafePgBin $CafeProgram
     if (-not (Test-Path -LiteralPath $CafeProgramPath)) {
         throw "Required PostgreSQL program not found: $CafeProgramPath"
     }
 }
 
-$CafePsqlVersion = & (Join-Path $CafePgBin 'psql.exe') --version
-if ($LASTEXITCODE -ne 0 -or $CafePsqlVersion -notmatch '18\.3') {
+$CafePsqlVersionLines = & (Join-Path $CafePgBin 'psql.exe') --version 2>&1
+$CafePsqlVersionExitCode = $LASTEXITCODE
+$CafePsqlVersion = $CafePsqlVersionLines -join [Environment]::NewLine
+if ($CafePsqlVersionExitCode -ne 0 -or $CafePsqlVersion -notmatch '18\.3') {
     throw "Expected PostgreSQL 18.3; received: $CafePsqlVersion"
 }
 
 $CafePythonExecutable = $null
 $CafePythonLauncherArguments = @()
+$CafePythonVersion = $null
+$CafePythonAttempts = [System.Collections.Generic.List[string]]::new()
+$CafePythonCandidates = [System.Collections.Generic.List[object]]::new()
 $CafePyLauncher = Get-Command py -ErrorAction SilentlyContinue
 
 if ($null -ne $CafePyLauncher) {
-    $CafePythonExecutable = $CafePyLauncher.Source
-    $CafePythonLauncherArguments = @('-3.14')
+    $CafePythonCandidates.Add([pscustomobject]@{
+        Executable = $CafePyLauncher.Source
+        Arguments = @('-3.14')
+    })
 }
 
-if ($null -eq $CafePythonExecutable -and (Test-Path -LiteralPath 'C:\Python314\python.exe')) {
-    $CafePythonExecutable = 'C:\Python314\python.exe'
+if (Test-Path -LiteralPath 'C:\Python314\python.exe' -PathType Leaf) {
+    $CafePythonCandidates.Add([pscustomobject]@{
+        Executable = 'C:\Python314\python.exe'
+        Arguments = @()
+    })
+}
+
+foreach ($CafePythonCandidate in $CafePythonCandidates) {
+    $CafeCandidateArguments = @($CafePythonCandidate.Arguments)
+    $CafeCandidateVersion = & $CafePythonCandidate.Executable `
+        @CafeCandidateArguments --version 2>&1
+    $CafeCandidateExitCode = $LASTEXITCODE
+    $CafeCandidateVersionText = ($CafeCandidateVersion -join [Environment]::NewLine).Trim()
+    $CafePythonAttempts.Add(
+        "$($CafePythonCandidate.Executable) $($CafePythonCandidate.Arguments -join ' '): exit=$CafeCandidateExitCode version=$CafeCandidateVersionText"
+    )
+    if ($CafeCandidateExitCode -eq 0 -and
+        $CafeCandidateVersionText -match '^Python 3\.14\.6$') {
+        $CafePythonExecutable = $CafePythonCandidate.Executable
+        $CafePythonLauncherArguments = @($CafePythonCandidate.Arguments)
+        $CafePythonVersion = $CafeCandidateVersionText
+        break
+    }
 }
 
 if ($null -eq $CafePythonExecutable) {
-    throw 'Could not find the approved CPython 3.14 interpreter.'
-}
-
-$CafePythonVersion = & $CafePythonExecutable @CafePythonLauncherArguments --version 2>&1
-$CafePythonVersionExitCode = $LASTEXITCODE
-if ($CafePythonVersionExitCode -ne 0 -or $CafePythonVersion -notmatch '^Python 3\.14\.6$') {
-    throw "Formal acceptance requires CPython 3.14.6; received: $CafePythonVersion"
+    throw "Could not find approved CPython 3.14.6. Attempts: $($CafePythonAttempts -join '; ')"
 }
 
 Write-Host "STEP 1 PASS: isolated target variables defined; $CafePsqlVersion; $CafePythonVersion"
@@ -107,75 +160,221 @@ Expected verification output contains:
 STEP 1 PASS: isolated target variables defined; psql (PostgreSQL) 18.3; Python 3.14.6
 ```
 
-## 2. Initialize and start a dedicated PostgreSQL cluster
+## 2. Ensure the dedicated PostgreSQL cluster exists and is running
 
-Only initialize a new directory. Do not reuse an unknown cluster:
+This step is repeatable after successful, failed, or interrupted runs. It uses
+a task-specific marker beneath the exact temporary path. A valid existing
+cluster is reused; a marker-owned partial initialization is removed and
+recreated; a stopped valid cluster is restarted; and a running valid cluster
+is left running. An unrecognized directory is never overwritten.
 
 ```powershell
-if (Test-Path -LiteralPath $CafeClusterRoot) {
-    throw "Refusing to overwrite an existing cluster directory: $CafeClusterRoot"
+$CafeExpectedClusterRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $env:TEMP 'CafeFausse-api04-local')
+)
+$CafeResolvedClusterRoot = [System.IO.Path]::GetFullPath($CafeClusterRoot)
+if (-not $CafeResolvedClusterRoot.Equals(
+    $CafeExpectedClusterRoot,
+    [System.StringComparison]::OrdinalIgnoreCase
+)) {
+    throw "Unsafe cluster path. Expected $CafeExpectedClusterRoot; received $CafeResolvedClusterRoot"
 }
 
-New-Item -ItemType Directory -Path $CafeClusterRoot | Out-Null
+$CafeMarkerText = @"
+Cafe Fausse API-04 disposable PostgreSQL 18 cluster
+port=$CafePort
+database=$CafeDatabase
+"@.Trim()
+$CafeVersionFile = Join-Path $CafeDataDir 'PG_VERSION'
 
-& (Join-Path $CafePgBin 'initdb.exe') `
-    -D $CafeDataDir `
-    -U $CafeAdminLogin `
-    -W `
-    --auth-host=scram-sha-256 `
-    --auth-local=scram-sha-256 `
-    --encoding=UTF8
-
-if ($LASTEXITCODE -ne 0) {
-    throw "initdb failed with exit code $LASTEXITCODE"
+if (-not (Test-Path -LiteralPath $CafeClusterRoot)) {
+    New-Item -ItemType Directory -Path $CafeClusterRoot | Out-Null
+    Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
+}
+elseif (-not (Test-Path -LiteralPath $CafeClusterMarker -PathType Leaf)) {
+    # One-time adoption of state created by an earlier version of this guide.
+    # A complete cluster must match version, port, and loopback binding. A
+    # partial initialization may contain only the known data/log paths.
+    if (-not (Test-Path -LiteralPath $CafeVersionFile -PathType Leaf)) {
+        $CafeUnexpectedLegacyItems = @(
+            Get-ChildItem -LiteralPath $CafeClusterRoot -Force | Where-Object {
+                $_.Name -notin @('data', 'postgres.log')
+            }
+        )
+        if ($CafeUnexpectedLegacyItems.Count -gt 0) {
+            throw "Existing unmarked directory contains unexpected items and will not be adopted: $($CafeUnexpectedLegacyItems.FullName -join ', ')"
+        }
+        Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
+        Write-Host 'Marked an exact-path legacy partial initialization for safe recreation.'
+    }
+    else {
+        $CafeExistingMajor = (Get-Content -LiteralPath $CafeVersionFile -Raw).Trim()
+        $CafePostmasterOptionsFile = Join-Path $CafeDataDir 'postmaster.opts'
+        $CafePostmasterOptions = if (Test-Path -LiteralPath $CafePostmasterOptionsFile) {
+            Get-Content -LiteralPath $CafePostmasterOptionsFile -Raw
+        } else {
+            ''
+        }
+        if ($CafeExistingMajor -ne '18' -or
+            $CafePostmasterOptions -notmatch [regex]::Escape($CafePort) -or
+            $CafePostmasterOptions -notmatch '127\.0\.0\.1') {
+            throw "Refusing to adopt an unrecognized cluster at $CafeClusterRoot"
+        }
+        Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
+        Write-Host 'Recognized and marked the existing task-specific PostgreSQL cluster.'
+    }
 }
 
-& (Join-Path $CafePgBin 'pg_ctl.exe') `
-    -D $CafeDataDir `
-    -l $CafeLogFile `
-    -o "-p $CafePort -h 127.0.0.1" `
-    -w start
-
-if ($LASTEXITCODE -ne 0) {
-    throw "PostgreSQL startup failed with exit code $LASTEXITCODE"
+$CafeRecordedMarker = (Get-Content -LiteralPath $CafeClusterMarker -Raw).Trim()
+if ($CafeRecordedMarker -ne $CafeMarkerText) {
+    throw "Cluster ownership marker does not match this runbook: $CafeClusterMarker"
 }
 
-$CafeServerStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
-$CafeServerStatusExitCode = $LASTEXITCODE
-$CafeServerStatus = $CafeServerStatusLines -join [Environment]::NewLine
-if ($CafeServerStatusExitCode -ne 0 -or $CafeServerStatus -notmatch 'server is running') {
-    throw "PostgreSQL status check failed with exit code $CafeServerStatusExitCode`: $CafeServerStatus"
+$CafeNeedsInitialization = $true
+if (Test-Path -LiteralPath $CafeVersionFile -PathType Leaf) {
+    $CafeExistingMajor = (Get-Content -LiteralPath $CafeVersionFile -Raw).Trim()
+    if ($CafeExistingMajor -ne '18') {
+        throw "Expected PostgreSQL data major version 18; found $CafeExistingMajor"
+    }
+    $CafeRequiredDataPaths = @(
+        (Join-Path $CafeDataDir 'global\pg_control'),
+        (Join-Path $CafeDataDir 'postgresql.conf'),
+        (Join-Path $CafeDataDir 'pg_hba.conf'),
+        (Join-Path $CafeDataDir 'base')
+    )
+    $CafeNeedsInitialization = @(
+        $CafeRequiredDataPaths | Where-Object {
+            -not (Test-Path -LiteralPath $_)
+        }
+    ).Count -gt 0
 }
 
-Write-Host $CafeServerStatus
-Write-Host "STEP 2 PASS: dedicated PostgreSQL cluster is running on 127.0.0.1:$CafePort"
+if ($CafeNeedsInitialization) {
+    if (Test-Path -LiteralPath $CafeDataDir) {
+        if (Test-Path -LiteralPath (Join-Path $CafeDataDir 'postmaster.pid')) {
+            $CafePartialStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') `
+                -D $CafeDataDir status 2>&1
+            $CafePartialStatusExitCode = $LASTEXITCODE
+            $CafePartialStatus = $CafePartialStatusLines -join [Environment]::NewLine
+            if ($CafePartialStatusExitCode -eq 0 -and
+                $CafePartialStatus -match 'server is running') {
+                & (Join-Path $CafePgBin 'pg_ctl.exe') `
+                    -D $CafeDataDir -m fast -w stop
+                $CafePartialStopExitCode = $LASTEXITCODE
+                if ($CafePartialStopExitCode -ne 0) {
+                    throw "Could not stop the marker-owned partial cluster; exit code $CafePartialStopExitCode"
+                }
+            }
+            elseif ($CafePartialStatusExitCode -eq 0 -or
+                $CafePartialStatus -notmatch 'no server running') {
+                throw "Unrecognized partial-cluster status; refusing cleanup: $CafePartialStatus"
+            }
+        }
+
+        $CafePartialReadyOutput = & (Join-Path $CafePgBin 'pg_isready.exe') `
+            -h 127.0.0.1 -p $CafePort -t 3 2>&1
+        $CafePartialReadyExitCode = $LASTEXITCODE
+        if ($CafePartialReadyExitCode -eq 0) {
+            throw "A PostgreSQL server is still accepting connections on the task port; refusing partial-data cleanup: $($CafePartialReadyOutput -join ' ')"
+        }
+
+        $CafeResolvedDataDir = [System.IO.Path]::GetFullPath($CafeDataDir)
+        $CafeExpectedDataDir = [System.IO.Path]::GetFullPath(
+            (Join-Path $CafeExpectedClusterRoot 'data')
+        )
+        if (-not $CafeResolvedDataDir.Equals(
+            $CafeExpectedDataDir,
+            [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw "Refusing partial-cluster cleanup outside the exact task data directory: $CafeResolvedDataDir"
+        }
+        Remove-Item -LiteralPath $CafeDataDir -Recurse -Force
+    }
+
+    & (Join-Path $CafePgBin 'initdb.exe') `
+        -D $CafeDataDir `
+        -U $CafeAdminLogin `
+        -W `
+        --auth-host=scram-sha-256 `
+        --auth-local=scram-sha-256 `
+        --encoding=UTF8
+    $CafeInitExitCode = $LASTEXITCODE
+    if ($CafeInitExitCode -ne 0) {
+        throw "initdb failed with exit code $CafeInitExitCode. Rerun Step 2; the marker-owned partial data directory will be safely recreated."
+    }
+}
+
+function Start-CafeFausseTestPostgres {
+    $CafeInitialReadyOutput = & (Join-Path $CafePgBin 'pg_isready.exe') `
+        -h 127.0.0.1 -p $CafePort -t 3 2>&1
+    $CafeInitialReadyExitCode = $LASTEXITCODE
+
+    if ($CafeInitialReadyExitCode -eq 0) {
+        $CafePostmasterPidFile = Join-Path $CafeDataDir 'postmaster.pid'
+        if (-not (Test-Path -LiteralPath $CafePostmasterPidFile -PathType Leaf)) {
+            throw "Port $CafePort is accepting PostgreSQL connections but this task data directory has no postmaster.pid; refusing to reuse an unknown server."
+        }
+        $CafePostmasterPidLines = @(Get-Content -LiteralPath $CafePostmasterPidFile)
+        if ($CafePostmasterPidLines.Count -lt 4 -or
+            $CafePostmasterPidLines[0].Trim() -notmatch '^\d+$' -or
+            $CafePostmasterPidLines[3].Trim() -ne $CafePort) {
+            throw "Port $CafePort is ready but the task postmaster.pid is invalid or names another port."
+        }
+        $CafePostmasterProcess = Get-Process `
+            -Id ([int]$CafePostmasterPidLines[0].Trim()) `
+            -ErrorAction SilentlyContinue
+        if ($null -eq $CafePostmasterProcess -or
+            $CafePostmasterProcess.ProcessName -ne 'postgres') {
+            throw "Port $CafePort is ready but the task postmaster PID is not a live postgres process."
+        }
+        Write-Host 'PostgreSQL is already running; startup was not repeated.'
+    }
+    else {
+        $CafeStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') `
+            -D $CafeDataDir status 2>&1
+        $CafeStatusExitCode = $LASTEXITCODE
+        $CafeStatusText = $CafeStatusLines -join [Environment]::NewLine
+        if ($CafeStatusExitCode -eq 0 -and
+            $CafeStatusText -match 'server is running') {
+            throw "The task postgres process exists but is not ready on 127.0.0.1:$CafePort`: $CafeStatusText"
+        }
+        if ($CafeStatusExitCode -eq 0 -or
+            $CafeStatusText -notmatch 'no server running') {
+            throw "Unrecognized PostgreSQL status (exit $CafeStatusExitCode): $CafeStatusText"
+        }
+
+        & (Join-Path $CafePgBin 'pg_ctl.exe') `
+            -D $CafeDataDir `
+            -l $CafeLogFile `
+            -o "-p $CafePort -h 127.0.0.1" `
+            -w start
+        $CafeStartExitCode = $LASTEXITCODE
+        if ($CafeStartExitCode -ne 0) {
+            throw "PostgreSQL startup failed with exit code $CafeStartExitCode"
+        }
+    }
+
+    $CafeReadyOutput = & (Join-Path $CafePgBin 'pg_isready.exe') `
+        -h 127.0.0.1 -p $CafePort -t 5 2>&1
+    $CafeReadyExitCode = $LASTEXITCODE
+    if ($CafeReadyExitCode -ne 0) {
+        throw "PostgreSQL did not become ready on 127.0.0.1:$CafePort`: $($CafeReadyOutput -join ' ')"
+    }
+}
+
+Start-CafeFausseTestPostgres
+Write-Host "STEP 2 PASS: task-owned PostgreSQL cluster is initialized and running on 127.0.0.1:$CafePort"
 ```
 
-`initdb -W` prompts for the administrator password. Use a new nonproduction
-password that is not used by either of the other logins.
+`initdb -W` prompts only when initialization or safe partial-state recovery is
+actually required. Use the same nonproduction administrator password when
+recovering a partial first run. A normal rerun does not reinitialize the
+cluster or prompt again.
 
-Expected verification output contains the `pg_ctl` startup message followed
-by:
+Expected verification output ends with:
 
 ```text
-STEP 2 PASS: dedicated PostgreSQL cluster is running on 127.0.0.1:55435
-```
-
-If `pg_ctl` already reported `server is running` but an earlier version of this
-guide misclassified that output, do not rerun `initdb` or the whole of Step 2.
-Run only this read-only recovery check, then continue with Step 3:
-
-```powershell
-$CafeServerStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
-$CafeServerStatusExitCode = $LASTEXITCODE
-$CafeServerStatus = $CafeServerStatusLines -join [Environment]::NewLine
-
-if ($CafeServerStatusExitCode -ne 0 -or $CafeServerStatus -notmatch 'server is running') {
-    throw "STEP 2 RECOVERY FAIL: pg_ctl exit code $CafeServerStatusExitCode`: $CafeServerStatus"
-}
-
-Write-Host $CafeServerStatus
-Write-Host "STEP 2 PASS: existing dedicated PostgreSQL cluster is running on 127.0.0.1:$CafePort"
+STEP 2 PASS: task-owned PostgreSQL cluster is initialized and running on 127.0.0.1:55435
 ```
 
 ## 3. Select a protected external file or secure interactive password
@@ -206,19 +405,69 @@ if (-not (Test-Path -LiteralPath $CafePassFile)) {
 if ($LASTEXITCODE -ne 0) {
     throw 'Could not restrict the PostgreSQL passfile ACL.'
 }
-```
 
-Using a trusted text editor, add the administrator entry below, replacing the
-placeholder with the administrator password. Do not type a real password into
-source control, documentation, screenshots, or shell history.
+function Set-CafeFaussePassfileEntry {
+    param(
+        [Parameter(Mandatory)][string]$Login,
+        [Parameter(Mandatory)][string]$DatabaseName,
+        [Parameter(Mandatory)][string]$Prompt
+    )
 
-```text
-127.0.0.1:55435:*:cafe_fausse_admin:<ADMIN_PASSWORD>
+    $CafeSecurePassword = Read-Host $Prompt -AsSecureString
+    try {
+        $CafePlainPassword = [System.Net.NetworkCredential]::new(
+            '', $CafeSecurePassword
+        ).Password
+        if ([string]::IsNullOrEmpty($CafePlainPassword)) {
+            throw "Password was empty for $Login"
+        }
+
+        $CafeEscapedPassword = $CafePlainPassword.Replace('\', '\\').Replace(':', '\:')
+        $CafeEntryPrefix = "127.0.0.1:$CafePort`:$DatabaseName`:$Login`:"
+        $CafeExistingLines = @(
+            if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
+                Get-Content -LiteralPath $CafePassFile
+            }
+        )
+        [string[]]$CafeUpdatedLines = @(
+            $CafeExistingLines | Where-Object {
+                -not $_.StartsWith(
+                    $CafeEntryPrefix,
+                    [System.StringComparison]::Ordinal
+                )
+            }
+        ) + ($CafeEntryPrefix + $CafeEscapedPassword)
+
+        [System.IO.File]::WriteAllLines(
+            $CafePassFile,
+            $CafeUpdatedLines,
+            [System.Text.UTF8Encoding]::new($false)
+        )
+    }
+    finally {
+        $CafeSecurePassword.Dispose()
+        Remove-Variable CafePlainPassword -ErrorAction SilentlyContinue
+        Remove-Variable CafeEscapedPassword -ErrorAction SilentlyContinue
+    }
+
+    & icacls.exe $CafePassFile /inheritance:r /grant:r "$CafeCurrentIdentity`:(R,W)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not reapply the PostgreSQL passfile ACL for $Login."
+    }
+    Write-Host "Passfile entry created or replaced for $Login without displaying its password."
+}
+
+Set-CafeFaussePassfileEntry `
+    -Login $CafeAdminLogin `
+    -DatabaseName '*' `
+    -Prompt "Password for $CafeAdminLogin"
 ```
 
 The PostgreSQL passfile format is
 `hostname:port:database:username:password`. Escape a literal `:` or `\` in a
-password with `\` as required by libpq.
+password with `\` as required by libpq. The helper performs that escaping and
+replaces an existing matching entry, so rerunning it does not create duplicate
+lines.
 
 ### Option B: secure interactive prompt when the file is absent
 
@@ -253,8 +502,13 @@ function Set-CafeFausseCredential {
     }
 
     $securePassword = Read-Host $Prompt -AsSecureString
-    $env:PGPASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
-    Remove-Variable securePassword
+    try {
+        $env:PGPASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
+    }
+    finally {
+        $securePassword.Dispose()
+        Remove-Variable securePassword -ErrorAction SilentlyContinue
+    }
 
     if ([string]::IsNullOrEmpty($env:PGPASSWORD)) {
         throw 'The interactive PostgreSQL password was empty.'
@@ -282,18 +536,40 @@ environment variable.
 
 ## 4. Create and verify the nonproduction database
 
-Create the empty database using the setup administrator:
+Create the database when absent or validate and reuse it when present. An
+existing database is accepted only when it has the exact safe name, owner, and
+PostgreSQL version required here:
 
 ```powershell
-& (Join-Path $CafePgBin 'createdb.exe') `
+Start-CafeFausseTestPostgres
+
+$CafeDatabaseExistsOutput = & (Join-Path $CafePgBin 'psql.exe') `
+    -X -tA -v ON_ERROR_STOP=1 `
     -h 127.0.0.1 `
     -p $CafePort `
     -U $CafeAdminLogin `
-    --owner=$CafeAdminLogin `
-    $CafeDatabase
+    -d postgres `
+    -c "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = '$CafeDatabase');" 2>&1
+$CafeDatabaseExistsExitCode = $LASTEXITCODE
+$CafeDatabaseExistsText = ($CafeDatabaseExistsOutput -join [Environment]::NewLine).Trim()
+if ($CafeDatabaseExistsExitCode -ne 0 -or $CafeDatabaseExistsText -notmatch '^(t|f)$') {
+    throw "Database existence check failed with exit code $CafeDatabaseExistsExitCode`: $CafeDatabaseExistsText"
+}
 
-if ($LASTEXITCODE -ne 0) {
-    throw "createdb failed with exit code $LASTEXITCODE"
+if ($CafeDatabaseExistsText -eq 'f') {
+    & (Join-Path $CafePgBin 'createdb.exe') `
+        -h 127.0.0.1 `
+        -p $CafePort `
+        -U $CafeAdminLogin `
+        --owner=$CafeAdminLogin `
+        $CafeDatabase
+    $CafeCreateDatabaseExitCode = $LASTEXITCODE
+    if ($CafeCreateDatabaseExitCode -ne 0) {
+        throw "createdb failed with exit code $CafeCreateDatabaseExitCode"
+    }
+}
+else {
+    Write-Host "Database $CafeDatabase already exists; validating it instead of recreating it."
 }
 
 $CafeDatabaseEvidence = & (Join-Path $CafePgBin 'psql.exe') `
@@ -302,13 +578,16 @@ $CafeDatabaseEvidence = & (Join-Path $CafePgBin 'psql.exe') `
     -p $CafePort `
     -U $CafeAdminLogin `
     -d $CafeDatabase `
-    -c "SELECT current_database() || '|' || current_setting('server_version_num');"
+    -c "SELECT current_database() || '|' || current_setting('server_version_num') || '|' || pg_catalog.pg_get_userbyid(datdba) FROM pg_catalog.pg_database WHERE datname = current_database();"
 
-if ($LASTEXITCODE -ne 0 -or $CafeDatabaseEvidence.Trim() -ne "$CafeDatabase|180003") {
+$CafeDatabaseEvidenceExitCode = $LASTEXITCODE
+$CafeDatabaseEvidenceText = ($CafeDatabaseEvidence -join [Environment]::NewLine).Trim()
+if ($CafeDatabaseEvidenceExitCode -ne 0 -or
+    $CafeDatabaseEvidenceText -ne "$CafeDatabase|180003|$CafeAdminLogin") {
     throw "Unexpected database evidence: $CafeDatabaseEvidence"
 }
 
-Write-Host "STEP 4 PASS: database=$CafeDatabase; server_version_num=180003"
+Write-Host "STEP 4 PASS: database=$CafeDatabase; server_version_num=180003; owner=$CafeAdminLogin"
 ```
 
 The result must identify `cafe_fausse_test_api04` and version number `180003`.
@@ -317,7 +596,7 @@ Do not continue if either value differs.
 Expected verification output:
 
 ```text
-STEP 4 PASS: database=cafe_fausse_test_api04; server_version_num=180003
+STEP 4 PASS: database=cafe_fausse_test_api04; server_version_num=180003; owner=cafe_fausse_admin
 ```
 
 ## 5. Build and verify the approved database baseline
@@ -327,6 +606,8 @@ both the requested and actual database names before resetting the fixed
 `cafe_fausse` schema.
 
 ```powershell
+Start-CafeFausseTestPostgres
+
 $env:CAFE_FAUSSE_PSQL = Join-Path $CafePgBin 'psql.exe'
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:CAFE_FAUSSE_ALLOW_RESET = 'YES'
@@ -360,6 +641,8 @@ STEP 5 PASS: approved database baseline rebuilt and verified.
 Connect as the setup administrator:
 
 ```powershell
+Start-CafeFausseTestPostgres
+
 & (Join-Path $CafePgBin 'psql.exe') `
     -X -v ON_ERROR_STOP=1 `
     -h 127.0.0.1 `
@@ -368,16 +651,55 @@ Connect as the setup administrator:
     -d $CafeDatabase
 ```
 
-At the `psql` prompt, run these one-time statements:
+At the `psql` prompt, run these repeatable statements. A missing login is
+created and passworded. An existing login is retained, normalized to the exact
+nonprivileged attributes, and keeps its current password unless a partial prior
+run left the password unset:
 
 ```sql
-CREATE ROLE cafe_fausse_api04_login
-    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
-    NOBYPASSRLS NOINHERIT;
+SELECT NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles
+    WHERE rolname = 'cafe_fausse_api04_login'
+) AS create_app_login,
+COALESCE((
+    SELECT rolpassword IS NULL FROM pg_catalog.pg_authid
+    WHERE rolname = 'cafe_fausse_api04_login'
+), true) AS set_app_password
+\gset
+\if :create_app_login
+    CREATE ROLE cafe_fausse_api04_login
+        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        NOBYPASSRLS NOINHERIT;
+\else
+    ALTER ROLE cafe_fausse_api04_login
+        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        NOBYPASSRLS NOINHERIT;
+\endif
+\if :set_app_password
+\password cafe_fausse_api04_login
+\endif
 
-CREATE ROLE cafe_fausse_api04_test_manager
-    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
-    NOBYPASSRLS NOINHERIT;
+SELECT NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_roles
+    WHERE rolname = 'cafe_fausse_api04_test_manager'
+) AS create_test_login,
+COALESCE((
+    SELECT rolpassword IS NULL FROM pg_catalog.pg_authid
+    WHERE rolname = 'cafe_fausse_api04_test_manager'
+), true) AS set_test_password
+\gset
+\if :create_test_login
+    CREATE ROLE cafe_fausse_api04_test_manager
+        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        NOBYPASSRLS NOINHERIT;
+\else
+    ALTER ROLE cafe_fausse_api04_test_manager
+        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+        NOBYPASSRLS NOINHERIT;
+\endif
+\if :set_test_password
+\password cafe_fausse_api04_test_manager
+\endif
 
 GRANT cafe_fausse_app TO cafe_fausse_api04_login;
 GRANT cafe_fausse_test TO cafe_fausse_api04_test_manager;
@@ -385,23 +707,28 @@ GRANT cafe_fausse_test TO cafe_fausse_api04_test_manager;
 GRANT CONNECT ON DATABASE cafe_fausse_test_api04
     TO cafe_fausse_api04_login, cafe_fausse_api04_test_manager;
 
-\password cafe_fausse_api04_login
-\password cafe_fausse_api04_test_manager
-
-SELECT 'STEP 6 PASS: deployment and test-management logins created and passworded.'
+SELECT 'STEP 6 PASS: deployment and test-management logins created or validated.'
     AS verification;
 \q
 ```
 
-Use different generated passwords at the two password prompts. If a login
-already exists, inspect it using the audit in the next step; do not drop or
-replace it blindly.
+Use different generated passwords at the two prompts on the first run. A rerun
+prompts only for a missing/null password and does not reset an existing one.
+Step 7 audits the resulting attributes and memberships on every run.
 
-Add exact-database entries for both login passwords to the protected passfile:
+If Option A in Step 3 selected a passfile, create or replace the exact-database
+entries after the first run or whenever a password changes:
 
-```text
-127.0.0.1:55435:cafe_fausse_test_api04:cafe_fausse_api04_login:<APP_PASSWORD>
-127.0.0.1:55435:cafe_fausse_test_api04:cafe_fausse_api04_test_manager:<TEST_MANAGER_PASSWORD>
+```powershell
+Set-CafeFaussePassfileEntry `
+    -Login $CafeAppLogin `
+    -DatabaseName $CafeDatabase `
+    -Prompt "Password for $CafeAppLogin"
+
+Set-CafeFaussePassfileEntry `
+    -Login $CafeTestLogin `
+    -DatabaseName $CafeDatabase `
+    -Prompt "Password for $CafeTestLogin"
 ```
 
 If Step 3 selected the interactive fallback, do not create a credential file
@@ -409,10 +736,11 @@ here merely by copying placeholders. Later single-login commands will prompt
 for the applicable password. The two-login integration and coverage runs in
 Steps 11 and 12 require a completed protected passfile with all three entries.
 
-Expected `psql` output includes `CREATE ROLE`, `GRANT ROLE`, `GRANT`, and:
+Expected `psql` output includes `CREATE ROLE` on the first run or `ALTER ROLE`
+on a rerun, repeatable `GRANT` output, and:
 
 ```text
-STEP 6 PASS: deployment and test-management logins created and passworded.
+STEP 6 PASS: deployment and test-management logins created or validated.
 ```
 
 ## 7. Audit role separation before testing
@@ -420,6 +748,7 @@ STEP 6 PASS: deployment and test-management logins created and passworded.
 Run the membership and login-attribute audit as the administrator:
 
 ```powershell
+Start-CafeFausseTestPostgres
 Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
 
 & (Join-Path $CafePgBin 'psql.exe') `
@@ -486,8 +815,13 @@ Keep the administrator selected because the database runner performs guarded
 rebuilds and provisions cluster roles:
 
 ```powershell
+Start-CafeFausseTestPostgres
 Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
+$env:CAFE_FAUSSE_PSQL = Join-Path $CafePgBin 'psql.exe'
 $env:PGUSER = $CafeAdminLogin
+$env:PGHOST = '127.0.0.1'
+$env:PGPORT = $CafePort
+$env:PGDATABASE = $CafeDatabase
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:CAFE_FAUSSE_ALLOW_RESET = 'YES'
 
@@ -524,27 +858,61 @@ STEP 8 PASS: complete PostgreSQL test suite passed and restored its baseline.
 
 ## 9. Create or refresh the backend Python environment
 
-Create the virtual environment once. If `backend\.venv` already contains the
-approved environment, activate it and reinstall the editable test extras to
-bring it up to date.
+Create or repair the virtual environment, then reinstall the editable test
+extras. A valid environment is reused. A partial, broken, or wrong-version
+environment is removed only after its exact repository path is checked and is
+then recreated.
 
 ```powershell
-if (-not (Test-Path -LiteralPath '.\backend\.venv\Scripts\python.exe')) {
-    & $CafePythonExecutable @CafePythonLauncherArguments -m venv backend\.venv
+$CafeRebuildVenv = $false
+if (Test-Path -LiteralPath $CafeVenvRoot) {
+    if (-not (Test-Path -LiteralPath $CafeVenvPython -PathType Leaf)) {
+        $CafeRebuildVenv = $true
+    }
+    else {
+        $CafeExistingVenvVersion = & $CafeVenvPython -c "import platform; print(platform.python_version())" 2>&1
+        $CafeExistingVenvExitCode = $LASTEXITCODE
+        if ($CafeExistingVenvExitCode -ne 0 -or
+            ($CafeExistingVenvVersion -join '').Trim() -ne '3.14.6') {
+            $CafeRebuildVenv = $true
+        }
+    }
+}
+
+if ($CafeRebuildVenv) {
+    $CafeResolvedVenv = [System.IO.Path]::GetFullPath($CafeVenvRoot)
+    $CafeExpectedVenv = [System.IO.Path]::GetFullPath(
+        (Join-Path $CafeRepo 'backend\.venv')
+    )
+    if (-not $CafeResolvedVenv.Equals(
+        $CafeExpectedVenv,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "Refusing virtual-environment cleanup outside the expected path: $CafeResolvedVenv"
+    }
+    Remove-Item -LiteralPath $CafeVenvRoot -Recurse -Force
+}
+
+if (-not (Test-Path -LiteralPath $CafeVenvPython -PathType Leaf)) {
+    & $CafePythonExecutable @CafePythonLauncherArguments -m venv $CafeVenvRoot
     if ($LASTEXITCODE -ne 0) { throw 'Backend virtual-environment creation failed.' }
 }
 
-.\backend\.venv\Scripts\Activate.ps1
-python -m pip install --disable-pip-version-check -e "backend[test]"
+& $CafeVenvPython -m pip install --disable-pip-version-check -e "backend[test]"
 if ($LASTEXITCODE -ne 0) { throw 'Backend test dependency installation failed.' }
 
-$CafePythonVersion = python -c "import platform; print(platform.python_version())"
-$CafePackageVersions = python -c "import importlib.metadata as m; print('|'.join(m.version(n) for n in ('Flask','psycopg','psycopg-binary','psycopg-pool','pytest','pytest-cov')))"
+$CafePythonVersionLines = & $CafeVenvPython -c "import platform; print(platform.python_version())" 2>&1
+$CafePythonCheckExitCode = $LASTEXITCODE
+$CafePythonVersion = ($CafePythonVersionLines -join [Environment]::NewLine).Trim()
+$CafePackageVersionLines = & $CafeVenvPython -c "import importlib.metadata as m; print('|'.join(m.version(n) for n in ('Flask','psycopg','psycopg-binary','psycopg-pool','pytest','pytest-cov')))" 2>&1
+$CafePackageCheckExitCode = $LASTEXITCODE
+$CafePackageVersions = ($CafePackageVersionLines -join [Environment]::NewLine).Trim()
 
-if ($CafePythonVersion.Trim() -ne '3.14.6') {
+if ($CafePythonCheckExitCode -ne 0 -or $CafePythonVersion -ne '3.14.6') {
     throw "Expected CPython 3.14.6; received $CafePythonVersion"
 }
-if ($CafePackageVersions.Trim() -ne '3.1.3|3.2.13|3.2.13|3.2.8|9.1.1|7.1.0') {
+if ($CafePackageCheckExitCode -ne 0 -or
+    $CafePackageVersions -ne '3.1.3|3.2.13|3.2.13|3.2.8|9.1.1|7.1.0') {
     throw "Unexpected backend package versions: $CafePackageVersions"
 }
 
@@ -569,18 +937,20 @@ The default pytest selection is the combined unit and Flask API suite. These
 tests do not require the database server:
 
 ```powershell
-Set-Location $CafeRepo\backend
+Push-Location (Join-Path $CafeRepo 'backend')
+try {
+    & $CafeVenvPython -m pytest
+    if ($LASTEXITCODE -ne 0) { throw 'Default backend tests failed.' }
 
-python -m pytest
-if ($LASTEXITCODE -ne 0) { throw 'Default backend tests failed.' }
+    & $CafeVenvPython -m pytest -m unit
+    if ($LASTEXITCODE -ne 0) { throw 'Backend unit tests failed.' }
 
-python -m pytest -m unit
-if ($LASTEXITCODE -ne 0) { throw 'Backend unit tests failed.' }
-
-python -m pytest -m api
-if ($LASTEXITCODE -ne 0) { throw 'Backend API tests failed.' }
-
-Set-Location $CafeRepo
+    & $CafeVenvPython -m pytest -m api
+    if ($LASTEXITCODE -ne 0) { throw 'Backend API tests failed.' }
+}
+finally {
+    Pop-Location
+}
 Write-Host 'STEP 10 PASS: default, unit, and API backend test selections passed.'
 ```
 
@@ -603,6 +973,8 @@ separate test-management login for fixture management. Keep both password
 entries in `PGPASSFILE` so each connection authenticates with its own secret.
 
 ```powershell
+Start-CafeFausseTestPostgres
+
 if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
     throw 'Steps 11 and 12 require the protected passfile because pytest opens two differently credentialed login connections in one process.'
 }
@@ -624,10 +996,14 @@ $env:CAFE_FAUSSE_TEST_MANAGER_USER = $CafeTestLogin
 $env:CAFE_FAUSSE_TEST_PGDATA = $CafeDataDir
 Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 
-Set-Location $CafeRepo\backend
-python -m pytest -m "integration and postgres"
-$CafeIntegrationExit = $LASTEXITCODE
-Set-Location $CafeRepo
+Push-Location (Join-Path $CafeRepo 'backend')
+try {
+    & $CafeVenvPython -m pytest -m "integration and postgres"
+    $CafeIntegrationExit = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+}
 
 if ($CafeIntegrationExit -ne 0) {
     throw 'Backend PostgreSQL integration tests failed.'
@@ -654,12 +1030,37 @@ With the same application, test-management, database, passfile, and data
 directory variables still set:
 
 ```powershell
-Set-Location $CafeRepo\backend
-python -m pytest -m "unit or api or integration" `
-    --cov=cafe_fausse `
-    --cov-report=term-missing
-$CafeCoverageExit = $LASTEXITCODE
-Set-Location $CafeRepo
+Start-CafeFausseTestPostgres
+
+if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
+    throw 'Steps 11 and 12 require the protected passfile because pytest opens two differently credentialed login connections in one process.'
+}
+Set-CafeFausseCredential -Prompt 'This prompt is not used when the required passfile exists'
+foreach ($CafeRequiredLogin in @($CafeAppLogin, $CafeTestLogin)) {
+    if (-not (Select-String -LiteralPath $CafePassFile -SimpleMatch ":${CafeRequiredLogin}:" -Quiet)) {
+        throw "The passfile has no entry for required login: $CafeRequiredLogin"
+    }
+}
+
+$env:CAFE_FAUSSE_ENVIRONMENT = 'test'
+$env:PGHOST = '127.0.0.1'
+$env:PGPORT = $CafePort
+$env:PGDATABASE = $CafeDatabase
+$env:PGUSER = $CafeAppLogin
+$env:CAFE_FAUSSE_TEST_MANAGER_USER = $CafeTestLogin
+$env:CAFE_FAUSSE_TEST_PGDATA = $CafeDataDir
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+
+Push-Location (Join-Path $CafeRepo 'backend')
+try {
+    & $CafeVenvPython -m pytest -m "unit or api or integration" `
+        --cov=cafe_fausse `
+        --cov-report=term-missing
+    $CafeCoverageExit = $LASTEXITCODE
+}
+finally {
+    Pop-Location
+}
 
 if ($CafeCoverageExit -ne 0) {
     throw 'Combined backend coverage run failed.'
@@ -678,12 +1079,13 @@ Expected final verbiage:
 STEP 12 PASS: combined unit, API, integration, and coverage run passed.
 ```
 
-## 13. Perform a manual Flask health smoke test
+## 13. Perform a repeatable Flask health smoke test
 
 The database scripts and test manager use variables that are intentionally not
-valid Flask application settings. Remove them before starting Flask, keep the
-deployment login selected, and do not use the administrator or test manager as
-the application identity:
+valid Flask application settings. This step removes them, keeps the deployment
+login selected, and starts one hidden development-server process only when the
+health endpoints are not already available. A task-owned unhealthy process is
+stopped and replaced; a healthy prior process is reused.
 
 ```powershell
 Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
@@ -691,6 +1093,7 @@ Remove-Item Env:CAFE_FAUSSE_PSQL -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_USER -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_TEST_PGDATA -ErrorAction SilentlyContinue
 
+Start-CafeFausseTestPostgres
 Set-CafeFausseCredential -Prompt "Password for $CafeAppLogin"
 
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
@@ -699,33 +1102,97 @@ $env:PGPORT = $CafePort
 $env:PGDATABASE = $CafeDatabase
 $env:PGUSER = $CafeAppLogin
 
-Set-Location $CafeRepo\backend
-python -m flask --app cafe_fausse run
-```
-
-Leave that shell running. In a second PowerShell window, call both health
-operations:
-
-```powershell
-$CafeLiveness = Invoke-RestMethod http://127.0.0.1:5000/api/v1/health/liveness
-$CafeReadiness = Invoke-RestMethod http://127.0.0.1:5000/api/v1/health/readiness
-
-if ($CafeLiveness.status -ne 'live') {
-    throw "Unexpected liveness response: $($CafeLiveness | ConvertTo-Json -Compress)"
+function Test-CafeFausseHealth {
+    try {
+        $CafeLiveness = Invoke-RestMethod `
+            -Uri 'http://127.0.0.1:5000/api/v1/health/liveness' `
+            -TimeoutSec 3
+        $CafeReadiness = Invoke-RestMethod `
+            -Uri 'http://127.0.0.1:5000/api/v1/health/readiness' `
+            -TimeoutSec 3
+        return (
+            $CafeLiveness.status -eq 'live' -and
+            $CafeReadiness.status -eq 'ready'
+        )
+    }
+    catch {
+        return $false
+    }
 }
-if ($CafeReadiness.status -ne 'ready') {
-    throw "Unexpected readiness response: $($CafeReadiness | ConvertTo-Json -Compress)"
+
+if (-not (Test-CafeFausseHealth)) {
+    if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
+        $CafeRecordedFlaskPidText = (Get-Content -LiteralPath $CafeFlaskPidFile -Raw).Trim()
+        if ($CafeRecordedFlaskPidText -notmatch '^\d+$') {
+            throw "Invalid task-owned Flask PID file: $CafeFlaskPidFile"
+        }
+        $CafeRecordedFlaskProcess = Get-Process `
+            -Id ([int]$CafeRecordedFlaskPidText) `
+            -ErrorAction SilentlyContinue
+        if ($null -ne $CafeRecordedFlaskProcess) {
+            $CafeRecordedProcessPath = $CafeRecordedFlaskProcess.Path
+            if ([string]::IsNullOrWhiteSpace($CafeRecordedProcessPath) -or
+                -not [System.IO.Path]::GetFullPath($CafeRecordedProcessPath).Equals(
+                    [System.IO.Path]::GetFullPath($CafeVenvPython),
+                    [System.StringComparison]::OrdinalIgnoreCase
+                )) {
+                throw "PID $CafeRecordedFlaskPidText is not the task-owned Flask interpreter; refusing to stop it."
+            }
+            Stop-Process -Id $CafeRecordedFlaskProcess.Id -Force
+            $CafeRecordedFlaskProcess.WaitForExit(10000)
+        }
+        Remove-Item -LiteralPath $CafeFlaskPidFile -Force
+    }
+
+    Remove-Item -LiteralPath $CafeFlaskOutputLog -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $CafeFlaskErrorLog -Force -ErrorAction SilentlyContinue
+    $CafeFlaskProcess = Start-Process `
+        -FilePath $CafeVenvPython `
+        -ArgumentList @(
+            '-m', 'flask', '--app', 'cafe_fausse', 'run',
+            '--host', '127.0.0.1', '--port', '5000'
+        ) `
+        -WorkingDirectory (Join-Path $CafeRepo 'backend') `
+        -RedirectStandardOutput $CafeFlaskOutputLog `
+        -RedirectStandardError $CafeFlaskErrorLog `
+        -WindowStyle Hidden `
+        -PassThru
+    Set-Content -LiteralPath $CafeFlaskPidFile -Value $CafeFlaskProcess.Id -Encoding ASCII
+
+    $CafeHealthReady = $false
+    for ($CafeAttempt = 1; $CafeAttempt -le 30; $CafeAttempt++) {
+        if ($CafeFlaskProcess.HasExited) {
+            break
+        }
+        if (Test-CafeFausseHealth) {
+            $CafeHealthReady = $true
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    if (-not $CafeHealthReady) {
+        if (-not $CafeFlaskProcess.HasExited) {
+            Stop-Process -Id $CafeFlaskProcess.Id -Force
+            $CafeFlaskProcess.WaitForExit(10000)
+        }
+        Remove-Item -LiteralPath $CafeFlaskPidFile -Force -ErrorAction SilentlyContinue
+        $CafeFlaskFailure = @(
+            if (Test-Path -LiteralPath $CafeFlaskErrorLog) {
+                Get-Content -LiteralPath $CafeFlaskErrorLog -Tail 30
+            }
+        ) -join [Environment]::NewLine
+        throw "Flask health endpoints did not become ready: $CafeFlaskFailure"
+    }
 }
 
 Write-Host 'STEP 13 PASS: Flask liveness=live; readiness=ready.'
 ```
 
 Liveness must report `status = live`. Readiness must report
-`status = ready`. Stop the Flask development server with `Ctrl+C`; it is only
-for local verification and is not a production server.
-
-The server shell should contain `Running on http://127.0.0.1:5000`. Expected
-verification output in the second shell:
+`status = ready`. The development server is local-only and remains available
+for a repeated Step 13. Step 16 safely stops it when its task-owned PID file is
+present. Expected verification output:
 
 ```text
 STEP 13 PASS: Flask liveness=live; readiness=ready.
@@ -738,10 +1205,14 @@ by rebuilding with the administrator and verifying the empty approved
 baseline:
 
 ```powershell
+Start-CafeFausseTestPostgres
 Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
 $env:CAFE_FAUSSE_PSQL = Join-Path $CafePgBin 'psql.exe'
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:CAFE_FAUSSE_ALLOW_RESET = 'YES'
+$env:PGHOST = '127.0.0.1'
+$env:PGPORT = $CafePort
+$env:PGDATABASE = $CafeDatabase
 $env:PGUSER = $CafeAdminLogin
 
 & .\database\scripts\rebuild.ps1
@@ -763,7 +1234,9 @@ SELECT concat_ws('|',
 );
 '@
 
-if ($LASTEXITCODE -ne 0 -or $CafeBaselineCounts.Trim() -ne '0|0|0|1|7|30') {
+$CafeBaselineCountsExitCode = $LASTEXITCODE
+$CafeBaselineCountsText = ($CafeBaselineCounts -join [Environment]::NewLine).Trim()
+if ($CafeBaselineCountsExitCode -ne 0 -or $CafeBaselineCountsText -ne '0|0|0|1|7|30') {
     throw "Unexpected final baseline counts: $CafeBaselineCounts"
 }
 
@@ -784,7 +1257,7 @@ These checks catch Python syntax problems and accidental whitespace damage:
 
 ```powershell
 Set-Location $CafeRepo
-python -m compileall -q backend\src backend\tests
+& $CafeVenvPython -m compileall -q backend\src backend\tests
 if ($LASTEXITCODE -ne 0) { throw 'Python compilation check failed.' }
 
 git diff --check
@@ -805,25 +1278,70 @@ changes. Expected final verbiage:
 STEP 15 PASS: Python compilation and Git whitespace checks passed; status displayed above.
 ```
 
-## 16. Stop the disposable PostgreSQL server
+## 16. Stop the task-owned Flask and PostgreSQL servers
 
-After all tests and evidence collection are complete:
+After all tests and evidence collection are complete, stop task-owned Flask
+and PostgreSQL processes. Missing/stale Flask PID state and an already-stopped
+PostgreSQL cluster are successful no-op conditions, making this cleanup safe to
+repeat:
 
 ```powershell
-& (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir -m fast -w stop
-if ($LASTEXITCODE -ne 0) {
-    throw "PostgreSQL shutdown failed with exit code $LASTEXITCODE"
+if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
+    $CafeRecordedFlaskPidText = (Get-Content -LiteralPath $CafeFlaskPidFile -Raw).Trim()
+    if ($CafeRecordedFlaskPidText -notmatch '^\d+$') {
+        throw "Invalid task-owned Flask PID file: $CafeFlaskPidFile"
+    }
+    $CafeRecordedFlaskProcess = Get-Process `
+        -Id ([int]$CafeRecordedFlaskPidText) `
+        -ErrorAction SilentlyContinue
+    if ($null -ne $CafeRecordedFlaskProcess) {
+        $CafeRecordedProcessPath = $CafeRecordedFlaskProcess.Path
+        if ([string]::IsNullOrWhiteSpace($CafeRecordedProcessPath) -or
+            -not [System.IO.Path]::GetFullPath($CafeRecordedProcessPath).Equals(
+                [System.IO.Path]::GetFullPath($CafeVenvPython),
+                [System.StringComparison]::OrdinalIgnoreCase
+            )) {
+            throw "PID $CafeRecordedFlaskPidText is not the task-owned Flask interpreter; refusing to stop it."
+        }
+        Stop-Process -Id $CafeRecordedFlaskProcess.Id -Force
+        $CafeRecordedFlaskProcess.WaitForExit(10000)
+    }
+    Remove-Item -LiteralPath $CafeFlaskPidFile -Force
 }
 
-$CafeStoppedStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
-$CafeStoppedStatusExitCode = $LASTEXITCODE
-$CafeStoppedStatus = $CafeStoppedStatusLines -join [Environment]::NewLine
-if ($CafeStoppedStatusExitCode -eq 0 -or $CafeStoppedStatus -notmatch 'no server running') {
-    throw "PostgreSQL still appears to be running; pg_ctl exit code $CafeStoppedStatusExitCode`: $CafeStoppedStatus"
+if (Test-Path -LiteralPath (Join-Path $CafeDataDir 'PG_VERSION') -PathType Leaf) {
+    $CafeStatusBeforeStopLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
+    $CafeStatusBeforeStopExitCode = $LASTEXITCODE
+    $CafeStatusBeforeStop = $CafeStatusBeforeStopLines -join [Environment]::NewLine
+
+    if ($CafeStatusBeforeStopExitCode -eq 0 -and $CafeStatusBeforeStop -match 'server is running') {
+        & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir -m fast -w stop
+        $CafeStopExitCode = $LASTEXITCODE
+        if ($CafeStopExitCode -ne 0) {
+            throw "PostgreSQL shutdown failed with exit code $CafeStopExitCode"
+        }
+    }
+    elseif ($CafeStatusBeforeStopExitCode -ne 0 -and $CafeStatusBeforeStop -match 'no server running') {
+        Write-Host 'PostgreSQL is already stopped; shutdown was not repeated.'
+    }
+    else {
+        throw "Unrecognized PostgreSQL pre-stop status (exit $CafeStatusBeforeStopExitCode): $CafeStatusBeforeStop"
+    }
+}
+else {
+    Write-Host 'PostgreSQL data directory is not initialized; shutdown is already satisfied.'
 }
 
-Write-Host $CafeStoppedStatus
-Write-Host 'STEP 16 PASS: disposable PostgreSQL server is stopped.'
+$CafeReadyAfterStop = & (Join-Path $CafePgBin 'pg_isready.exe') `
+    -h 127.0.0.1 -p $CafePort -t 3 2>&1
+$CafeReadyAfterStopExitCode = $LASTEXITCODE
+if ($CafeReadyAfterStopExitCode -eq 0) {
+    throw "A PostgreSQL server is still accepting connections on 127.0.0.1:$CafePort`: $($CafeReadyAfterStop -join ' ')"
+}
+
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
+Write-Host 'STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.'
 ```
 
 Retain the stopped cluster if it will be reused for later API work. Before
@@ -831,10 +1349,11 @@ deleting it, independently resolve and verify that its exact path is beneath
 `$env:TEMP`; never recursively delete a path derived from an unchecked or empty
 variable.
 
-Expected output contains `server stopped`, `no server running`, and:
+Expected output contains `server stopped` on the first cleanup or the
+already-stopped message on a rerun, followed by:
 
 ```text
-STEP 16 PASS: disposable PostgreSQL server is stopped.
+STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.
 ```
 
 ## Failure diagnosis
