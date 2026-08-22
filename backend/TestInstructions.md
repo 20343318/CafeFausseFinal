@@ -41,6 +41,12 @@ changes location itself.
   passfile automatically and removes the unused credential variables. Steps
   11 and 12 support either one protected passfile or two secure interactive
   prompts.
+- Use the dedicated Flask port from Step 1 only. A listening process is never
+  reused or terminated unless its PID file, interpreter path, and TCP listener
+  ownership agree.
+- Step 1 snapshots every PostgreSQL/Cafe Fausse process variable this workflow
+  can change. Step 16 restores each prior value or prior absence without
+  displaying secrets.
 - Stop immediately if a guard, version check, role audit, rebuild, verifier, or
   test command fails.
 - Every numbered step is restartable. A rerun must inspect and reuse valid
@@ -52,7 +58,7 @@ changes location itself.
 
 | Step | Repeatable behavior |
 |---|---|
-| 1 | Reassigns the same task variables and redetects the approved tools. |
+| 1 | Preserves the original process environment once, reassigns task variables, and redetects approved tools without overwriting the snapshot on a rerun. |
 | 2 | Reuses a valid marked cluster, adopts exact-path legacy state, recreates marker-owned partial data, or starts a stopped cluster. |
 | 3 | Replaces the active credential source; passfile entries are updated in place without duplicates. |
 | 4 | Creates a missing database or validates the existing database, owner, and version. |
@@ -64,10 +70,10 @@ changes location itself.
 | 10 | Repeats unit/API tests and always restores the caller's directory. |
 | 11 | Ensures PostgreSQL is running, then repeats integration/recovery tests and restores the caller's directory. |
 | 12 | Reestablishes all test variables, then repeats coverage and restores the caller's directory. |
-| 13 | Reuses healthy Flask, or replaces only a task-owned unhealthy Flask process. |
+| 13 | Uses a dedicated port and reuses or replaces Flask only after PID, interpreter, and listener ownership agree. |
 | 14 | Repeats the guarded final rebuild and exact baseline-count proof. |
 | 15 | Repeats compilation/Git checks from the repository root. |
-| 16 | Removes the test database, generated roles/files, app credential, recognized processes, and the entire task-owned PostgreSQL cluster; it retains only an external administrator passfile entry when present. |
+| 16 | Removes the test database, generated roles/files, app credential, recognized processes, and the entire task-owned PostgreSQL cluster; retains an external administrator passfile entry when present; and restores the original process environment. |
 
 ## How credential selection works
 
@@ -99,6 +105,104 @@ passfile automatically; its presence always selects passfile mode.
 Open PowerShell at the repository root and define task-specific variables:
 
 ```powershell
+$CafeManagedEnvironmentNames = @(
+    'CAFE_FAUSSE_ALLOW_RESET',
+    'CAFE_FAUSSE_ENVIRONMENT',
+    'CAFE_FAUSSE_PSQL',
+    'CAFE_FAUSSE_TEST_MANAGER_PASSWORD',
+    'CAFE_FAUSSE_TEST_MANAGER_USER',
+    'CAFE_FAUSSE_TEST_PGDATA',
+    'PGDATABASE',
+    'PGHOST',
+    'PGOPTIONS',
+    'PGPASSFILE',
+    'PGPASSWORD',
+    'PGPORT',
+    'PGUSER'
+)
+
+if (-not (Get-Variable CafePriorProcessEnvironment -Scope Script -ErrorAction SilentlyContinue)) {
+    $CafeOriginalProcessEnvironment = [Environment]::GetEnvironmentVariables(
+        [EnvironmentVariableTarget]::Process
+    )
+    $CafePriorProcessEnvironment = [ordered]@{}
+    foreach ($CafeEnvironmentName in $CafeManagedEnvironmentNames) {
+        $CafeWasPresent = $CafeOriginalProcessEnvironment.Contains(
+            $CafeEnvironmentName
+        )
+        $CafePriorProcessEnvironment[$CafeEnvironmentName] = [pscustomobject]@{
+            WasPresent = $CafeWasPresent
+            Value = if ($CafeWasPresent) {
+                [string]$CafeOriginalProcessEnvironment[$CafeEnvironmentName]
+            } else {
+                $null
+            }
+        }
+    }
+    Remove-Variable CafeOriginalProcessEnvironment -ErrorAction SilentlyContinue
+    $CafeEnvironmentRestoreCompleted = $false
+    Write-Host 'Environment snapshot created without displaying values.'
+} else {
+    Write-Host 'Existing environment snapshot retained; prior values were not overwritten.'
+}
+
+function Restore-CafeFausseProcessEnvironment {
+    if (Get-Variable CafePriorProcessEnvironment -Scope Script -ErrorAction SilentlyContinue) {
+        foreach ($CafeEnvironmentName in $CafeManagedEnvironmentNames) {
+            $CafePriorEnvironmentEntry = $CafePriorProcessEnvironment[
+                $CafeEnvironmentName
+            ]
+            if ($CafePriorEnvironmentEntry.WasPresent) {
+                [Environment]::SetEnvironmentVariable(
+                    $CafeEnvironmentName,
+                    [string]$CafePriorEnvironmentEntry.Value,
+                    [EnvironmentVariableTarget]::Process
+                )
+            } else {
+                [Environment]::SetEnvironmentVariable(
+                    $CafeEnvironmentName,
+                    $null,
+                    [EnvironmentVariableTarget]::Process
+                )
+            }
+        }
+
+        $CafeRestoredProcessEnvironment = [Environment]::GetEnvironmentVariables(
+            [EnvironmentVariableTarget]::Process
+        )
+        foreach ($CafeEnvironmentName in $CafeManagedEnvironmentNames) {
+            $CafePriorEnvironmentEntry = $CafePriorProcessEnvironment[
+                $CafeEnvironmentName
+            ]
+            $CafeIsPresentAfterRestore = $CafeRestoredProcessEnvironment.Contains(
+                $CafeEnvironmentName
+            )
+            if ($CafePriorEnvironmentEntry.WasPresent -ne
+                $CafeIsPresentAfterRestore) {
+                throw "Environment presence restoration failed for $CafeEnvironmentName."
+            }
+            if ($CafePriorEnvironmentEntry.WasPresent -and
+                [string]$CafeRestoredProcessEnvironment[$CafeEnvironmentName] -cne
+                    [string]$CafePriorEnvironmentEntry.Value) {
+                throw "Environment value restoration failed for $CafeEnvironmentName."
+            }
+        }
+
+        foreach ($CafePriorEnvironmentEntry in $CafePriorProcessEnvironment.Values) {
+            $CafePriorEnvironmentEntry.Value = $null
+        }
+        $CafePriorProcessEnvironment.Clear()
+        Remove-Variable CafePriorProcessEnvironment -Scope Script -ErrorAction SilentlyContinue
+        $script:CafeEnvironmentRestoreCompleted = $true
+        Write-Host "STEP 16 EVIDENCE: restored prior presence/values for $($CafeManagedEnvironmentNames.Count) process environment variables without displaying values."
+    } elseif (-not (Get-Variable CafeEnvironmentRestoreCompleted -Scope Script -ErrorAction SilentlyContinue) -or
+        -not $CafeEnvironmentRestoreCompleted) {
+        throw 'The Step 1 environment snapshot is unavailable; refusing to claim environment restoration.'
+    } else {
+        Write-Host 'STEP 16 EVIDENCE: prior process environment was already restored.'
+    }
+}
+
 $CafeRepo = (Resolve-Path '.').Path
 $CafePgBin = 'C:\Program Files\PostgreSQL\18\bin'
 $CafeClusterRoot = Join-Path $env:TEMP 'CafeFausse-api04-local'
@@ -111,6 +215,7 @@ $CafeFlaskErrorLog = Join-Path $CafeClusterRoot 'flask-error.log'
 $CafeVenvRoot = Join-Path $CafeRepo 'backend\.venv'
 $CafeVenvPython = Join-Path $CafeVenvRoot 'Scripts\python.exe'
 $CafePort = '55435'
+$CafeFlaskPort = '55004'
 $CafeDatabase = 'cafe_fausse_test_api04'
 $CafeAdminLogin = 'cafe_fausse_admin'
 $CafeAppLogin = 'cafe_fausse_api04_login'
@@ -181,7 +286,7 @@ if ($null -eq $CafePythonExecutable) {
     throw "Could not find approved CPython 3.14.6. Attempts: $($CafePythonAttempts -join '; ')"
 }
 
-Write-Host "STEP 1 PASS: isolated target variables defined; $CafePsqlVersion; $CafePythonVersion"
+Write-Host "STEP 1 PASS: environment preserved; PostgreSQL=127.0.0.1:$CafePort; Flask=127.0.0.1:$CafeFlaskPort; $CafePsqlVersion; $CafePythonVersion"
 ```
 
 The PostgreSQL output must report `18.3`. Normal application metadata supports
@@ -194,7 +299,7 @@ later steps.
 Expected verification output contains:
 
 ```text
-STEP 1 PASS: isolated target variables defined; psql (PostgreSQL) 18.3; Python 3.14.6
+STEP 1 PASS: environment preserved; PostgreSQL=127.0.0.1:55435; Flask=127.0.0.1:55004; psql (PostgreSQL) 18.3; Python 3.14.6
 ```
 
 ## 2. Ensure the dedicated PostgreSQL cluster exists and is running
@@ -418,7 +523,95 @@ Define the one external passfile location used by automatic detection:
 ```powershell
 $CafePassDirectory = Join-Path $env:APPDATA 'postgresql'
 $CafePassFile = Join-Path $CafePassDirectory 'cafe_fausse_api04_pgpass.conf'
-$CafeCurrentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$CafeCurrentWindowsIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$CafeApprovedPassfileSid = $CafeCurrentWindowsIdentity.User
+$CafeCurrentWindowsIdentity.Dispose()
+
+function Assert-CafeFaussePassfileAcl {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Protected PostgreSQL passfile does not exist: $Path"
+    }
+
+    $CafeVerifiedAcl = Get-Acl -LiteralPath $Path
+    if (-not $CafeVerifiedAcl.AreAccessRulesProtected) {
+        throw "Passfile ACL still inherits access entries: $Path"
+    }
+
+    $CafeVerifiedRules = @(
+        $CafeVerifiedAcl.GetAccessRules(
+            $true,
+            $true,
+            [System.Security.Principal.SecurityIdentifier]
+        )
+    )
+    if ($CafeVerifiedRules.Count -ne 1) {
+        throw "Passfile ACL must contain exactly one explicit access rule; found $($CafeVerifiedRules.Count)."
+    }
+
+    $CafeVerifiedRule = $CafeVerifiedRules[0]
+    if ($CafeVerifiedRule.IsInherited -or
+        $CafeVerifiedRule.AccessControlType -ne
+            [System.Security.AccessControl.AccessControlType]::Allow -or
+        $CafeVerifiedRule.IdentityReference.Value -ne
+            $CafeApprovedPassfileSid.Value -or
+        $CafeVerifiedRule.FileSystemRights -ne
+            [System.Security.AccessControl.FileSystemRights]::FullControl) {
+        throw 'Passfile ACL permits an identity or access rule outside the approved current-user allowlist.'
+    }
+}
+
+function Protect-CafeFaussePassfileAcl {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Protected PostgreSQL passfile does not exist: $Path"
+    }
+
+    $CafeApprovedPassfileTrustee = "*$($CafeApprovedPassfileSid.Value)"
+    & icacls.exe $Path `
+        /inheritance:r `
+        /grant:r "$CafeApprovedPassfileTrustee`:(F)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not establish the current-user passfile ACL.'
+    }
+
+    $CafeCandidateAcl = Get-Acl -LiteralPath $Path
+    $CafeCandidateRules = @(
+        $CafeCandidateAcl.GetAccessRules(
+            $true,
+            $true,
+            [System.Security.Principal.SecurityIdentifier]
+        )
+    )
+    $CafeUnapprovedSids = @(
+        $CafeCandidateRules |
+            Where-Object {
+                $_.IdentityReference.Value -ne
+                    $CafeApprovedPassfileSid.Value
+            } |
+            ForEach-Object { $_.IdentityReference.Value } |
+            Sort-Object -Unique
+    )
+    foreach ($CafeUnapprovedSid in $CafeUnapprovedSids) {
+        $CafeUnapprovedTrustee = "*$CafeUnapprovedSid"
+        & icacls.exe $Path `
+            /remove:g $CafeUnapprovedTrustee `
+            /remove:d $CafeUnapprovedTrustee | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw 'Could not remove an unapproved explicit passfile ACL identity.'
+        }
+    }
+
+    & icacls.exe $Path `
+        /remove:d $CafeApprovedPassfileTrustee `
+        /grant:r "$CafeApprovedPassfileTrustee`:(F)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not finalize the current-user-only passfile ACL.'
+    }
+    Assert-CafeFaussePassfileAcl -Path $Path
+}
 ```
 
 Choose the workflow by file presence, not by changing a variable:
@@ -435,7 +628,10 @@ Run this block only when using external credential storage. It creates a
 missing passfile outside the repository, restricts it to the current Windows
 identity, and creates or replaces the administrator entry without displaying
 the password. If a passfile already exists, rerunning the block preserves
-unrelated entries and refreshes the matching administrator entry.
+unrelated credential lines and refreshes the matching administrator entry. Its
+ACL is rebuilt from an empty explicit-access list: inheritance is disabled and
+the current Windows user's SID is the only approved identity. Any inherited or
+additional explicit access rule causes verification to fail.
 
 ```powershell
 New-Item -ItemType Directory -Path $CafePassDirectory -Force | Out-Null
@@ -443,11 +639,7 @@ if (-not (Test-Path -LiteralPath $CafePassFile)) {
     New-Item -ItemType File -Path $CafePassFile | Out-Null
 }
 
-& icacls.exe $CafePassFile /inheritance:r /grant:r "$CafeCurrentIdentity`:(R,W)"
-
-if ($LASTEXITCODE -ne 0) {
-    throw 'Could not restrict the PostgreSQL passfile ACL.'
-}
+Protect-CafeFaussePassfileAcl -Path $CafePassFile
 
 function Set-CafeFaussePassfileEntry {
     param(
@@ -503,10 +695,7 @@ function Set-CafeFaussePassfileEntry {
         Remove-Variable CafeDisposeSecurePassword -ErrorAction SilentlyContinue
     }
 
-    & icacls.exe $CafePassFile /inheritance:r /grant:r "$CafeCurrentIdentity`:(R,W)" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not reapply the PostgreSQL passfile ACL for $Login."
-    }
+    Protect-CafeFaussePassfileAcl -Path $CafePassFile
     Write-Host "Passfile entry created or replaced for $Login without displaying its password."
 }
 
@@ -533,6 +722,7 @@ if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
     if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
         throw "The detected external passfile is empty: $CafePassFile"
     }
+    Assert-CafeFaussePassfileAcl -Path $CafePassFile
     Write-Host 'STEP 3 SOURCE: protected external passfile detected; PGPASSFILE will be used.'
 } else {
     Write-Host 'STEP 3 SOURCE: no external passfile detected; secure interactive prompts will be used.'
@@ -572,10 +762,7 @@ function Set-CafeFausseCredential {
             throw "The external passfile exists but is empty: $CafePassFile"
         }
 
-        & icacls.exe $CafePassFile | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Cannot read the passfile ACL: $CafePassFile"
-        }
+        Assert-CafeFaussePassfileAcl -Path $CafePassFile
 
         $env:PGPASSFILE = $CafePassFile
         Write-Host 'STEP 3 PASS: credential source is the protected external PGPASSFILE.'
@@ -607,6 +794,7 @@ function Set-CafeFaussePytestCredentials {
         if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
             throw "The external passfile exists but is empty: $CafePassFile"
         }
+        Assert-CafeFaussePassfileAcl -Path $CafePassFile
         foreach ($CafeRequiredLogin in @($CafeAppLogin, $CafeAdminLogin)) {
             if (-not (Select-String -LiteralPath $CafePassFile -SimpleMatch ":${CafeRequiredLogin}:" -Quiet)) {
                 throw "The passfile has no entry for required login: $CafeRequiredLogin"
@@ -659,7 +847,8 @@ STEP 3 PASS: credential source is interactive PGPASSWORD for this PowerShell pro
 
 An interactive value is plain text only after assignment to the current
 process environment, which is necessary for libpq. It is inherited by child
-processes. Step 16 clears both interactive test variables. Run
+processes. Step 16 restores the original values or original absence of both
+interactive test variables. Run
 `Set-CafeFausseCredential` again with the appropriate identity in the prompt
 whenever a single-login step changes identities. Steps 11 and 12 instead call
 `Set-CafeFaussePytestCredentials`, which supports the passfile or prompts for
@@ -1231,9 +1420,12 @@ STEP 12 PASS: combined unit, API, integration, and coverage run passed.
 
 The database scripts and test manager use variables that are intentionally not
 valid Flask application settings. This step removes them, keeps the deployment
-login selected, and starts one hidden development-server process only when the
-health endpoints are not already available. A task-owned unhealthy process is
-stopped and replaced; a healthy prior process is reused.
+login selected, and uses the dedicated `$CafeFlaskPort` from Step 1. An
+existing health service is queried or reused only after the PID file, expected
+virtual-environment interpreter path, and Windows TCP listener owner all prove
+that the process belongs to this runbook. If any process occupies the port
+without that complete ownership evidence, the step fails without reusing or
+terminating it. A proven task-owned unhealthy process may be replaced.
 
 ```powershell
 Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
@@ -1251,13 +1443,110 @@ $env:PGPORT = $CafePort
 $env:PGDATABASE = $CafeDatabase
 $env:PGUSER = $CafeAppLogin
 
+function Get-CafeFausseFlaskListenerOwner {
+    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+        throw 'Get-NetTCPConnection is required to prove Flask port ownership.'
+    }
+    try {
+        $CafeFlaskListeners = @(
+            Get-NetTCPConnection -State Listen -ErrorAction Stop |
+                Where-Object { $_.LocalPort -eq [int]$CafeFlaskPort }
+        )
+    }
+    catch {
+        throw "Could not inspect TCP listener ownership for port $CafeFlaskPort."
+    }
+
+    $CafeFlaskListenerOwners = @(
+        $CafeFlaskListeners |
+            ForEach-Object { $_.OwningProcess } |
+            Sort-Object -Unique
+    )
+    if ($CafeFlaskListenerOwners.Count -gt 1) {
+        throw "Multiple processes listen on dedicated Flask port $CafeFlaskPort; refusing reuse or termination."
+    }
+    if ($CafeFlaskListenerOwners.Count -eq 0) {
+        return $null
+    }
+    return [int]$CafeFlaskListenerOwners[0]
+}
+
+function Get-CafeFausseRecordedFlaskOwnership {
+    param(
+        [Parameter(Mandatory)][int]$ListenerProcessId,
+        [Parameter(Mandatory)][int]$LauncherProcessId
+    )
+
+    $CafeListenerProcess = Get-Process `
+        -Id $ListenerProcessId `
+        -ErrorAction SilentlyContinue
+    $CafeLauncherProcess = Get-Process `
+        -Id $LauncherProcessId `
+        -ErrorAction SilentlyContinue
+    if ($null -eq $CafeListenerProcess -and
+        $null -eq $CafeLauncherProcess) {
+        return $null
+    }
+    if ($null -eq $CafeListenerProcess -or
+        $null -eq $CafeLauncherProcess) {
+        throw 'Recorded Flask listener/launcher process pair is incomplete; refusing reuse or termination.'
+    }
+
+    try {
+        $CafeLauncherPath = $CafeLauncherProcess.Path
+    }
+    catch {
+        throw "Cannot inspect recorded Flask launcher PID $LauncherProcessId; refusing reuse or termination."
+    }
+    if ([string]::IsNullOrWhiteSpace($CafeLauncherPath) -or
+        -not [System.IO.Path]::GetFullPath($CafeLauncherPath).Equals(
+            [System.IO.Path]::GetFullPath($CafeVenvPython),
+            [System.StringComparison]::OrdinalIgnoreCase
+        )) {
+        throw "Recorded launcher PID $LauncherProcessId does not use the expected backend virtual-environment interpreter; refusing reuse or termination."
+    }
+
+    try {
+        $CafeListenerProcessRecord = Get-CimInstance `
+            -ClassName Win32_Process `
+            -Filter "ProcessId = $ListenerProcessId" `
+            -ErrorAction Stop
+    }
+    catch {
+        throw "Cannot inspect the parent of Flask listener PID $ListenerProcessId; refusing reuse or termination."
+    }
+    if ($null -eq $CafeListenerProcessRecord -or
+        [int]$CafeListenerProcessRecord.ParentProcessId -ne
+            $LauncherProcessId) {
+        throw "Flask listener PID $ListenerProcessId is not a child of recorded virtual-environment launcher PID $LauncherProcessId; refusing reuse or termination."
+    }
+
+    return [pscustomobject]@{
+        Listener = $CafeListenerProcess
+        Launcher = $CafeLauncherProcess
+    }
+}
+
+function Stop-CafeFausseRecordedFlaskOwnership {
+    param([Parameter(Mandatory)]$Ownership)
+
+    if (-not $Ownership.Listener.HasExited) {
+        Stop-Process -Id $Ownership.Listener.Id -Force
+        [void]$Ownership.Listener.WaitForExit(10000)
+    }
+    if (-not $Ownership.Launcher.HasExited) {
+        Stop-Process -Id $Ownership.Launcher.Id -Force
+        [void]$Ownership.Launcher.WaitForExit(10000)
+    }
+}
+
 function Test-CafeFausseHealth {
     try {
         $CafeLiveness = Invoke-RestMethod `
-            -Uri 'http://127.0.0.1:5000/api/v1/health/liveness' `
+            -Uri "http://127.0.0.1:$CafeFlaskPort/api/v1/health/liveness" `
             -TimeoutSec 3
         $CafeReadiness = Invoke-RestMethod `
-            -Uri 'http://127.0.0.1:5000/api/v1/health/readiness' `
+            -Uri "http://127.0.0.1:$CafeFlaskPort/api/v1/health/readiness" `
             -TimeoutSec 3
         return (
             $CafeLiveness.status -eq 'live' -and
@@ -1269,64 +1558,132 @@ function Test-CafeFausseHealth {
     }
 }
 
-if (-not (Test-CafeFausseHealth)) {
-    if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
-        $CafeRecordedFlaskPidText = (Get-Content -LiteralPath $CafeFlaskPidFile -Raw).Trim()
-        if ($CafeRecordedFlaskPidText -notmatch '^\d+$') {
-            throw "Invalid task-owned Flask PID file: $CafeFlaskPidFile"
-        }
-        $CafeRecordedFlaskProcess = Get-Process `
-            -Id ([int]$CafeRecordedFlaskPidText) `
-            -ErrorAction SilentlyContinue
-        if ($null -ne $CafeRecordedFlaskProcess) {
-            $CafeRecordedProcessPath = $CafeRecordedFlaskProcess.Path
-            if ([string]::IsNullOrWhiteSpace($CafeRecordedProcessPath) -or
-                -not [System.IO.Path]::GetFullPath($CafeRecordedProcessPath).Equals(
-                    [System.IO.Path]::GetFullPath($CafeVenvPython),
-                    [System.StringComparison]::OrdinalIgnoreCase
-                )) {
-                throw "PID $CafeRecordedFlaskPidText is not the task-owned Flask interpreter; refusing to stop it."
-            }
-            Stop-Process -Id $CafeRecordedFlaskProcess.Id -Force
-            $CafeRecordedFlaskProcess.WaitForExit(10000)
+$CafeStartFlask = $false
+$CafeOwnedFlaskOwnership = $null
+$CafeListenerOwner = Get-CafeFausseFlaskListenerOwner
+
+if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
+    $CafeRecordedFlaskPidText = (Get-Content -LiteralPath $CafeFlaskPidFile -Raw).Trim()
+    if ($CafeRecordedFlaskPidText -notmatch '^(\d+)\|(\d+)$') {
+        throw "Invalid task-owned Flask PID file: $CafeFlaskPidFile"
+    }
+    $CafeRecordedListenerPid = [int]$Matches[1]
+    $CafeRecordedLauncherPid = [int]$Matches[2]
+    $CafeRecordedFlaskOwnership = Get-CafeFausseRecordedFlaskOwnership `
+        -ListenerProcessId $CafeRecordedListenerPid `
+        -LauncherProcessId $CafeRecordedLauncherPid
+
+    if ($null -eq $CafeRecordedFlaskOwnership) {
+        if ($null -ne $CafeListenerOwner) {
+            throw "Dedicated Flask port $CafeFlaskPort is owned by unrecorded PID $CafeListenerOwner; refusing reuse or termination."
         }
         Remove-Item -LiteralPath $CafeFlaskPidFile -Force
+        $CafeStartFlask = $true
     }
+    elseif ($null -ne $CafeListenerOwner -and
+        $CafeListenerOwner -ne $CafeRecordedFlaskOwnership.Listener.Id) {
+        throw "Dedicated Flask port $CafeFlaskPort is owned by PID $CafeListenerOwner, not recorded listener PID $CafeRecordedListenerPid; refusing reuse or termination."
+    }
+    elseif ($null -eq $CafeListenerOwner) {
+        Stop-CafeFausseRecordedFlaskOwnership `
+            -Ownership $CafeRecordedFlaskOwnership
+        Remove-Item -LiteralPath $CafeFlaskPidFile -Force
+        $CafeStartFlask = $true
+    }
+    elseif (Test-CafeFausseHealth) {
+        $CafeOwnedFlaskOwnership = $CafeRecordedFlaskOwnership
+        Write-Host ((
+            "Reusing verified task-owned Flask listener PID {0} " +
+            "through virtual-environment launcher PID {1}."
+        ) -f
+            $CafeOwnedFlaskOwnership.Listener.Id,
+            $CafeOwnedFlaskOwnership.Launcher.Id
+        )
+    }
+    else {
+        Stop-CafeFausseRecordedFlaskOwnership `
+            -Ownership $CafeRecordedFlaskOwnership
+        Remove-Item -LiteralPath $CafeFlaskPidFile -Force
+        $CafeStartFlask = $true
+    }
+} else {
+    if ($null -ne $CafeListenerOwner) {
+        throw "Dedicated Flask port $CafeFlaskPort is occupied by unrecorded PID $CafeListenerOwner; refusing reuse or termination."
+    }
+    $CafeStartFlask = $true
+}
 
+if ($CafeStartFlask) {
+    $CafeListenerOwner = Get-CafeFausseFlaskListenerOwner
+    if ($null -ne $CafeListenerOwner) {
+        throw "Dedicated Flask port $CafeFlaskPort became occupied by PID $CafeListenerOwner; refusing startup or termination."
+    }
     Remove-Item -LiteralPath $CafeFlaskOutputLog -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $CafeFlaskErrorLog -Force -ErrorAction SilentlyContinue
-    $CafeFlaskProcess = Start-Process `
+    $CafeFlaskLauncherProcess = Start-Process `
         -FilePath $CafeVenvPython `
         -ArgumentList @(
             '-m', 'flask', '--app', 'cafe_fausse', 'run',
-            '--host', '127.0.0.1', '--port', '5000'
+            '--host', '127.0.0.1', '--port', $CafeFlaskPort,
+            '--no-reload', '--no-debugger'
         ) `
         -WorkingDirectory (Join-Path $CafeRepo 'backend') `
         -RedirectStandardOutput $CafeFlaskOutputLog `
         -RedirectStandardError $CafeFlaskErrorLog `
         -WindowStyle Hidden `
         -PassThru
-    Set-Content -LiteralPath $CafeFlaskPidFile -Value $CafeFlaskProcess.Id -Encoding ASCII
 
     $CafeHealthReady = $false
+    $CafeOwnershipFailure = $null
     for ($CafeAttempt = 1; $CafeAttempt -le 30; $CafeAttempt++) {
-        if ($CafeFlaskProcess.HasExited) {
+        if ($CafeFlaskLauncherProcess.HasExited) {
             break
         }
-        if (Test-CafeFausseHealth) {
-            $CafeHealthReady = $true
-            break
+        $CafeStartedListenerOwner = Get-CafeFausseFlaskListenerOwner
+        if ($null -ne $CafeStartedListenerOwner) {
+            try {
+                $CafeStartedOwnership = Get-CafeFausseRecordedFlaskOwnership `
+                    -ListenerProcessId $CafeStartedListenerOwner `
+                    -LauncherProcessId $CafeFlaskLauncherProcess.Id
+            }
+            catch {
+                $CafeOwnershipFailure = $_.Exception.Message
+                break
+            }
+
+            if ($null -ne $CafeStartedOwnership) {
+                $CafeOwnedFlaskOwnership = $CafeStartedOwnership
+                Set-Content `
+                    -LiteralPath $CafeFlaskPidFile `
+                    -Value ("{0}|{1}" -f
+                        $CafeStartedOwnership.Listener.Id,
+                        $CafeStartedOwnership.Launcher.Id) `
+                    -Encoding ASCII
+                if (Test-CafeFausseHealth) {
+                    $CafeHealthReady = $true
+                    break
+                }
+            }
         }
         Start-Sleep -Seconds 1
     }
 
     if (-not $CafeHealthReady) {
-        if (-not $CafeFlaskProcess.HasExited) {
-            Stop-Process -Id $CafeFlaskProcess.Id -Force
-            $CafeFlaskProcess.WaitForExit(10000)
+        if ($null -ne $CafeOwnedFlaskOwnership) {
+            Stop-CafeFausseRecordedFlaskOwnership `
+                -Ownership $CafeOwnedFlaskOwnership
+        }
+        elseif (-not $CafeFlaskLauncherProcess.HasExited) {
+            # The launcher is the only process whose ownership is proven here.
+            # Do not terminate a listener unless the parent/launcher proof passed.
+            Stop-Process -Id $CafeFlaskLauncherProcess.Id -Force
+            [void]$CafeFlaskLauncherProcess.WaitForExit(10000)
         }
         Remove-Item -LiteralPath $CafeFlaskPidFile -Force -ErrorAction SilentlyContinue
         $CafeFlaskFailure = @(
+            if (-not [string]::IsNullOrWhiteSpace($CafeOwnershipFailure)) {
+                $CafeOwnershipFailure
+            }
             if (Test-Path -LiteralPath $CafeFlaskErrorLog) {
                 Get-Content -LiteralPath $CafeFlaskErrorLog -Tail 30
             }
@@ -1335,16 +1692,39 @@ if (-not (Test-CafeFausseHealth)) {
     }
 }
 
-Write-Host 'STEP 13 PASS: Flask liveness=live; readiness=ready.'
+$CafeFinalFlaskOwnership = Get-CafeFausseRecordedFlaskOwnership `
+    -ListenerProcessId $CafeOwnedFlaskOwnership.Listener.Id `
+    -LauncherProcessId $CafeOwnedFlaskOwnership.Launcher.Id
+$CafeFinalListenerOwner = Get-CafeFausseFlaskListenerOwner
+if ($null -eq $CafeFinalFlaskOwnership -or
+    $CafeFinalListenerOwner -ne $CafeFinalFlaskOwnership.Listener.Id -or
+    -not (Test-CafeFausseHealth)) {
+    throw 'Final task-owned Flask process-chain, interpreter, listener, or health proof failed.'
+}
+
+Write-Host ((
+    "STEP 13 PASS: task-owned Flask listener PID={0} through " +
+    "virtual-environment launcher PID={1} on 127.0.0.1:{2}; " +
+    "liveness=live; readiness=ready."
+) -f
+    $CafeFinalFlaskOwnership.Listener.Id,
+    $CafeFinalFlaskOwnership.Launcher.Id,
+    $CafeFlaskPort
+)
 ```
 
 Liveness must report `status = live`. Readiness must report
-`status = ready`. The development server is local-only and remains available
-for a repeated Step 13. Step 16 safely stops it when its task-owned PID file is
-present. Expected verification output:
+`status = ready`. On Windows, the virtual-environment launcher may create a
+separate child Python process that owns the TCP listener, so the task PID file
+records `<listener-pid>|<launcher-pid>`. Both PIDs, their parent-child
+relationship, the launcher interpreter path, and the TCP listener must agree
+before any health request, reuse, replacement, or cleanup. The development
+server is local-only and remains available for a repeated Step 13. Step 16
+safely stops it when this complete task-ownership proof succeeds. Expected
+verification output:
 
 ```text
-STEP 13 PASS: Flask liveness=live; readiness=ready.
+STEP 13 PASS: task-owned Flask listener PID=<listener-pid> through virtual-environment launcher PID=<launcher-pid> on 127.0.0.1:55004; liveness=live; readiness=ready.
 ```
 
 ## 14. Restore and prove the clean baseline
@@ -1441,7 +1821,8 @@ safe to repeat and removes the objects created by this runbook:
   install metadata;
 - the entire task-owned `%TEMP%\CafeFausse-api04-local` directory, including
   `PGDATA` and its safety marker;
-- process-scoped credential and test-management environment variables.
+- task-set process environment values, after which every captured variable is
+  restored to its original value or original absence without being displayed.
 
 PostgreSQL stores its administrator password verifier inside `PGDATA`, so
 deleting the cluster necessarily deletes that database-side verifier. The
@@ -1471,28 +1852,64 @@ if ($CafeAppLogin -ne 'cafe_fausse_api04_login' -or
     throw 'Refusing cleanup for unexpected PostgreSQL login names.'
 }
 
-# Stop only the Flask process recorded by this runbook.
+# Stop only a recorded Flask listener/launcher pair whose interpreter,
+# parent-child relationship, and listener ownership all agree. Never terminate
+# an unrecorded process on the dedicated port.
+if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+    throw 'Get-NetTCPConnection is required to prove Flask cleanup ownership.'
+}
+try {
+    $CafeCleanupFlaskListeners = @(
+        Get-NetTCPConnection -State Listen -ErrorAction Stop |
+            Where-Object { $_.LocalPort -eq [int]$CafeFlaskPort }
+    )
+}
+catch {
+    throw "Could not inspect Flask listener ownership for cleanup on port $CafeFlaskPort."
+}
+$CafeCleanupFlaskOwners = @(
+    $CafeCleanupFlaskListeners |
+        ForEach-Object { $_.OwningProcess } |
+        Sort-Object -Unique
+)
+if ($CafeCleanupFlaskOwners.Count -gt 1) {
+    throw "Multiple processes occupy dedicated Flask port $CafeFlaskPort; refusing cleanup termination."
+}
+$CafeCleanupFlaskOwner = if ($CafeCleanupFlaskOwners.Count -eq 1) {
+    [int]$CafeCleanupFlaskOwners[0]
+} else {
+    $null
+}
+
 if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
     $CafeRecordedFlaskPidText = (Get-Content -LiteralPath $CafeFlaskPidFile -Raw).Trim()
-    if ($CafeRecordedFlaskPidText -notmatch '^\d+$') {
+    if ($CafeRecordedFlaskPidText -notmatch '^(\d+)\|(\d+)$') {
         throw "Invalid task-owned Flask PID file: $CafeFlaskPidFile"
     }
-    $CafeRecordedFlaskProcess = Get-Process `
-        -Id ([int]$CafeRecordedFlaskPidText) `
-        -ErrorAction SilentlyContinue
-    if ($null -ne $CafeRecordedFlaskProcess) {
-        $CafeRecordedProcessPath = $CafeRecordedFlaskProcess.Path
-        if ([string]::IsNullOrWhiteSpace($CafeRecordedProcessPath) -or
-            -not [System.IO.Path]::GetFullPath($CafeRecordedProcessPath).Equals(
-                [System.IO.Path]::GetFullPath($CafeVenvPython),
-                [System.StringComparison]::OrdinalIgnoreCase
-            )) {
-            throw "PID $CafeRecordedFlaskPidText is not the task-owned Flask interpreter; refusing to stop it."
+    if (-not (Get-Command Get-CafeFausseRecordedFlaskOwnership -ErrorAction SilentlyContinue) -or
+        -not (Get-Command Stop-CafeFausseRecordedFlaskOwnership -ErrorAction SilentlyContinue)) {
+        throw 'Run Step 13 in this PowerShell session before Step 16 so Flask ownership can be proved safely.'
+    }
+    $CafeRecordedListenerPid = [int]$Matches[1]
+    $CafeRecordedLauncherPid = [int]$Matches[2]
+    $CafeRecordedFlaskOwnership = Get-CafeFausseRecordedFlaskOwnership `
+        -ListenerProcessId $CafeRecordedListenerPid `
+        -LauncherProcessId $CafeRecordedLauncherPid
+    if ($null -eq $CafeRecordedFlaskOwnership) {
+        if ($null -ne $CafeCleanupFlaskOwner) {
+            throw "Dedicated Flask port $CafeFlaskPort is owned by unrecorded PID $CafeCleanupFlaskOwner; refusing termination."
         }
-        Stop-Process -Id $CafeRecordedFlaskProcess.Id -Force
-        $CafeRecordedFlaskProcess.WaitForExit(10000)
+    } else {
+        if ($null -ne $CafeCleanupFlaskOwner -and
+            $CafeCleanupFlaskOwner -ne $CafeRecordedFlaskOwnership.Listener.Id) {
+            throw "Dedicated Flask port $CafeFlaskPort is owned by PID $CafeCleanupFlaskOwner, not recorded listener PID $CafeRecordedListenerPid; refusing termination."
+        }
+        Stop-CafeFausseRecordedFlaskOwnership `
+            -Ownership $CafeRecordedFlaskOwnership
     }
     Remove-Item -LiteralPath $CafeFlaskPidFile -Force
+} elseif ($null -ne $CafeCleanupFlaskOwner) {
+    throw "Dedicated Flask port $CafeFlaskPort is occupied by unrecorded PID $CafeCleanupFlaskOwner; refusing termination."
 }
 
 # Remove database and cluster-role objects while retaining cafe_fausse_admin.
@@ -1591,10 +2008,7 @@ if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
         $CafeRetainedPassfileLines,
         [System.Text.UTF8Encoding]::new($false)
     )
-    & icacls.exe $CafePassFile /inheritance:r /grant:r "$CafeCurrentIdentity`:(R,W)" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Could not reapply the preserved administrator passfile ACL.'
-    }
+    Protect-CafeFaussePassfileAcl -Path $CafePassFile
     foreach ($CafeRemovedPrefix in $CafeCleanupPassfilePrefixes) {
         if (Select-String -LiteralPath $CafePassFile -SimpleMatch $CafeRemovedPrefix -Quiet) {
             throw "A non-administrator passfile entry survived cleanup: $CafeRemovedPrefix"
@@ -1670,6 +2084,14 @@ if ($CafeReadyAfterStopExitCode -eq 0) {
     throw "A PostgreSQL server is still accepting connections on 127.0.0.1:$CafePort`: $($CafeReadyAfterStop -join ' ')"
 }
 
+$CafeFlaskListenersAfterStop = @(
+    Get-NetTCPConnection -State Listen -ErrorAction Stop |
+        Where-Object { $_.LocalPort -eq [int]$CafeFlaskPort }
+)
+if ($CafeFlaskListenersAfterStop.Count -ne 0) {
+    throw "A process still occupies dedicated Flask port $CafeFlaskPort; refusing cluster-directory cleanup."
+}
+
 # Remove the whole task-owned cluster only after PostgreSQL is proven stopped.
 # Windows can briefly retain handles after shutdown, so retry the same exact,
 # previously validated TEMP path and fail unless the directory is truly gone.
@@ -1704,13 +2126,7 @@ if (Test-Path -LiteralPath $CafeResolvedCleanupRoot) {
 
 Write-Host "STEP 16 EVIDENCE: task-owned cluster directory is absent: $CafeResolvedCleanupRoot"
 
-Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
-Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
-Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
-Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_USER -ErrorAction SilentlyContinue
-Remove-Item Env:CAFE_FAUSSE_TEST_PGDATA -ErrorAction SilentlyContinue
-Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
-Remove-Item Env:CAFE_FAUSSE_PSQL -ErrorAction SilentlyContinue
+Restore-CafeFausseProcessEnvironment
 
 Write-Host 'STEP 16 PASS: test database, generated roles/files, app credential, processes, and entire task-owned cluster removed; external administrator credential retained when present.'
 ```
@@ -1719,6 +2135,7 @@ Expected final output:
 
 ```text
 STEP 16 EVIDENCE: task-owned cluster directory is absent: C:\Users\<you>\AppData\Local\Temp\<session>\CafeFausse-api04-local
+STEP 16 EVIDENCE: restored prior presence/values for 13 process environment variables without displaying values.
 STEP 16 PASS: test database, generated roles/files, app credential, processes, and entire task-owned cluster removed; external administrator credential retained when present.
 ```
 

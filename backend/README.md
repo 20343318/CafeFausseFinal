@@ -130,7 +130,7 @@ deployment login. The administrator also performs external fixture management
 through `cafe_fausse_test`; Flask continues to use only the deployment login
 through `cafe_fausse_app`. Follow [TestInstructions.md](TestInstructions.md) for
 the repeatable setup, secure interactive-password option, and optional passfile
-option. The guide is the authoritative convenience workflow. For the condensed
+option. The guide is the preferred convenience workflow. For the condensed
 commands below, the required starting directory is the repository root:
 
 ```powershell
@@ -156,4 +156,5 @@ The integration process may use one protected `PGPASSFILE` containing both
 login entries. Without a passfile, keep the app password in `PGPASSWORD` and
 the administrator/test-management password in the test-only
 `CAFE_FAUSSE_TEST_MANAGER_PASSWORD` variable; the guide populates both through
-non-echoing PowerShell prompts and clears them during cleanup.
+non-echoing PowerShell prompts and restores their prior values or absence
+during cleanup.

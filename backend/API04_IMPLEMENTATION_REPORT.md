@@ -238,6 +238,64 @@ test-role restoration, unavailable-database liveness, real server-down/server-up
 background recovery, transaction rollback, wrong-role lease discard, and
 repeated factory closure. The application role never performed setup or cleanup.
 
+### Second API-04 documentation-safety correction - 2026-08-22
+
+This pass changed documentation and its executable convenience workflow only.
+`backend/TestInstructions.md` remains a user-requested convenience document;
+it is not an SRS, rubric, approved design authority, or required API-04
+deliverable. The backend README now calls it the preferred convenience
+workflow, not an authoritative workflow.
+
+The corrected guide reserves task-specific Flask port 55004 in Step 1 and uses
+that variable for startup, liveness, and readiness. On Windows, the backend
+virtual-environment Python launcher creates a child Python listener, so the
+task PID file now records `<listener-pid>|<launcher-pid>`. Before making a
+health request, reusing a service, replacing it, or cleaning it up, the guide
+proves all of the following: both recorded processes exist, the launcher path
+is the expected `backend/.venv` interpreter, the listener is the launcher's
+child, and the Windows TCP listener owner is the recorded listener PID. An
+unrecorded service placed on port 55004 was rejected without receiving a health
+request and without being terminated. A task-owned Flask listener/launcher pair
+then started, passed both health requests, was reused on a second execution,
+and was removed by final cleanup.
+
+The optional external passfile workflow now removes inherited and unapproved
+explicit allow/deny entries, grants only the current Windows SID, and verifies
+one protected, explicit current-user FullControl rule before use. Verification
+used generated one-run values in a passfile inside the disposable task root;
+the file's contents were never displayed. The guide snapshots the prior value
+or absence of all 13 PostgreSQL/Cafe Fausse process variables it manages and
+restores that exact state during cleanup without logging values. Final cleanup
+proved the database, generated roles, Flask processes, passfile, virtual
+environment, and entire `%TEMP%\CafeFausse-api04-local` directory were absent.
+
+Fresh second-pass evidence on CPython 3.14.6 and PostgreSQL 18.3:
+
+- Editable installation: passed with the API-04 bounded dependencies.
+- Unit: 51 passed, 17 deselected.
+- Flask API: 10 passed, 58 deselected.
+- PostgreSQL integration: 7 passed, 61 deselected.
+- Consolidated coverage: 68 passed; 94% total statement/branch report.
+- Flask ownership safety: unknown-owner refusal/no-request/no-termination,
+  verified listener/launcher startup, repeated reuse, and cleanup all passed.
+- Credential and cleanup safety: protected disposable passfile use and exact
+  restoration of all 13 managed environment variables passed.
+- Documentation/static: all 22 PowerShell blocks parsed without errors;
+  `compileall`, `git diff --check`, the port-5000 guide search, and the retired
+  singular-filename search passed.
+
+The exact changed-path catalogue for this second correction is:
+
+```text
+backend/API04_IMPLEMENTATION_REPORT.md
+backend/README.md
+backend/TestInstructions.md
+```
+
+No Flask source or test behavior changed. No database migration, database
+object, approved design artifact, OP-01 through OP-05 capability, frontend
+file, API-05 work, commit, or push was introduced.
+
 ## Warnings, limitations, and exclusions
 
 The Windows `py` launcher was unavailable; direct CPython 3.14.6 execution was
