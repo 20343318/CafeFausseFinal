@@ -23,6 +23,9 @@ root in Windows PowerShell unless a step says otherwise.
 - Keep the deployment login separate from administrator/test authority. This
   preserves the approved API-03 least-privilege boundary while removing the
   redundant third login from the local test harness.
+- Give the cluster administrator and deployment login different passwords.
+  Reusing the administrator password for the app-only login would undermine
+  the benefit of separating their privileges.
 - Either store both passwords outside the repository in a protected PostgreSQL
   passfile or enter both at secure interactive prompts when a command needs
   them. Never commit passwords, passfiles, connection URLs, or environment
@@ -192,8 +195,7 @@ $CafeVersionFile = Join-Path $CafeDataDir 'PG_VERSION'
 if (-not (Test-Path -LiteralPath $CafeClusterRoot)) {
     New-Item -ItemType Directory -Path $CafeClusterRoot | Out-Null
     Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
-}
-elseif (-not (Test-Path -LiteralPath $CafeClusterMarker -PathType Leaf)) {
+} elseif (-not (Test-Path -LiteralPath $CafeClusterMarker -PathType Leaf)) {
     # One-time adoption of state created by an earlier version of this guide.
     # A complete cluster must match version, port, and loopback binding. A
     # partial initialization may contain only the known data/log paths.
@@ -266,8 +268,7 @@ if ($CafeNeedsInitialization) {
                 if ($CafePartialStopExitCode -ne 0) {
                     throw "Could not stop the marker-owned partial cluster; exit code $CafePartialStopExitCode"
                 }
-            }
-            elseif ($CafePartialStatusExitCode -eq 0 -or
+            } elseif ($CafePartialStatusExitCode -eq 0 -or
                 $CafePartialStatus -notmatch 'no server running') {
                 throw "Unrecognized partial-cluster status; refusing cleanup: $CafePartialStatus"
             }
@@ -330,8 +331,7 @@ function Start-CafeFausseTestPostgres {
             throw "Port $CafePort is ready but the task postmaster PID is not a live postgres process."
         }
         Write-Host 'PostgreSQL is already running; startup was not repeated.'
-    }
-    else {
+    } else {
         $CafeStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') `
             -D $CafeDataDir status 2>&1
         $CafeStatusExitCode = $LASTEXITCODE
@@ -385,6 +385,17 @@ Define the external passfile location. Step 1 defaults
 `$CafeUsePassFile = $false`, so an existing file never silently changes the
 chosen mode. Leave it false for secure interactive prompts. Set it true only
 when selecting Option A.
+
+Choose exactly one credential-storage option:
+
+| Choice | Setting | What to run |
+|---|---|---|
+| Option A: protected passfile | `$CafeUsePassFile = $true` | Run the Option A block, then run the shared credential-helper block. |
+| Option B: interactive prompts (default) | `$CafeUsePassFile = $false` | Skip the entire Option A block and run the Option B confirmation followed by the shared credential-helper block. |
+
+Do not run Option A merely because a passfile from an earlier session exists.
+The value of `$CafeUsePassFile` is the explicit choice and prevents a stale
+file from silently overriding interactive mode.
 
 ```powershell
 $CafePassDirectory = Join-Path $env:APPDATA 'postgresql'
@@ -473,12 +484,41 @@ password with `\` as required by libpq. The helper performs that escaping and
 replaces an existing matching entry, so rerunning it does not create duplicate
 lines.
 
-### Credential helper for either option
+After running Option A, continue to the shared credential-helper block below.
+Do not run Option B's confirmation block.
 
-Run the helper code below for either option. When `$CafeUsePassFile` is false,
-it reads the current login's password without echoing it, converts it only for
-the process environment, and sets `PGPASSWORD`. When the setting is true, it
-requires and selects `PGPASSFILE`. It always removes the other variables first.
+### Option B: secure interactive prompts (default)
+
+Choose this option when passwords should exist only in the current PowerShell
+process rather than in a passfile. Skip every command under Option A, including
+passfile creation and `Set-CafeFaussePassfileEntry`. Confirm interactive mode:
+
+```powershell
+$CafeUsePassFile = $false
+Write-Host 'STEP 3 OPTION B: secure interactive password prompts selected.'
+```
+
+Expected option-selection output:
+
+```text
+STEP 3 OPTION B: secure interactive password prompts selected.
+```
+
+Now continue to the shared credential-helper block. Its final command prompts
+for the administrator password needed by Steps 4 and 5. Later single-login
+steps call the same helper again with the applicable login name. Steps 11 and
+12 call the two-password pytest helper and prompt separately for the app login
+and administrator/test-management login.
+
+### Shared credential helpers required for both options
+
+Run this entire block after completing either Option A or Option B. Do not skip
+it: later steps depend on the two functions it defines.
+
+When `$CafeUsePassFile` is false, `Set-CafeFausseCredential` reads the current
+login's password without echoing it, converts it only for the process
+environment, and sets `PGPASSWORD`. When the setting is true, it requires and
+selects `PGPASSFILE`. It always removes the other variables first.
 
 ```powershell
 function Set-CafeFausseCredential {
