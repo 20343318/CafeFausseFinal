@@ -60,7 +60,7 @@ root in Windows PowerShell unless a step says otherwise.
 | 13 | Reuses healthy Flask, or replaces only a task-owned unhealthy Flask process. |
 | 14 | Repeats the guarded final rebuild and exact baseline-count proof. |
 | 15 | Repeats compilation/Git checks from the repository root. |
-| 16 | Removes the test database, generated roles/files and app credential, stops recognized processes, and retains only the administrator credential with its required stopped cluster state. |
+| 16 | Removes the test database, generated roles/files, app credential, recognized processes, and the entire task-owned PostgreSQL cluster; it retains only an external administrator passfile entry when present. |
 
 ## How credential selection works
 
@@ -1420,7 +1420,7 @@ changes. Expected final verbiage:
 STEP 15 PASS: Python compilation and Git whitespace checks passed; status displayed above.
 ```
 
-## 16. Self-clean all test objects while preserving the administrator credential
+## 16. Self-clean all test objects while preserving the external administrator credential
 
 Run this one PowerShell block after all tests and evidence collection. It is
 safe to repeat and removes the objects created by this runbook:
@@ -1432,17 +1432,17 @@ safe to repeat and removes the objects created by this runbook:
 - the task-owned Flask process, PID file, Flask/PostgreSQL logs, virtual
   environment, pytest/coverage caches, `__pycache__` directories, and editable
   install metadata;
+- the entire task-owned `%TEMP%\CafeFausse-api04-local` directory, including
+  `PGDATA` and its safety marker;
 - process-scoped credential and test-management environment variables.
 
-PostgreSQL stores the administrator password verifier inside its cluster data.
-It is technically impossible to delete the entire `PGDATA` cluster while
-preserving that PostgreSQL administrator password. This cleanup therefore
-retains only the stopped PostgreSQL cluster data, its safety ownership marker,
-the `cafe_fausse_admin` role/password verifier, and—when created—the protected
-passfile with its administrator entry. It never changes or displays the
-administrator password. Deleting the retained cluster would necessarily
-delete the administrator account and password and is intentionally outside
-this cleanup.
+PostgreSQL stores its administrator password verifier inside `PGDATA`, so
+deleting the cluster necessarily deletes that database-side verifier. The
+credential retained by this step is the protected external administrator
+passfile entry, when that optional file exists. In interactive mode, the
+runbook has no persistent password file to retain; the next Step 2 run prompts
+for the administrator password again. Step 16 never changes, displays, or
+writes that password to the repository.
 
 ```powershell
 $CafeExpectedCleanupRoot = [System.IO.Path]::GetFullPath(
@@ -1663,6 +1663,40 @@ if ($CafeReadyAfterStopExitCode -eq 0) {
     throw "A PostgreSQL server is still accepting connections on 127.0.0.1:$CafePort`: $($CafeReadyAfterStop -join ' ')"
 }
 
+# Remove the whole task-owned cluster only after PostgreSQL is proven stopped.
+# Windows can briefly retain handles after shutdown, so retry the same exact,
+# previously validated TEMP path and fail unless the directory is truly gone.
+if (Test-Path -LiteralPath $CafeResolvedCleanupRoot) {
+    $CafeClusterRemoved = $false
+    $CafeClusterRemovalError = $null
+    foreach ($CafeCleanupAttempt in 1..5) {
+        try {
+            Remove-Item `
+                -LiteralPath $CafeResolvedCleanupRoot `
+                -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            $CafeClusterRemovalError = $_.Exception.Message
+        }
+
+        if (-not (Test-Path -LiteralPath $CafeResolvedCleanupRoot)) {
+            $CafeClusterRemoved = $true
+            break
+        }
+        if ($CafeCleanupAttempt -eq 5) {
+            throw "Could not remove the task-owned cluster after 5 attempts: $CafeResolvedCleanupRoot. $CafeClusterRemovalError"
+        }
+        Start-Sleep -Milliseconds (250 * $CafeCleanupAttempt)
+    }
+
+    if (-not $CafeClusterRemoved -or
+        (Test-Path -LiteralPath $CafeResolvedCleanupRoot)) {
+        throw "Task-owned cluster directory survived cleanup: $CafeResolvedCleanupRoot"
+    }
+}
+
+Write-Host "STEP 16 EVIDENCE: task-owned cluster directory is absent: $CafeResolvedCleanupRoot"
+
 Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
@@ -1671,13 +1705,14 @@ Remove-Item Env:CAFE_FAUSSE_TEST_PGDATA -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_PSQL -ErrorAction SilentlyContinue
 
-Write-Host 'STEP 16 PASS: test database, generated roles/files, app credential, and processes removed; administrator credential and stopped cluster retained.'
+Write-Host 'STEP 16 PASS: test database, generated roles/files, app credential, processes, and entire task-owned cluster removed; external administrator credential retained when present.'
 ```
 
 Expected final output:
 
 ```text
-STEP 16 PASS: test database, generated roles/files, app credential, and processes removed; administrator credential and stopped cluster retained.
+STEP 16 EVIDENCE: task-owned cluster directory is absent: C:\Users\<you>\AppData\Local\Temp\<session>\CafeFausse-api04-local
+STEP 16 PASS: test database, generated roles/files, app credential, processes, and entire task-owned cluster removed; external administrator credential retained when present.
 ```
 
 ## Failure diagnosis
