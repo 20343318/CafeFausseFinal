@@ -140,11 +140,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "PostgreSQL startup failed with exit code $LASTEXITCODE"
 }
 
-$CafeServerStatus = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
-if ($LASTEXITCODE -ne 0 -or $CafeServerStatus -notmatch 'server is running') {
-    throw "PostgreSQL status check failed: $CafeServerStatus"
+$CafeServerStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
+$CafeServerStatusExitCode = $LASTEXITCODE
+$CafeServerStatus = $CafeServerStatusLines -join [Environment]::NewLine
+if ($CafeServerStatusExitCode -ne 0 -or $CafeServerStatus -notmatch 'server is running') {
+    throw "PostgreSQL status check failed with exit code $CafeServerStatusExitCode`: $CafeServerStatus"
 }
 
+Write-Host $CafeServerStatus
 Write-Host "STEP 2 PASS: dedicated PostgreSQL cluster is running on 127.0.0.1:$CafePort"
 ```
 
@@ -156,6 +159,23 @@ by:
 
 ```text
 STEP 2 PASS: dedicated PostgreSQL cluster is running on 127.0.0.1:55435
+```
+
+If `pg_ctl` already reported `server is running` but an earlier version of this
+guide misclassified that output, do not rerun `initdb` or the whole of Step 2.
+Run only this read-only recovery check, then continue with Step 3:
+
+```powershell
+$CafeServerStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
+$CafeServerStatusExitCode = $LASTEXITCODE
+$CafeServerStatus = $CafeServerStatusLines -join [Environment]::NewLine
+
+if ($CafeServerStatusExitCode -ne 0 -or $CafeServerStatus -notmatch 'server is running') {
+    throw "STEP 2 RECOVERY FAIL: pg_ctl exit code $CafeServerStatusExitCode`: $CafeServerStatus"
+}
+
+Write-Host $CafeServerStatus
+Write-Host "STEP 2 PASS: existing dedicated PostgreSQL cluster is running on 127.0.0.1:$CafePort"
 ```
 
 ## 3. Select a protected external file or secure interactive password
@@ -795,9 +815,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "PostgreSQL shutdown failed with exit code $LASTEXITCODE"
 }
 
-$CafeStoppedStatus = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
-if ($LASTEXITCODE -eq 0 -or $CafeStoppedStatus -notmatch 'no server running') {
-    throw "PostgreSQL still appears to be running: $CafeStoppedStatus"
+$CafeStoppedStatusLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
+$CafeStoppedStatusExitCode = $LASTEXITCODE
+$CafeStoppedStatus = $CafeStoppedStatusLines -join [Environment]::NewLine
+if ($CafeStoppedStatusExitCode -eq 0 -or $CafeStoppedStatus -notmatch 'no server running') {
+    throw "PostgreSQL still appears to be running; pg_ctl exit code $CafeStoppedStatusExitCode`: $CafeStoppedStatus"
 }
 
 Write-Host $CafeStoppedStatus
