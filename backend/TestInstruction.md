@@ -30,9 +30,10 @@ root in Windows PowerShell unless a step says otherwise.
   passfile or enter both at secure interactive prompts when a command needs
   them. Never commit passwords, passfiles, connection URLs, or environment
   dumps.
-- Use `PGPASSFILE` or `PGPASSWORD`, never both. The helper in Step 3 enforces
-  this choice for the Flask connection. Steps 11 and 12 support either one
-  protected passfile or two secure interactive prompts.
+- Use `PGPASSFILE` or `PGPASSWORD`, never both. Step 3 detects the documented
+  passfile automatically and removes the unused credential variables. Steps
+  11 and 12 support either one protected passfile or two secure interactive
+  prompts.
 - Stop immediately if a guard, version check, role audit, rebuild, verifier, or
   test command fails.
 - Every numbered step is restartable. A rerun must inspect and reuse valid
@@ -61,6 +62,31 @@ root in Windows PowerShell unless a step says otherwise.
 | 15 | Repeats compilation/Git checks from the repository root. |
 | 16 | Stops only recognized task processes; already-stopped state succeeds. |
 
+## How credential selection works
+
+No credential-mode variable or manual true/false switch is used. Step 3 always
+checks this external path:
+
+```text
+%APPDATA%\postgresql\cafe_fausse_api04_pgpass.conf
+```
+
+The selection rule is automatic and applies to every later step:
+
+1. If the passfile exists and is nonempty, the helpers set `PGPASSFILE` and
+   use it.
+2. If the passfile does not exist, the helpers securely prompt for the needed
+   password with `Read-Host -AsSecureString` and set process-scoped
+   `PGPASSWORD` values.
+3. If the passfile exists but is empty, the helpers stop with an error instead
+   of silently falling back or attempting authentication with incomplete
+   state.
+
+Step 3 includes an optional block that creates and populates the passfile. Run
+that block only when persistent external credential storage is wanted. Skip it
+when interactive prompts are wanted. The runbook never deletes an existing
+passfile automatically; its presence always selects passfile mode.
+
 ## 1. Define the isolated target
 
 Open PowerShell at the repository root and define task-specific variables:
@@ -81,7 +107,6 @@ $CafePort = '55435'
 $CafeDatabase = 'cafe_fausse_test_api04'
 $CafeAdminLogin = 'cafe_fausse_admin'
 $CafeAppLogin = 'cafe_fausse_api04_login'
-$CafeUsePassFile = $false  # Default: use secure interactive prompts.
 ```
 
 Confirm that the shell is at the correct repository and that the required
@@ -381,21 +406,7 @@ STEP 2 PASS: task-owned PostgreSQL cluster is initialized and running on 127.0.0
 
 ## 3. Select a protected external file or secure interactive password
 
-Define the external passfile location. Step 1 defaults
-`$CafeUsePassFile = $false`, so an existing file never silently changes the
-chosen mode. Leave it false for secure interactive prompts. Set it true only
-when selecting Option A.
-
-Choose exactly one credential-storage option:
-
-| Choice | Setting | What to run |
-|---|---|---|
-| Option A: protected passfile | `$CafeUsePassFile = $true` | Run the Option A block, then run the shared credential-helper block. |
-| Option B: interactive prompts (default) | `$CafeUsePassFile = $false` | Skip the entire Option A block and run the Option B confirmation followed by the shared credential-helper block. |
-
-Do not run Option A merely because a passfile from an earlier session exists.
-The value of `$CafeUsePassFile` is the explicit choice and prevents a stale
-file from silently overriding interactive mode.
+Define the one external passfile location used by automatic detection:
 
 ```powershell
 $CafePassDirectory = Join-Path $env:APPDATA 'postgresql'
@@ -403,13 +414,23 @@ $CafePassFile = Join-Path $CafePassDirectory 'cafe_fausse_api04_pgpass.conf'
 $CafeCurrentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 ```
 
-### Option A: protected external passfile
+Choose the workflow by file presence, not by changing a variable:
 
-To use an external passfile, create it outside the repository and restrict it
-to the current Windows identity:
+| Detected state | Automatic behavior | What to do in Step 3 |
+|---|---|---|
+| Passfile exists and is nonempty | Use `PGPASSFILE` | Run the protected-passfile block so its ACL and administrator entry are validated or refreshed, then run the shared helpers. |
+| Passfile is absent | Use secure interactive prompts | Skip the protected-passfile block and run the automatic-selection check followed by the shared helpers. |
+| Passfile exists but is empty | Stop with an error | Populate it through the protected-passfile block or intentionally remove the empty external file before continuing. |
+
+### Optional: create or refresh the protected external passfile
+
+Run this block only when using external credential storage. It creates a
+missing passfile outside the repository, restricts it to the current Windows
+identity, and creates or replaces the administrator entry without displaying
+the password. If a passfile already exists, rerunning the block preserves
+unrelated entries and refreshes the matching administrator entry.
 
 ```powershell
-$CafeUsePassFile = $true
 New-Item -ItemType Directory -Path $CafePassDirectory -Force | Out-Null
 if (-not (Test-Path -LiteralPath $CafePassFile)) {
     New-Item -ItemType File -Path $CafePassFile | Out-Null
@@ -484,41 +505,39 @@ password with `\` as required by libpq. The helper performs that escaping and
 replaces an existing matching entry, so rerunning it does not create duplicate
 lines.
 
-After running Option A, continue to the shared credential-helper block below.
-Do not run Option B's confirmation block.
+### Verify the automatically selected credential source
 
-### Option B: secure interactive prompts (default)
-
-Choose this option when passwords should exist only in the current PowerShell
-process rather than in a passfile. Skip every command under Option A, including
-passfile creation and `Set-CafeFaussePassfileEntry`. Confirm interactive mode:
+Run this check whether or not the optional passfile block was run. It reports
+the source that the shared helpers will use. It never prints a password or
+passfile content:
 
 ```powershell
-$CafeUsePassFile = $false
-Write-Host 'STEP 3 OPTION B: secure interactive password prompts selected.'
+if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
+    if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
+        throw "The detected external passfile is empty: $CafePassFile"
+    }
+    Write-Host 'STEP 3 SOURCE: protected external passfile detected; PGPASSFILE will be used.'
+} else {
+    Write-Host 'STEP 3 SOURCE: no external passfile detected; secure interactive prompts will be used.'
+}
 ```
 
-Expected option-selection output:
+Expected source-selection output is exactly one of:
 
 ```text
-STEP 3 OPTION B: secure interactive password prompts selected.
+STEP 3 SOURCE: protected external passfile detected; PGPASSFILE will be used.
+STEP 3 SOURCE: no external passfile detected; secure interactive prompts will be used.
 ```
 
-Now continue to the shared credential-helper block. Its final command prompts
-for the administrator password needed by Steps 4 and 5. Later single-login
-steps call the same helper again with the applicable login name. Steps 11 and
-12 call the two-password pytest helper and prompt separately for the app login
-and administrator/test-management login.
+### Shared credential helpers required for both sources
 
-### Shared credential helpers required for both options
+Run this entire block after the automatic-selection check. Do not skip it:
+later steps depend on the two functions it defines.
 
-Run this entire block after completing either Option A or Option B. Do not skip
-it: later steps depend on the two functions it defines.
-
-When `$CafeUsePassFile` is false, `Set-CafeFausseCredential` reads the current
+When the passfile is absent, `Set-CafeFausseCredential` reads the current
 login's password without echoing it, converts it only for the process
-environment, and sets `PGPASSWORD`. When the setting is true, it requires and
-selects `PGPASSFILE`. It always removes the other variables first.
+environment, and sets `PGPASSWORD`. When the passfile is present, it selects
+`PGPASSFILE`. It always removes the unused credential variables first.
 
 ```powershell
 function Set-CafeFausseCredential {
@@ -531,10 +550,7 @@ function Set-CafeFausseCredential {
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
     Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
 
-    if ($CafeUsePassFile) {
-        if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
-            throw "Passfile mode was selected but the file does not exist: $CafePassFile"
-        }
+    if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
         if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
             throw "The external passfile exists but is empty: $CafePassFile"
         }
@@ -570,10 +586,7 @@ function Set-CafeFaussePytestCredentials {
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
     Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
 
-    if ($CafeUsePassFile) {
-        if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
-            throw "Passfile mode was selected but the file does not exist: $CafePassFile"
-        }
+    if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
         if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
             throw "The external passfile exists but is empty: $CafePassFile"
         }
@@ -669,8 +682,7 @@ if ($CafeDatabaseExistsText -eq 'f') {
     if ($CafeCreateDatabaseExitCode -ne 0) {
         throw "createdb failed with exit code $CafeCreateDatabaseExitCode"
     }
-}
-else {
+} else {
     Write-Host "Database $CafeDatabase already exists; validating it instead of recreating it."
 }
 
@@ -820,19 +832,29 @@ The `\password` prompt appears only when the deployment login is new or a prior
 partial run left its password unset. A rerun does not reset an existing
 password. Step 7 audits the resulting attributes and memberships on every run.
 
-If Option A in Step 3 selected a passfile, create or replace the exact-database
-entries after the first run or whenever a password changes:
+Run the following block after the first login creation and whenever its
+password changes. It checks the passfile automatically. When the passfile is
+present, it creates or replaces the app login's exact-database entry using the
+helper defined by Step 3's optional passfile block. When the passfile is absent,
+it skips persistent storage and confirms that later steps will prompt:
 
 ```powershell
-Set-CafeFaussePassfileEntry `
-    -Login $CafeAppLogin `
-    -DatabaseName $CafeDatabase `
-    -Prompt "Password for $CafeAppLogin"
+if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
+    if (-not (Get-Command Set-CafeFaussePassfileEntry -ErrorAction SilentlyContinue)) {
+        throw 'The passfile exists, but its Step 3 management helper is not loaded. Rerun the optional passfile block in Step 3.'
+    }
+    Set-CafeFaussePassfileEntry `
+        -Login $CafeAppLogin `
+        -DatabaseName $CafeDatabase `
+        -Prompt "Password for $CafeAppLogin"
+} else {
+    Write-Host 'No passfile detected; the app password will be requested interactively when needed.'
+}
 ```
 
-If Step 3 selected the interactive fallback, do not create a credential file
-here merely by copying placeholders. Later single-login commands prompt for the
-applicable password. Steps 11 and 12 securely prompt for both passwords.
+Do not create a passfile here merely by copying placeholders. When it is
+absent, later single-login commands prompt for the applicable password and
+Steps 11 and 12 securely prompt for both passwords.
 
 Expected `psql` output includes `CREATE ROLE` on the first run or `ALTER ROLE`
 on a rerun, repeatable `GRANT` output, and:
@@ -1430,8 +1452,7 @@ if (Test-Path -LiteralPath (Join-Path $CafeDataDir 'PG_VERSION') -PathType Leaf)
     else {
         throw "Unrecognized PostgreSQL pre-stop status (exit $CafeStatusBeforeStopExitCode): $CafeStatusBeforeStop"
     }
-}
-else {
+} else {
     Write-Host 'PostgreSQL data directory is not initialized; shutdown is already satisfied.'
 }
 
