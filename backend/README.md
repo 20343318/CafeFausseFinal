@@ -18,7 +18,7 @@ application startup gates. Node.js is not used by this increment.
 
 ## Local environment
 
-From the repository root in PowerShell:
+Required working directory: the repository root. Run this block in PowerShell:
 
 ```powershell
 py -3.14 -m venv backend\.venv
@@ -27,13 +27,16 @@ python -m pip install -e "backend[test]"
 ```
 
 If the Windows Python launcher is unavailable but the approved interpreter is
-installed at its verified location, use:
+installed at its verified location, run this replacement command from the
+repository root:
 
 ```powershell
 C:\Python314\python.exe -m venv backend\.venv
 ```
 
-Set configuration in the current shell or a protected external secret source.
+Working directory: these process-environment assignments may be made from any
+directory in the same PowerShell session. Set configuration in the current
+shell or a protected external secret source.
 Do not commit a password, passfile, DSN, or environment dump. The application
 uses standard libpq variables directly:
 
@@ -82,9 +85,11 @@ database scripts and is not a Flask setting.
 
 ## Local development server
 
-After setting the environment and activating the virtual environment:
+Required starting directory: the repository root. After setting the
+environment and activating the virtual environment, run:
 
 ```powershell
+Set-Location backend
 python -m flask --app cafe_fausse run
 ```
 
@@ -108,7 +113,8 @@ intentionally exposes none of those details and never repairs them.
 
 ## Tests
 
-Unit and Flask API tests (the default local selection):
+Required starting directory: the repository root. Run unit and Flask API tests
+(the default local selection) with:
 
 ```powershell
 Set-Location backend
@@ -122,9 +128,10 @@ scripts against an isolated `cafe_fausse_test_*` PostgreSQL 18.3 target. The
 local test harness needs only the cluster administrator and one app-only
 deployment login. The administrator also performs external fixture management
 through `cafe_fausse_test`; Flask continues to use only the deployment login
-through `cafe_fausse_app`. Follow [TestInstruction.md](TestInstruction.md) for
+through `cafe_fausse_app`. Follow [TestInstructions.md](TestInstructions.md) for
 the repeatable setup, secure interactive-password option, and optional passfile
-option. Then:
+option. The guide is the authoritative convenience workflow. For the condensed
+commands below, the required starting directory is the repository root:
 
 ```powershell
 $env:CAFE_FAUSSE_PSQL = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
@@ -132,8 +139,8 @@ $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:CAFE_FAUSSE_ALLOW_RESET = 'YES'
 $env:CAFE_FAUSSE_TEST_PGDATA = 'C:\path\to\the\disposable\cluster\data'
 $env:CAFE_FAUSSE_TEST_MANAGER_USER = 'your_cluster_administrator'
-database\scripts\rebuild.ps1
-database\scripts\verify.ps1
+& .\database\scripts\rebuild.ps1
+& .\database\scripts\verify.ps1
 Set-Location backend
 python -m pytest -m "integration and postgres"
 python -m pytest -m "unit or api or integration" --cov=cafe_fausse --cov-report=term-missing

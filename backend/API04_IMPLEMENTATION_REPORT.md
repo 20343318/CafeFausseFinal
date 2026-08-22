@@ -39,6 +39,10 @@ Jinja2 3.1.6, MarkupSafe 3.0.3, packaging 26.3, pluggy 1.6.0,
 Pygments 2.21.0, typing-extensions 4.16.0, tzdata 2026.3, and
 Werkzeug 3.1.8.
 
+The API-04 correction pass bounded the PEP 517 build requirement to
+`setuptools>=80,<81`. The repository-local editable-install environment
+resolved Setuptools **80.10.2** exactly.
+
 ## Files and responsibility mapping
 
 - `pyproject.toml`: Python range, approved dependencies, package layout,
@@ -55,6 +59,11 @@ Werkzeug 3.1.8.
 - `tests/unit/`, `tests/api/`, `tests/integration/`: API-04 traceable executable
   evidence.
 - `README.md`: safe Windows setup, run, configuration, lifecycle, and test guide.
+- `TestInstructions.md`: user-requested convenience guide for repeatable,
+  guarded Windows PostgreSQL/backend testing, secure interactive or passfile
+  credentials, verification evidence, and complete task-owned cleanup. It is
+  not an SRS, rubric, approved design authority, or required Prompt 13/API-04
+  deliverable.
 - root `.gitignore`: backend virtual environment and generated artifacts only.
 
 Exact changed paths:
@@ -64,6 +73,7 @@ Exact changed paths:
 backend/pyproject.toml
 backend/README.md
 backend/API04_IMPLEMENTATION_REPORT.md
+backend/TestInstructions.md
 backend/src/cafe_fausse/__init__.py
 backend/src/cafe_fausse/application.py
 backend/src/cafe_fausse/config.py
@@ -137,19 +147,24 @@ final clean-baseline proof, the disposable server was stopped and its temporary
 cluster directory removed; it is reproducible from PostgreSQL 18.3 plus the
 approved repository tooling.
 
-Principal evidence commands (run from the repository root unless noted):
+Principal evidence commands (required starting directory: repository root):
 
 ```powershell
 C:\Python314\python.exe -m venv backend\.venv
 backend\.venv\Scripts\python.exe -m pip install -e "backend[test]"
-database\scripts\rebuild.ps1
-database\scripts\verify.ps1
-Set-Location backend
-python -m pytest -m unit
-python -m pytest -m api
-python -m pytest -m "integration and postgres"
-python -m pytest -m "unit or api or integration" --cov=cafe_fausse --cov-report=term-missing
-python -m compileall -q src tests
+& .\database\scripts\rebuild.ps1
+& .\database\scripts\verify.ps1
+Push-Location backend
+try {
+    python -m pytest -m unit
+    python -m pytest -m api
+    python -m pytest -m "integration and postgres"
+    python -m pytest -m "unit or api or integration" --cov=cafe_fausse --cov-report=term-missing
+}
+finally {
+    Pop-Location
+}
+backend\.venv\Scripts\python.exe -m compileall -q backend\src backend\tests
 git diff --check
 ```
 
@@ -180,6 +195,41 @@ secret was added to the repository or test output.
   passed through the passfile path.
 - Static/repository: CPython `compileall` passed; `git diff --check` passed.
 
+### API-04 correction pass - 2026-08-22
+
+The correction pass remained within API-04 and made these corrections:
+
+- confirmed the user-requested convenience document at the plural path
+  `backend/TestInstructions.md`, repaired the backend README link, and proved
+  that neither the retired backend singular path nor a singular reference
+  remains under `backend/`;
+- retained the distinct approved programmer test guide under `database/`; it
+  is not a reference to the backend convenience guide and was not changed;
+- made the required working directory explicit for every command block in the
+  backend README and established one unambiguous repository-root contract for
+  every numbered command block in the convenience test guide;
+- bounded the build dependency to `setuptools>=80,<81` and verified an editable
+  install resolving Setuptools 80.10.2.
+
+Fresh correction evidence used CPython 3.14.6 and PostgreSQL 18.3. The database
+tests used generated one-run SCRAM passwords in process memory and a protected
+passfile inside a uniquely named disposable Windows TEMP cluster. No real
+credential was read, displayed, logged, or added to the repository. The server,
+passfile, and entire correction-test cluster were removed after the run. The
+repository-local virtual environment, pytest/coverage caches, bytecode caches,
+and editable-install metadata created for this verification were also removed
+after their evidence was recorded.
+
+- Editable install: passed; `cafe-fausse-backend` 0.1.0 imported from
+  `backend/src/cafe_fausse`.
+- Setuptools: 80.10.2.
+- Unit: 51 passed, 17 deselected.
+- Flask API: 10 passed, 58 deselected.
+- PostgreSQL integration: 7 passed, 61 deselected.
+- Consolidated coverage: 68 passed; 94% total statement/branch report.
+- Static/repository: `compileall`, `git diff --check`, and the retired-backend-
+  filename search passed.
+
 Integration evidence includes exact platform/dependency versions, role on a
 pooled session, PostgreSQL/extension/routine/foundation readiness, direct DML,
 reservation-read, DDL, internal-helper denials, zero customer/reservation/
@@ -208,6 +258,12 @@ all PostgreSQL contract decisions remain unchanged.
 The intended final diff consists only of `.gitignore` plus API-04-owned files
 under `backend/`. API-03 1.0.2, API-02 1.0.1, API-01 1.0.1, DB-07 Hard Gate 1,
 and PostgreSQL Contract 1.0 remain compatible without revision.
+
+The correction-pass diff is limited to `backend/pyproject.toml`,
+`backend/README.md`, `backend/API04_IMPLEMENTATION_REPORT.md`, and the
+user-requested `backend/TestInstructions.md` convenience guide. No database
+migration, database artifact, approved design artifact, application behavior,
+test behavior, frontend file, or API-05 file changed.
 
 ## Approval checkpoint
 
