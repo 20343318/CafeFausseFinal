@@ -50,7 +50,7 @@ root in Windows PowerShell unless a step says otherwise.
 | 3 | Replaces the active credential source; passfile entries are updated in place without duplicates. |
 | 4 | Creates a missing database or validates the existing database, owner, and version. |
 | 5 | Guardedly rebuilds the fixed schema and verifies the baseline. |
-| 6 | Creates or normalizes the one deployment login, preserves its existing password, and reapplies the exact app-only grants. |
+| 6 | Creates or normalizes the one deployment login, resets and verifies its password, and reapplies the exact app-only grants. |
 | 7 | Repeats read-only role and authentication audits. |
 | 8 | Repeats the destructive nonproduction PostgreSQL gate and restores its baseline. |
 | 9 | Reuses a valid environment or safely recreates a partial/wrong-version `.venv`, then refreshes dependencies. |
@@ -60,7 +60,7 @@ root in Windows PowerShell unless a step says otherwise.
 | 13 | Reuses healthy Flask, or replaces only a task-owned unhealthy Flask process. |
 | 14 | Repeats the guarded final rebuild and exact baseline-count proof. |
 | 15 | Repeats compilation/Git checks from the repository root. |
-| 16 | Stops only recognized task processes; already-stopped state succeeds. |
+| 16 | Removes the test database, generated roles/files and app credential, stops recognized processes, and retains only the administrator credential with its required stopped cluster state. |
 
 ## How credential selection works
 
@@ -117,7 +117,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $CafeRepo 'backend\pyproject.toml'))
     throw 'Run this guide from the Cafe Fausse repository root.'
 }
 
-foreach ($CafeProgram in @('initdb.exe', 'pg_ctl.exe', 'pg_isready.exe', 'psql.exe', 'createdb.exe')) {
+foreach ($CafeProgram in @('initdb.exe', 'pg_ctl.exe', 'pg_isready.exe', 'psql.exe', 'createdb.exe', 'dropdb.exe')) {
     $CafeProgramPath = Join-Path $CafePgBin $CafeProgram
     if (-not (Test-Path -LiteralPath $CafeProgramPath)) {
         throw "Required PostgreSQL program not found: $CafeProgramPath"
@@ -446,10 +446,16 @@ function Set-CafeFaussePassfileEntry {
     param(
         [Parameter(Mandatory)][string]$Login,
         [Parameter(Mandatory)][string]$DatabaseName,
-        [Parameter(Mandatory)][string]$Prompt
+        [Parameter(Mandatory)][string]$Prompt,
+        [Security.SecureString]$SecurePassword
     )
 
-    $CafeSecurePassword = Read-Host $Prompt -AsSecureString
+    $CafeSecurePassword = $SecurePassword
+    $CafeDisposeSecurePassword = $false
+    if ($null -eq $CafeSecurePassword) {
+        $CafeSecurePassword = Read-Host $Prompt -AsSecureString
+        $CafeDisposeSecurePassword = $true
+    }
     try {
         $CafePlainPassword = [System.Net.NetworkCredential]::new(
             '', $CafeSecurePassword
@@ -481,9 +487,13 @@ function Set-CafeFaussePassfileEntry {
         )
     }
     finally {
-        $CafeSecurePassword.Dispose()
+        if ($CafeDisposeSecurePassword -and $null -ne $CafeSecurePassword) {
+            $CafeSecurePassword.Dispose()
+        }
         Remove-Variable CafePlainPassword -ErrorAction SilentlyContinue
         Remove-Variable CafeEscapedPassword -ErrorAction SilentlyContinue
+        Remove-Variable CafeSecurePassword -ErrorAction SilentlyContinue
+        Remove-Variable CafeDisposeSecurePassword -ErrorAction SilentlyContinue
     }
 
     & icacls.exe $CafePassFile /inheritance:r /grant:r "$CafeCurrentIdentity`:(R,W)" | Out-Null
@@ -753,92 +763,88 @@ STEP 5 PASS: approved database baseline rebuilt and verified.
 
 ## 6. Create the app-only deployment login
 
-Connect as the setup administrator:
+Run this one PowerShell block in its entirety. It safely performs every Step 6
+operation in sequence: start PostgreSQL, authenticate as the administrator,
+create or normalize the app-only login, remove elevated memberships, grant
+only `cafe_fausse_app`, set the app password through an isolated `psql`
+password command, verify that PostgreSQL stored a password, update the detected
+passfile when present, authenticate as the app login, assume
+`cafe_fausse_app`, and verify the final boundary.
+
+The isolated `psql` password command deliberately pauses twice on every run:
+
+```text
+Enter new password for user "cafe_fausse_api04_login":
+Enter it again:
+```
+
+Do not paste anything during those two prompts; enter the same new app password
+twice. Use a password different from the administrator password. If a passfile
+is present, the block then asks once more for that same app password so it can
+refresh the external passfile entry. If no passfile is present, it asks once
+more to authenticate and prove the new password. No password is placed in SQL,
+a command-line argument, documentation, or output.
 
 ```powershell
 Start-CafeFausseTestPostgres
 Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
 
-& (Join-Path $CafePgBin 'psql.exe') `
-    -X -v ON_ERROR_STOP=1 `
-    -h 127.0.0.1 `
-    -p $CafePort `
-    -U $CafeAdminLogin `
-    -d $CafeDatabase
-```
+$CafeRoleSetupSql = @'
+DO $role_setup$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_roles
+        WHERE rolname = 'cafe_fausse_api04_login'
+    ) THEN
+        CREATE ROLE cafe_fausse_api04_login
+            LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+            NOBYPASSRLS NOINHERIT;
+    END IF;
+END
+$role_setup$;
 
-At the `psql` prompt, run these repeatable statements. A missing deployment
-login is created and passworded. An existing login is retained, normalized to
-the exact nonprivileged attributes, and keeps its current password unless a
-partial prior run left the password unset. The app login is explicitly removed
-from owner/test membership before its one approved membership is reapplied:
-
-```sql
-SELECT NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_roles
-    WHERE rolname = 'cafe_fausse_api04_login'
-) AS create_app_login,
-COALESCE((
-    SELECT rolpassword IS NULL FROM pg_catalog.pg_authid
-    WHERE rolname = 'cafe_fausse_api04_login'
-), true) AS set_app_password
-\gset
-\if :create_app_login
-    CREATE ROLE cafe_fausse_api04_login
-        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
-        NOBYPASSRLS NOINHERIT;
-\else
-    ALTER ROLE cafe_fausse_api04_login
-        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
-        NOBYPASSRLS NOINHERIT;
-\endif
-\if :set_app_password
-\password cafe_fausse_api04_login
-\endif
-
-SELECT
-    EXISTS (
-        SELECT 1 FROM pg_catalog.pg_auth_members membership
-        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
-        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
-        WHERE granted_role.rolname = 'cafe_fausse_owner'
-          AND member_role.rolname = 'cafe_fausse_api04_login'
-    ) AS revoke_owner_membership,
-    EXISTS (
-        SELECT 1 FROM pg_catalog.pg_auth_members membership
-        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
-        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
-        WHERE granted_role.rolname = 'cafe_fausse_test'
-          AND member_role.rolname = 'cafe_fausse_api04_login'
-    ) AS revoke_test_membership
-\gset
-\if :revoke_owner_membership
-    REVOKE cafe_fausse_owner FROM cafe_fausse_api04_login;
-\endif
-\if :revoke_test_membership
-    REVOKE cafe_fausse_test FROM cafe_fausse_api04_login;
-\endif
+ALTER ROLE cafe_fausse_api04_login
+    LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
+    NOBYPASSRLS NOINHERIT;
+REVOKE cafe_fausse_owner FROM cafe_fausse_api04_login;
+REVOKE cafe_fausse_test FROM cafe_fausse_api04_login;
 GRANT cafe_fausse_app TO cafe_fausse_api04_login;
-
 GRANT CONNECT ON DATABASE cafe_fausse_test_api04
     TO cafe_fausse_api04_login;
+'@
 
-SELECT 'STEP 6 PASS: app-only deployment login created or validated; cluster administrator remains the external test manager.'
-    AS verification;
-\q
-```
+$CafeRoleSetupSql | & (Join-Path $CafePgBin 'psql.exe') `
+    -X -q -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort `
+    -U $CafeAdminLogin -d $CafeDatabase
+$CafeRoleSetupExitCode = $LASTEXITCODE
+Remove-Variable CafeRoleSetupSql -ErrorAction SilentlyContinue
+if ($CafeRoleSetupExitCode -ne 0) {
+    throw "Deployment-login creation or normalization failed with exit code $CafeRoleSetupExitCode"
+}
 
-The `\password` prompt appears only when the deployment login is new or a prior
-partial run left its password unset. A rerun does not reset an existing
-password. Step 7 audits the resulting attributes and memberships on every run.
+Write-Host 'Set the app-login password. The next command prompts twice.'
+& (Join-Path $CafePgBin 'psql.exe') `
+    -X -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort `
+    -U $CafeAdminLogin -d $CafeDatabase `
+    -c '\password cafe_fausse_api04_login'
+$CafePasswordSetExitCode = $LASTEXITCODE
+if ($CafePasswordSetExitCode -ne 0) {
+    throw "Deployment-login password assignment failed with exit code $CafePasswordSetExitCode"
+}
 
-Run the following block after the first login creation and whenever its
-password changes. It checks the passfile automatically. When the passfile is
-present, it creates or replaces the app login's exact-database entry using the
-helper defined by Step 3's optional passfile block. When the passfile is absent,
-it skips persistent storage and confirms that later steps will prompt:
+$CafePasswordEvidence = & (Join-Path $CafePgBin 'psql.exe') `
+    -X -qAt -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort `
+    -U $CafeAdminLogin -d $CafeDatabase `
+    -c "SELECT rolpassword IS NOT NULL FROM pg_catalog.pg_authid WHERE rolname = 'cafe_fausse_api04_login';"
+$CafePasswordEvidenceExitCode = $LASTEXITCODE
+$CafePasswordEvidenceText = ($CafePasswordEvidence -join [Environment]::NewLine).Trim()
+if ($CafePasswordEvidenceExitCode -ne 0 -or $CafePasswordEvidenceText -ne 't') {
+    throw "PostgreSQL did not retain the deployment-login password; evidence: $CafePasswordEvidenceText"
+}
 
-```powershell
 if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
     if (-not (Get-Command Set-CafeFaussePassfileEntry -ErrorAction SilentlyContinue)) {
         throw 'The passfile exists, but its Step 3 management helper is not loaded. Rerun the optional passfile block in Step 3.'
@@ -846,21 +852,32 @@ if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
     Set-CafeFaussePassfileEntry `
         -Login $CafeAppLogin `
         -DatabaseName $CafeDatabase `
-        -Prompt "Password for $CafeAppLogin"
-} else {
-    Write-Host 'No passfile detected; the app password will be requested interactively when needed.'
+        -Prompt "Enter the same password for $CafeAppLogin to refresh its passfile entry"
 }
+
+Set-CafeFausseCredential -Prompt "Enter the new password for $CafeAppLogin to verify authentication"
+$CafeAppRoleEvidence = & (Join-Path $CafePgBin 'psql.exe') `
+    -X -qAt -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort `
+    -U $CafeAppLogin -d $CafeDatabase `
+    -c "SET ROLE cafe_fausse_app; SELECT concat_ws('|', session_user, current_user); RESET ROLE;"
+$CafeAppRoleExitCode = $LASTEXITCODE
+$CafeAppRoleEvidenceText = ($CafeAppRoleEvidence -join [Environment]::NewLine).Trim()
+Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
+
+if ($CafeAppRoleExitCode -ne 0 -or
+    $CafeAppRoleEvidenceText -ne "$CafeAppLogin|cafe_fausse_app") {
+    throw "Deployment-login authentication or role verification failed; received: $CafeAppRoleEvidenceText"
+}
+
+Write-Host 'STEP 6 PASS: app-only deployment login, password, authentication, and role boundary verified.'
 ```
 
-Do not create a passfile here merely by copying placeholders. When it is
-absent, later single-login commands prompt for the applicable password and
-Steps 11 and 12 securely prompt for both passwords.
-
-Expected `psql` output includes `CREATE ROLE` on the first run or `ALTER ROLE`
-on a rerun, repeatable `GRANT` output, and:
+Expected final output:
 
 ```text
-STEP 6 PASS: app-only deployment login created or validated; cluster administrator remains the external test manager.
+STEP 6 PASS: app-only deployment login, password, authentication, and role boundary verified.
 ```
 
 ## 7. Audit role separation before testing
@@ -1403,14 +1420,51 @@ changes. Expected final verbiage:
 STEP 15 PASS: Python compilation and Git whitespace checks passed; status displayed above.
 ```
 
-## 16. Stop the task-owned Flask and PostgreSQL servers
+## 16. Self-clean all test objects while preserving the administrator credential
 
-After all tests and evidence collection are complete, stop task-owned Flask
-and PostgreSQL processes. Missing/stale Flask PID state and an already-stopped
-PostgreSQL cluster are successful no-op conditions, making this cleanup safe to
-repeat:
+Run this one PowerShell block after all tests and evidence collection. It is
+safe to repeat and removes the objects created by this runbook:
+
+- the `cafe_fausse_test_api04` database;
+- the app login, legacy three-login test-manager login if present, and the
+  three Cafe Fausse group roles;
+- the app and legacy test-manager entries from the external passfile;
+- the task-owned Flask process, PID file, Flask/PostgreSQL logs, virtual
+  environment, pytest/coverage caches, `__pycache__` directories, and editable
+  install metadata;
+- process-scoped credential and test-management environment variables.
+
+PostgreSQL stores the administrator password verifier inside its cluster data.
+It is technically impossible to delete the entire `PGDATA` cluster while
+preserving that PostgreSQL administrator password. This cleanup therefore
+retains only the stopped PostgreSQL cluster data, its safety ownership marker,
+the `cafe_fausse_admin` role/password verifier, and—when created—the protected
+passfile with its administrator entry. It never changes or displays the
+administrator password. Deleting the retained cluster would necessarily
+delete the administrator account and password and is intentionally outside
+this cleanup.
 
 ```powershell
+$CafeExpectedCleanupRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $env:TEMP 'CafeFausse-api04-local')
+)
+$CafeResolvedCleanupRoot = [System.IO.Path]::GetFullPath($CafeClusterRoot)
+if (-not $CafeResolvedCleanupRoot.Equals(
+    $CafeExpectedCleanupRoot,
+    [System.StringComparison]::OrdinalIgnoreCase
+)) {
+    throw "Refusing cleanup for an unexpected cluster root: $CafeResolvedCleanupRoot"
+}
+if ($CafeDatabase -ne 'cafe_fausse_test_api04' -or
+    $CafeDatabase -notlike 'cafe_fausse_test_*') {
+    throw "Refusing cleanup for unexpected database name: $CafeDatabase"
+}
+if ($CafeAppLogin -ne 'cafe_fausse_api04_login' -or
+    $CafeAdminLogin -ne 'cafe_fausse_admin') {
+    throw 'Refusing cleanup for unexpected PostgreSQL login names.'
+}
+
+# Stop only the Flask process recorded by this runbook.
 if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
     $CafeRecordedFlaskPidText = (Get-Content -LiteralPath $CafeFlaskPidFile -Raw).Trim()
     if ($CafeRecordedFlaskPidText -notmatch '^\d+$') {
@@ -1434,7 +1488,58 @@ if (Test-Path -LiteralPath $CafeFlaskPidFile -PathType Leaf) {
     Remove-Item -LiteralPath $CafeFlaskPidFile -Force
 }
 
+# Remove database and cluster-role objects while retaining cafe_fausse_admin.
 if (Test-Path -LiteralPath (Join-Path $CafeDataDir 'PG_VERSION') -PathType Leaf) {
+    Start-CafeFausseTestPostgres
+    Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin during cleanup"
+
+    & (Join-Path $CafePgBin 'dropdb.exe') `
+        --if-exists --force `
+        -h 127.0.0.1 -p $CafePort `
+        -U $CafeAdminLogin $CafeDatabase
+    $CafeDropDatabaseExitCode = $LASTEXITCODE
+    if ($CafeDropDatabaseExitCode -ne 0) {
+        throw "Test-database cleanup failed with exit code $CafeDropDatabaseExitCode"
+    }
+
+    $CafeRoleCleanupSql = @'
+DROP ROLE IF EXISTS cafe_fausse_api04_login;
+DROP ROLE IF EXISTS cafe_fausse_api04_test_manager;
+DROP ROLE IF EXISTS cafe_fausse_app;
+DROP ROLE IF EXISTS cafe_fausse_test;
+DROP ROLE IF EXISTS cafe_fausse_owner;
+SELECT count(*)
+FROM pg_catalog.pg_roles
+WHERE rolname IN (
+    'cafe_fausse_api04_login',
+    'cafe_fausse_api04_test_manager',
+    'cafe_fausse_app',
+    'cafe_fausse_test',
+    'cafe_fausse_owner'
+);
+'@
+    $CafeRemainingRoleEvidence = $CafeRoleCleanupSql | & (Join-Path $CafePgBin 'psql.exe') `
+        -X -qAt -v ON_ERROR_STOP=1 `
+        -h 127.0.0.1 -p $CafePort `
+        -U $CafeAdminLogin -d postgres
+    $CafeRoleCleanupExitCode = $LASTEXITCODE
+    Remove-Variable CafeRoleCleanupSql -ErrorAction SilentlyContinue
+    $CafeRemainingRoleText = ($CafeRemainingRoleEvidence -join [Environment]::NewLine).Trim()
+    if ($CafeRoleCleanupExitCode -ne 0 -or $CafeRemainingRoleText -ne '0') {
+        throw "Cafe Fausse role cleanup failed; remaining-role evidence: $CafeRemainingRoleText"
+    }
+
+    $CafeRemainingDatabaseEvidence = & (Join-Path $CafePgBin 'psql.exe') `
+        -X -qAt -v ON_ERROR_STOP=1 `
+        -h 127.0.0.1 -p $CafePort `
+        -U $CafeAdminLogin -d postgres `
+        -c "SELECT count(*) FROM pg_catalog.pg_database WHERE datname = 'cafe_fausse_test_api04';"
+    $CafeDatabaseCleanupExitCode = $LASTEXITCODE
+    $CafeRemainingDatabaseText = ($CafeRemainingDatabaseEvidence -join [Environment]::NewLine).Trim()
+    if ($CafeDatabaseCleanupExitCode -ne 0 -or $CafeRemainingDatabaseText -ne '0') {
+        throw "Test-database cleanup verification failed; evidence: $CafeRemainingDatabaseText"
+    }
+
     $CafeStatusBeforeStopLines = & (Join-Path $CafePgBin 'pg_ctl.exe') -D $CafeDataDir status 2>&1
     $CafeStatusBeforeStopExitCode = $LASTEXITCODE
     $CafeStatusBeforeStop = $CafeStatusBeforeStopLines -join [Environment]::NewLine
@@ -1453,7 +1558,102 @@ if (Test-Path -LiteralPath (Join-Path $CafeDataDir 'PG_VERSION') -PathType Leaf)
         throw "Unrecognized PostgreSQL pre-stop status (exit $CafeStatusBeforeStopExitCode): $CafeStatusBeforeStop"
     }
 } else {
-    Write-Host 'PostgreSQL data directory is not initialized; shutdown is already satisfied.'
+    Write-Host 'PostgreSQL data directory is absent; database/role cleanup is already satisfied.'
+}
+
+# Remove only the non-administrator entries created by this runbook. Preserve
+# the administrator entry and every unrelated external passfile entry.
+if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
+    $CafeCleanupPassfilePrefixes = @(
+        "127.0.0.1:$CafePort`:$CafeDatabase`:$CafeAppLogin`:",
+        "127.0.0.1:$CafePort`:$CafeDatabase`:cafe_fausse_api04_test_manager`:"
+    )
+    $CafeExistingPassfileLines = @(Get-Content -LiteralPath $CafePassFile)
+    [string[]]$CafeRetainedPassfileLines = @(
+        $CafeExistingPassfileLines | Where-Object {
+            $CafeLine = $_
+            @(
+                $CafeCleanupPassfilePrefixes | Where-Object {
+                    $CafeLine.StartsWith($_, [System.StringComparison]::Ordinal)
+                }
+            ).Count -eq 0
+        }
+    )
+    [System.IO.File]::WriteAllLines(
+        $CafePassFile,
+        $CafeRetainedPassfileLines,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    & icacls.exe $CafePassFile /inheritance:r /grant:r "$CafeCurrentIdentity`:(R,W)" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not reapply the preserved administrator passfile ACL.'
+    }
+    foreach ($CafeRemovedPrefix in $CafeCleanupPassfilePrefixes) {
+        if (Select-String -LiteralPath $CafePassFile -SimpleMatch $CafeRemovedPrefix -Quiet) {
+            throw "A non-administrator passfile entry survived cleanup: $CafeRemovedPrefix"
+        }
+    }
+}
+
+# Remove generated repository files only after validating every resolved path
+# is a child of backend/. Source and documentation files are never selected.
+$CafeBackendRoot = [System.IO.Path]::GetFullPath((Join-Path $CafeRepo 'backend'))
+$CafeBackendPrefix = $CafeBackendRoot.TrimEnd('\') + '\'
+function Remove-CafeFausseGeneratedPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+    $CafeGeneratedFullPath = [System.IO.Path]::GetFullPath($Path)
+    if (-not $CafeGeneratedFullPath.StartsWith(
+        $CafeBackendPrefix,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "Refusing generated-file cleanup outside backend: $CafeGeneratedFullPath"
+    }
+    $CafeGeneratedItem = Get-Item -LiteralPath $CafeGeneratedFullPath -Force
+    if ($CafeGeneratedItem.PSIsContainer) {
+        Remove-Item -LiteralPath $CafeGeneratedFullPath -Recurse -Force
+    } else {
+        Remove-Item -LiteralPath $CafeGeneratedFullPath -Force
+    }
+}
+
+$CafeFixedGeneratedPaths = @(
+    $CafeVenvRoot,
+    (Join-Path $CafeBackendRoot '.pytest_cache'),
+    (Join-Path $CafeBackendRoot '.coverage')
+)
+foreach ($CafeGeneratedPath in $CafeFixedGeneratedPaths) {
+    Remove-CafeFausseGeneratedPath -Path $CafeGeneratedPath
+}
+
+$CafeDiscoveredGeneratedPaths = @(
+    Get-ChildItem -LiteralPath $CafeBackendRoot -Force -File -Filter '.coverage.*' -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $CafeBackendRoot -Force -Directory -Recurse -Filter '__pycache__' -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $CafeBackendRoot -Force -Directory -Recurse -Filter '*.egg-info' -ErrorAction SilentlyContinue
+)
+foreach ($CafeGeneratedItem in $CafeDiscoveredGeneratedPaths) {
+    Remove-CafeFausseGeneratedPath -Path $CafeGeneratedItem.FullName
+}
+
+# Remove task logs/PID files beneath the validated temporary cluster root.
+foreach ($CafeTaskFile in @(
+    $CafeFlaskPidFile,
+    $CafeFlaskOutputLog,
+    $CafeFlaskErrorLog,
+    $CafeLogFile
+)) {
+    $CafeTaskFileFullPath = [System.IO.Path]::GetFullPath($CafeTaskFile)
+    $CafeTaskRootPrefix = $CafeResolvedCleanupRoot.TrimEnd('\') + '\'
+    if (-not $CafeTaskFileFullPath.StartsWith(
+        $CafeTaskRootPrefix,
+        [System.StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw "Refusing task-file cleanup outside validated cluster root: $CafeTaskFileFullPath"
+    }
+    Remove-Item -LiteralPath $CafeTaskFileFullPath -Force -ErrorAction SilentlyContinue
 }
 
 $CafeReadyAfterStop = & (Join-Path $CafePgBin 'pg_isready.exe') `
@@ -1466,19 +1666,18 @@ if ($CafeReadyAfterStopExitCode -eq 0) {
 Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
-Write-Host 'STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.'
+Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_USER -ErrorAction SilentlyContinue
+Remove-Item Env:CAFE_FAUSSE_TEST_PGDATA -ErrorAction SilentlyContinue
+Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
+Remove-Item Env:CAFE_FAUSSE_PSQL -ErrorAction SilentlyContinue
+
+Write-Host 'STEP 16 PASS: test database, generated roles/files, app credential, and processes removed; administrator credential and stopped cluster retained.'
 ```
 
-Retain the stopped cluster if it will be reused for later API work. Before
-deleting it, independently resolve and verify that its exact path is beneath
-`$env:TEMP`; never recursively delete a path derived from an unchecked or empty
-variable.
-
-Expected output contains `server stopped` on the first cleanup or the
-already-stopped message on a rerun, followed by:
+Expected final output:
 
 ```text
-STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.
+STEP 16 PASS: test database, generated roles/files, app credential, and processes removed; administrator credential and stopped cluster retained.
 ```
 
 ## Failure diagnosis
@@ -1489,11 +1688,16 @@ STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.
   rebuild and verifier succeed.
 - If Flask reports an unknown `CAFE_FAUSSE_*` setting, remove database-script
   and test-only variables as shown in the manual smoke-test step.
+- If the PostgreSQL log says `cafe_fausse_api04_login` has no password
+  assigned, rerun all of Step 6. Do not run an isolated fragment: Step 6
+  creates or normalizes the login, resets its password, proves that PostgreSQL
+  stored it, and verifies authentication before it can print PASS.
 - If authentication fails for only one identity, check that identity's exact
-  passfile entry. In interactive mode, rerun `Set-CafeFausseCredential` for a
-  single-login step or `Set-CafeFaussePytestCredentials` for Steps 11 and 12,
-  then carefully enter the requested password. Do not work around the problem
-  by giving the application administrator/test authority.
+  passfile entry. Rerun the complete numbered step that failed; do not paste a
+  helper or SQL fragment by itself. For Step 6, enter the same application
+  password at every application-password prompt, and keep it different from
+  the administrator password. Do not work around the problem by giving the
+  application administrator/test authority.
 - If the recovery test refuses the data path, do not weaken its check. Create a
   genuinely disposable cluster beneath the Windows temporary directory.
 - If a database test leaves test data after a failure, run the guarded final
