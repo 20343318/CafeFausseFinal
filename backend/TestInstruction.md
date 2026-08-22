@@ -68,17 +68,26 @@ if ($LASTEXITCODE -ne 0 -or $CafePsqlVersion -notmatch '18\.3') {
     throw "Expected PostgreSQL 18.3; received: $CafePsqlVersion"
 }
 
-if (Get-Command py -ErrorAction SilentlyContinue) {
-    $CafePythonVersion = & py -3.14 --version 2>&1
+$CafePythonExecutable = $null
+$CafePythonLauncherArguments = @()
+$CafePyLauncher = Get-Command py -ErrorAction SilentlyContinue
+
+if ($null -ne $CafePyLauncher) {
+    $CafePythonExecutable = $CafePyLauncher.Source
+    $CafePythonLauncherArguments = @('-3.14')
 }
-elseif (Test-Path -LiteralPath 'C:\Python314\python.exe') {
-    $CafePythonVersion = & 'C:\Python314\python.exe' --version 2>&1
+
+if ($null -eq $CafePythonExecutable -and (Test-Path -LiteralPath 'C:\Python314\python.exe')) {
+    $CafePythonExecutable = 'C:\Python314\python.exe'
 }
-else {
+
+if ($null -eq $CafePythonExecutable) {
     throw 'Could not find the approved CPython 3.14 interpreter.'
 }
 
-if ($LASTEXITCODE -ne 0 -or $CafePythonVersion -notmatch '^Python 3\.14\.6$') {
+$CafePythonVersion = & $CafePythonExecutable @CafePythonLauncherArguments --version 2>&1
+$CafePythonVersionExitCode = $LASTEXITCODE
+if ($CafePythonVersionExitCode -ne 0 -or $CafePythonVersion -notmatch '^Python 3\.14\.6$') {
     throw "Formal acceptance requires CPython 3.14.6; received: $CafePythonVersion"
 }
 
@@ -88,8 +97,9 @@ Write-Host "STEP 1 PASS: isolated target variables defined; $CafePsqlVersion; $C
 The PostgreSQL output must report `18.3`. Normal application metadata supports
 standard 64-bit CPython 3.14.x, but the formal integration acceptance test
 requires Windows Server 2025 and standard GIL-enabled 64-bit CPython 3.14.6.
-Use that exact platform for a formal test run. If the `py` launcher is
-unavailable, use `C:\Python314\python.exe` in the Python commands below.
+Use that exact platform for a formal test run. Step 1 records either the `py`
+launcher or `C:\Python314\python.exe` in `$CafePythonExecutable` for reuse by
+later steps.
 
 Expected verification output contains:
 
@@ -500,7 +510,8 @@ bring it up to date.
 
 ```powershell
 if (-not (Test-Path -LiteralPath '.\backend\.venv\Scripts\python.exe')) {
-    py -3.14 -m venv backend\.venv
+    & $CafePythonExecutable @CafePythonLauncherArguments -m venv backend\.venv
+    if ($LASTEXITCODE -ne 0) { throw 'Backend virtual-environment creation failed.' }
 }
 
 .\backend\.venv\Scripts\Activate.ps1
@@ -518,12 +529,6 @@ if ($CafePackageVersions.Trim() -ne '3.1.3|3.2.13|3.2.13|3.2.8|9.1.1|7.1.0') {
 }
 
 Write-Host "STEP 9 PASS: Python $CafePythonVersion; packages=$CafePackageVersions"
-```
-
-If `py` is unavailable, replace the environment-creation line with:
-
-```powershell
-C:\Python314\python.exe -m venv backend\.venv
 ```
 
 Formal API-04 acceptance evidence expects Flask 3.1.3, psycopg 3.2.13,
