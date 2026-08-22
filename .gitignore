@@ -5,3 +5,15 @@ database/.env
 database/.env.*
 !database/.env.example
 database/test-results/
+
+# Backend-local environments and generated Python/test artifacts
+backend/.venv/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/build/
+backend/dist/
+backend/*.egg-info/
+backend/src/*.egg-info/
+backend/**/__pycache__/
+backend/**/*.pyc

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cafe-fausse-backend"
+version = "0.1.0"
+description = "Cafe Fausse Flask foundation and PostgreSQL connectivity"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+  "Flask>=3.1,<3.2",
+  "psycopg[binary]>=3.2.10,<3.3",
+  "psycopg_pool>=3.2.8,<3.3",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=9,<10",
+  "pytest-cov>=7,<8",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers -m 'unit or api'"
+testpaths = ["tests"]
+markers = [
+  "unit: pure tests without Flask or PostgreSQL",
+  "api: Flask test-client tests with fake dependencies",
+  "integration: real Flask and PostgreSQL tests",
+  "postgres: requires the guarded PostgreSQL 18.3 test target",
+  "failure_injection: controlled dependency-failure tests",
+  "concurrency: coordinated multi-client tests",
+  "performance: non-gating timing evidence",
+  "slow: rebuild, recovery, or timing tests",
+  "acceptance: formal Windows Server 2025 and CPython 3.14.6 evidence",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["cafe_fausse"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
