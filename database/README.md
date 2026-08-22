@@ -81,6 +81,7 @@ shell or use a properly secured PostgreSQL password file outside the repo.
 | `DB07_VERIFICATION_REPORT.md` | Records the final audit, catalogues, evidence, traceability, defects, limitations, and phase-gate assessment. |
 | `POSTGRESQL_CONTRACT_FOR_FLASK.md` | Freezes the versioned database-facing contract for later approved Flask design work. |
 | `DB07_MANUAL_DEMONSTRATION.md` | Gives a repeatable PostgreSQL-only Hard Gate 1 demonstration. |
+| `TestInstruction.md` | Provides the programmer-oriented, ordered DB-05 through DB-07 validation runbook with automated pass/fail markers. |
 
 Migrations are intentionally psql-native and contain no migration metadata
 table, because DB-05 does not authorize an additional persistent table. A
@@ -120,6 +121,10 @@ without a clean rebuild fails on existing schema/keys, while the documented
 guarded rebuild returns the exact approved baseline.
 
 ## Verify and test
+
+For the complete programmer-oriented setup and ordered validation workflow,
+including secure password entry, standardized validation markers, staged
+diagnostics, and cleanup, follow [`TestInstruction.md`](TestInstruction.md).
 
 Read-only verification of an existing DB-07 build:
 
