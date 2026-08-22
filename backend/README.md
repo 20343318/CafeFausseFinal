@@ -118,13 +118,20 @@ python -m pytest -m api
 ```
 
 For PostgreSQL integration tests, first use the existing guarded database
-scripts against an isolated `cafe_fausse_test_*` PostgreSQL 18.3 target. Then:
+scripts against an isolated `cafe_fausse_test_*` PostgreSQL 18.3 target. The
+local test harness needs only the cluster administrator and one app-only
+deployment login. The administrator also performs external fixture management
+through `cafe_fausse_test`; Flask continues to use only the deployment login
+through `cafe_fausse_app`. Follow [TestInstruction.md](TestInstruction.md) for
+the repeatable setup, secure interactive-password option, and optional passfile
+option. Then:
 
 ```powershell
 $env:CAFE_FAUSSE_PSQL = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:CAFE_FAUSSE_ALLOW_RESET = 'YES'
 $env:CAFE_FAUSSE_TEST_PGDATA = 'C:\path\to\the\disposable\cluster\data'
+$env:CAFE_FAUSSE_TEST_MANAGER_USER = 'your_cluster_administrator'
 database\scripts\rebuild.ps1
 database\scripts\verify.ps1
 Set-Location backend
@@ -138,3 +145,8 @@ unknown application-prefixed variables. Never point these commands at
 production or production-like data. `CAFE_FAUSSE_TEST_PGDATA` is consumed only
 by the formal failure-injection test, which validates that the resolved path is
 under the system temporary directory before stopping/restarting the test server.
+The integration process may use one protected `PGPASSFILE` containing both
+login entries. Without a passfile, keep the app password in `PGPASSWORD` and
+the administrator/test-management password in the test-only
+`CAFE_FAUSSE_TEST_MANAGER_PASSWORD` variable; the guide populates both through
+non-echoing PowerShell prompts and clears them during cleanup.

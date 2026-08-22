@@ -33,13 +33,26 @@ def _settings() -> Settings:
     return Settings.from_environment(values)
 
 
-def _admin_connect():
+def _test_manager_connect():
+    connection_values = {
+        "host": os.environ["PGHOST"],
+        "port": int(os.environ.get("PGPORT", "5432")),
+        "dbname": os.environ["PGDATABASE"],
+        "user": os.environ["CAFE_FAUSSE_TEST_MANAGER_USER"],
+    }
+    if os.environ.get("PGPASSFILE"):
+        connection_values["passfile"] = os.environ["PGPASSFILE"]
+    elif os.environ.get("CAFE_FAUSSE_TEST_MANAGER_PASSWORD"):
+        connection_values["password"] = os.environ[
+            "CAFE_FAUSSE_TEST_MANAGER_PASSWORD"
+        ]
+    else:
+        pytest.fail(
+            "PostgreSQL integration tests require either PGPASSFILE or "
+            "CAFE_FAUSSE_TEST_MANAGER_PASSWORD for external test management"
+        )
     return psycopg.connect(
-        host=os.environ["PGHOST"],
-        port=int(os.environ.get("PGPORT", "5432")),
-        dbname=os.environ["PGDATABASE"],
-        user=os.environ["CAFE_FAUSSE_TEST_MANAGER_USER"],
-        password=os.environ.get("PGPASSWORD"),
+        **connection_values,
     )
 
 
@@ -111,7 +124,7 @@ def test_it_dbapi_found_privilege_denials_and_nonmutation():
                 with pytest.raises(psycopg.Error):
                     with connection.transaction():
                         connection.execute(statement)
-        with _admin_connect() as admin:
+        with _test_manager_connect() as admin:
             admin.execute("SET ROLE cafe_fausse_test")
             counts = admin.execute(
                 "SELECT (SELECT count(*) FROM cafe_fausse.customers),"
@@ -132,7 +145,7 @@ def test_it_dbapi_found_controlled_foundation_failure_is_generic_and_restored():
     client = app.test_client()
     try:
         assert _wait_ready(client).status_code == 200
-        with _admin_connect() as admin:
+        with _test_manager_connect() as admin:
             admin.execute("SET ROLE cafe_fausse_test")
             admin.execute("DELETE FROM cafe_fausse.restaurant_operating_hours WHERE weekday = 7")
             admin.commit()
@@ -147,7 +160,7 @@ def test_it_dbapi_found_controlled_foundation_failure_is_generic_and_restored():
             }
         }
     finally:
-        with _admin_connect() as admin:
+        with _test_manager_connect() as admin:
             admin.execute("SET ROLE cafe_fausse_test")
             admin.execute(
                 "INSERT INTO cafe_fausse.restaurant_operating_hours(weekday,opens_at,closes_at) "
@@ -237,7 +250,7 @@ def test_it_dbapi_life_background_recovery_after_database_start():
         pytest.fail("Recovery test PGDATA must be inside the system temporary directory")
     pg_ctl = Path(r"C:\Program Files\PostgreSQL\18\bin\pg_ctl.exe")
     port = int(os.environ["PGPORT"])
-    with _admin_connect() as admin:
+    with _test_manager_connect() as admin:
         assert admin.execute("SELECT current_database(), current_setting('server_version_num')::integer").fetchone() == (
             os.environ["PGDATABASE"],
             180003,

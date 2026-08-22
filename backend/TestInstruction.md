@@ -14,20 +14,22 @@ root in Windows PowerShell unless a step says otherwise.
 - The full backend PostgreSQL integration suite deliberately stops and
   restarts PostgreSQL. `CAFE_FAUSSE_TEST_PGDATA` must therefore identify this
   dedicated cluster's data directory under the Windows temporary directory.
-- Keep three separate login identities:
-  - the setup administrator, used only for provisioning, rebuilds, and final
-    restoration;
+- The Windows user running this guide needs only two PostgreSQL logins:
+  - the cluster administrator created in Step 2, used for setup, rebuilds,
+    final restoration, and external test management through
+    `cafe_fausse_test`;
   - the deployment login, which is a member only of `cafe_fausse_app` and is
-    used by Flask;
-  - the test-management login, which is a member only of
-    `cafe_fausse_test` and is used by external test fixtures.
-- Give all three logins different passwords. Either store them outside the
-  repository in a protected PostgreSQL passfile or enter the password for the
-  current identity at a secure interactive prompt. Never commit passwords,
-  passfiles, connection URLs, or environment dumps.
+    used by Flask.
+- Keep the deployment login separate from administrator/test authority. This
+  preserves the approved API-03 least-privilege boundary while removing the
+  redundant third login from the local test harness.
+- Either store both passwords outside the repository in a protected PostgreSQL
+  passfile or enter both at secure interactive prompts when a command needs
+  them. Never commit passwords, passfiles, connection URLs, or environment
+  dumps.
 - Use `PGPASSFILE` or `PGPASSWORD`, never both. The helper in Step 3 enforces
-  this choice. Because the integration suite connects as two differently
-  credentialed logins in one process, Steps 11 and 12 require `PGPASSFILE`.
+  this choice for the Flask connection. Steps 11 and 12 support either one
+  protected passfile or two secure interactive prompts.
 - Stop immediately if a guard, version check, role audit, rebuild, verifier, or
   test command fails.
 - Every numbered step is restartable. A rerun must inspect and reuse valid
@@ -44,7 +46,7 @@ root in Windows PowerShell unless a step says otherwise.
 | 3 | Replaces the active credential source; passfile entries are updated in place without duplicates. |
 | 4 | Creates a missing database or validates the existing database, owner, and version. |
 | 5 | Guardedly rebuilds the fixed schema and verifies the baseline. |
-| 6 | Creates missing logins, repairs their nonprivileged attributes, preserves existing passwords, and reapplies grants. |
+| 6 | Creates or normalizes the one deployment login, preserves its existing password, and reapplies the exact app-only grants. |
 | 7 | Repeats read-only role and authentication audits. |
 | 8 | Repeats the destructive nonproduction PostgreSQL gate and restores its baseline. |
 | 9 | Reuses a valid environment or safely recreates a partial/wrong-version `.venv`, then refreshes dependencies. |
@@ -76,7 +78,7 @@ $CafePort = '55435'
 $CafeDatabase = 'cafe_fausse_test_api04'
 $CafeAdminLogin = 'cafe_fausse_admin'
 $CafeAppLogin = 'cafe_fausse_api04_login'
-$CafeTestLogin = 'cafe_fausse_api04_test_manager'
+$CafeUsePassFile = $false  # Default: use secure interactive prompts.
 ```
 
 Confirm that the shell is at the correct repository and that the required
@@ -379,9 +381,10 @@ STEP 2 PASS: task-owned PostgreSQL cluster is initialized and running on 127.0.0
 
 ## 3. Select a protected external file or secure interactive password
 
-Define the external passfile location. Do not create an empty file unless you
-intend to use the passfile option; an absent file activates the interactive
-fallback below.
+Define the external passfile location. Step 1 defaults
+`$CafeUsePassFile = $false`, so an existing file never silently changes the
+chosen mode. Leave it false for secure interactive prompts. Set it true only
+when selecting Option A.
 
 ```powershell
 $CafePassDirectory = Join-Path $env:APPDATA 'postgresql'
@@ -395,6 +398,7 @@ To use an external passfile, create it outside the repository and restrict it
 to the current Windows identity:
 
 ```powershell
+$CafeUsePassFile = $true
 New-Item -ItemType Directory -Path $CafePassDirectory -Force | Out-Null
 if (-not (Test-Path -LiteralPath $CafePassFile)) {
     New-Item -ItemType File -Path $CafePassFile | Out-Null
@@ -469,12 +473,12 @@ password with `\` as required by libpq. The helper performs that escaping and
 replaces an existing matching entry, so rerunning it does not create duplicate
 lines.
 
-### Option B: secure interactive prompt when the file is absent
+### Credential helper for either option
 
-If `$CafePassFile` does not exist, the helper below reads the current login's
-password without echoing it, converts it only for the process environment, and
-sets `PGPASSWORD`. If the passfile exists, the same helper selects
-`PGPASSFILE`. It always removes the other variable first so both are never set.
+Run the helper code below for either option. When `$CafeUsePassFile` is false,
+it reads the current login's password without echoing it, converts it only for
+the process environment, and sets `PGPASSWORD`. When the setting is true, it
+requires and selects `PGPASSFILE`. It always removes the other variables first.
 
 ```powershell
 function Set-CafeFausseCredential {
@@ -485,8 +489,12 @@ function Set-CafeFausseCredential {
 
     Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
     Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
 
-    if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
+    if ($CafeUsePassFile) {
+        if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
+            throw "Passfile mode was selected but the file does not exist: $CafePassFile"
+        }
         if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
             throw "The external passfile exists but is empty: $CafePassFile"
         }
@@ -517,6 +525,58 @@ function Set-CafeFausseCredential {
     Write-Host 'STEP 3 PASS: credential source is interactive PGPASSWORD for this PowerShell process.'
 }
 
+function Set-CafeFaussePytestCredentials {
+    Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
+    Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+    Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
+
+    if ($CafeUsePassFile) {
+        if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
+            throw "Passfile mode was selected but the file does not exist: $CafePassFile"
+        }
+        if ((Get-Item -LiteralPath $CafePassFile).Length -eq 0) {
+            throw "The external passfile exists but is empty: $CafePassFile"
+        }
+        foreach ($CafeRequiredLogin in @($CafeAppLogin, $CafeAdminLogin)) {
+            if (-not (Select-String -LiteralPath $CafePassFile -SimpleMatch ":${CafeRequiredLogin}:" -Quiet)) {
+                throw "The passfile has no entry for required login: $CafeRequiredLogin"
+            }
+        }
+        $env:PGPASSFILE = $CafePassFile
+        Write-Host 'TEST CREDENTIAL PASS: protected passfile contains both required login entries.'
+        return
+    }
+
+    $CafeAppSecurePassword = $null
+    $CafeManagerSecurePassword = $null
+    try {
+        $CafeAppSecurePassword = Read-Host "Password for $CafeAppLogin" -AsSecureString
+        $env:PGPASSWORD = [System.Net.NetworkCredential]::new(
+            '', $CafeAppSecurePassword
+        ).Password
+
+        $CafeManagerSecurePassword = Read-Host "Password for $CafeAdminLogin (external test management)" -AsSecureString
+        $env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD = [System.Net.NetworkCredential]::new(
+            '', $CafeManagerSecurePassword
+        ).Password
+    }
+    finally {
+        if ($null -ne $CafeAppSecurePassword) { $CafeAppSecurePassword.Dispose() }
+        if ($null -ne $CafeManagerSecurePassword) { $CafeManagerSecurePassword.Dispose() }
+        Remove-Variable CafeAppSecurePassword -ErrorAction SilentlyContinue
+        Remove-Variable CafeManagerSecurePassword -ErrorAction SilentlyContinue
+    }
+
+    if ([string]::IsNullOrEmpty($env:PGPASSWORD) -or
+        [string]::IsNullOrEmpty($env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD)) {
+        Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
+        Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
+        throw 'One or both interactive PostgreSQL passwords were empty.'
+    }
+
+    Write-Host 'TEST CREDENTIAL PASS: deployment and test-management passwords were read interactively.'
+}
+
 Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
 ```
 
@@ -527,11 +587,13 @@ STEP 3 PASS: credential source is the protected external PGPASSFILE.
 STEP 3 PASS: credential source is interactive PGPASSWORD for this PowerShell process.
 ```
 
-The interactive value is plain text only after assignment to the current
+An interactive value is plain text only after assignment to the current
 process environment, which is necessary for libpq. It is inherited by child
-processes, so clear it with `Remove-Item Env:PGPASSWORD` when testing is done.
-Run `Set-CafeFausseCredential` again with the appropriate identity in the
-prompt whenever a later step changes logins. Do not print either credential
+processes. Step 16 clears both interactive test variables. Run
+`Set-CafeFausseCredential` again with the appropriate identity in the prompt
+whenever a single-login step changes identities. Steps 11 and 12 instead call
+`Set-CafeFaussePytestCredentials`, which supports the passfile or prompts for
+both logins without displaying either password. Do not print any credential
 environment variable.
 
 ## 4. Create and verify the nonproduction database
@@ -627,8 +689,9 @@ Write-Host 'STEP 5 PASS: approved database baseline rebuilt and verified.'
 
 The rebuild creates the passwordless capability roles
 `cafe_fausse_owner`, `cafe_fausse_app`, and `cafe_fausse_test`. These are
-group roles, not login accounts. The next step creates the two distinct login
-accounts that receive only the required membership.
+group roles, not login accounts. The cluster administrator already receives
+the owner and test-management memberships from the approved provisioning
+script. The next step creates only the separate app-only deployment login.
 
 Expected verification output ends with:
 
@@ -636,12 +699,13 @@ Expected verification output ends with:
 STEP 5 PASS: approved database baseline rebuilt and verified.
 ```
 
-## 6. Create the deployment and test-management logins
+## 6. Create the app-only deployment login
 
 Connect as the setup administrator:
 
 ```powershell
 Start-CafeFausseTestPostgres
+Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
 
 & (Join-Path $CafePgBin 'psql.exe') `
     -X -v ON_ERROR_STOP=1 `
@@ -651,10 +715,11 @@ Start-CafeFausseTestPostgres
     -d $CafeDatabase
 ```
 
-At the `psql` prompt, run these repeatable statements. A missing login is
-created and passworded. An existing login is retained, normalized to the exact
-nonprivileged attributes, and keeps its current password unless a partial prior
-run left the password unset:
+At the `psql` prompt, run these repeatable statements. A missing deployment
+login is created and passworded. An existing login is retained, normalized to
+the exact nonprivileged attributes, and keeps its current password unless a
+partial prior run left the password unset. The app login is explicitly removed
+from owner/test membership before its one approved membership is reapplied:
 
 ```sql
 SELECT NOT EXISTS (
@@ -679,42 +744,41 @@ COALESCE((
 \password cafe_fausse_api04_login
 \endif
 
-SELECT NOT EXISTS (
-    SELECT 1 FROM pg_catalog.pg_roles
-    WHERE rolname = 'cafe_fausse_api04_test_manager'
-) AS create_test_login,
-COALESCE((
-    SELECT rolpassword IS NULL FROM pg_catalog.pg_authid
-    WHERE rolname = 'cafe_fausse_api04_test_manager'
-), true) AS set_test_password
+SELECT
+    EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members membership
+        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
+        WHERE granted_role.rolname = 'cafe_fausse_owner'
+          AND member_role.rolname = 'cafe_fausse_api04_login'
+    ) AS revoke_owner_membership,
+    EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members membership
+        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
+        WHERE granted_role.rolname = 'cafe_fausse_test'
+          AND member_role.rolname = 'cafe_fausse_api04_login'
+    ) AS revoke_test_membership
 \gset
-\if :create_test_login
-    CREATE ROLE cafe_fausse_api04_test_manager
-        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
-        NOBYPASSRLS NOINHERIT;
-\else
-    ALTER ROLE cafe_fausse_api04_test_manager
-        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION
-        NOBYPASSRLS NOINHERIT;
+\if :revoke_owner_membership
+    REVOKE cafe_fausse_owner FROM cafe_fausse_api04_login;
 \endif
-\if :set_test_password
-\password cafe_fausse_api04_test_manager
+\if :revoke_test_membership
+    REVOKE cafe_fausse_test FROM cafe_fausse_api04_login;
 \endif
-
 GRANT cafe_fausse_app TO cafe_fausse_api04_login;
-GRANT cafe_fausse_test TO cafe_fausse_api04_test_manager;
 
 GRANT CONNECT ON DATABASE cafe_fausse_test_api04
-    TO cafe_fausse_api04_login, cafe_fausse_api04_test_manager;
+    TO cafe_fausse_api04_login;
 
-SELECT 'STEP 6 PASS: deployment and test-management logins created or validated.'
+SELECT 'STEP 6 PASS: app-only deployment login created or validated; cluster administrator remains the external test manager.'
     AS verification;
 \q
 ```
 
-Use different generated passwords at the two prompts on the first run. A rerun
-prompts only for a missing/null password and does not reset an existing one.
-Step 7 audits the resulting attributes and memberships on every run.
+The `\password` prompt appears only when the deployment login is new or a prior
+partial run left its password unset. A rerun does not reset an existing
+password. Step 7 audits the resulting attributes and memberships on every run.
 
 If Option A in Step 3 selected a passfile, create or replace the exact-database
 entries after the first run or whenever a password changes:
@@ -724,89 +788,106 @@ Set-CafeFaussePassfileEntry `
     -Login $CafeAppLogin `
     -DatabaseName $CafeDatabase `
     -Prompt "Password for $CafeAppLogin"
-
-Set-CafeFaussePassfileEntry `
-    -Login $CafeTestLogin `
-    -DatabaseName $CafeDatabase `
-    -Prompt "Password for $CafeTestLogin"
 ```
 
 If Step 3 selected the interactive fallback, do not create a credential file
-here merely by copying placeholders. Later single-login commands will prompt
-for the applicable password. The two-login integration and coverage runs in
-Steps 11 and 12 require a completed protected passfile with all three entries.
+here merely by copying placeholders. Later single-login commands prompt for the
+applicable password. Steps 11 and 12 securely prompt for both passwords.
 
 Expected `psql` output includes `CREATE ROLE` on the first run or `ALTER ROLE`
 on a rerun, repeatable `GRANT` output, and:
 
 ```text
-STEP 6 PASS: deployment and test-management logins created or validated.
+STEP 6 PASS: app-only deployment login created or validated; cluster administrator remains the external test manager.
 ```
 
 ## 7. Audit role separation before testing
 
-Run the membership and login-attribute audit as the administrator:
+Run the membership and login-attribute audit as the administrator. These
+queries inspect direct grants rather than treating a superuser's inherent
+ability to assume roles as an explicit membership:
 
 ```powershell
 Start-CafeFausseTestPostgres
 Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
 
-& (Join-Path $CafePgBin 'psql.exe') `
-    -X -v ON_ERROR_STOP=1 `
-    -h 127.0.0.1 `
-    -p $CafePort `
-    -U $CafeAdminLogin `
-    -d $CafeDatabase `
+$CafeMembershipEvidence = & (Join-Path $CafePgBin 'psql.exe') `
+    -X -qAt -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort -U $CafeAdminLogin -d $CafeDatabase `
     -c @'
-SELECT
-    pg_has_role('cafe_fausse_api04_login', 'cafe_fausse_app', 'MEMBER') AS app_has_app,
-    pg_has_role('cafe_fausse_api04_login', 'cafe_fausse_test', 'MEMBER') AS app_has_test,
-    pg_has_role('cafe_fausse_api04_test_manager', 'cafe_fausse_test', 'MEMBER') AS test_has_test,
-    pg_has_role('cafe_fausse_api04_test_manager', 'cafe_fausse_app', 'MEMBER') AS test_has_app;
-
-SELECT rolname, rolcanlogin, rolsuper, rolcreatedb, rolcreaterole,
-       rolreplication, rolbypassrls, rolinherit
-FROM pg_roles
-WHERE rolname IN (
-    'cafe_fausse_api04_login',
-    'cafe_fausse_api04_test_manager'
-)
-ORDER BY rolname;
+SELECT concat_ws('|',
+    EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members membership
+        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
+        WHERE granted_role.rolname = 'cafe_fausse_app'
+          AND member_role.rolname = 'cafe_fausse_api04_login'
+    ),
+    EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members membership
+        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
+        WHERE granted_role.rolname = 'cafe_fausse_test'
+          AND member_role.rolname = 'cafe_fausse_api04_login'
+    ),
+    EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members membership
+        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
+        WHERE granted_role.rolname = 'cafe_fausse_owner'
+          AND member_role.rolname = 'cafe_fausse_api04_login'
+    ),
+    EXISTS (
+        SELECT 1 FROM pg_catalog.pg_auth_members membership
+        JOIN pg_catalog.pg_roles granted_role ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
+        WHERE granted_role.rolname = 'cafe_fausse_test'
+          AND member_role.rolname = 'cafe_fausse_admin'
+    )
+);
 '@
+if ($LASTEXITCODE -ne 0 -or $CafeMembershipEvidence -ne 't|f|f|t') {
+    throw "Role membership audit failed; expected t|f|f|t, received: $CafeMembershipEvidence"
+}
 
-if ($LASTEXITCODE -ne 0) { throw 'Role membership audit failed.' }
+$CafeAppAttributeEvidence = & (Join-Path $CafePgBin 'psql.exe') `
+    -X -qAt -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort -U $CafeAdminLogin -d $CafeDatabase `
+    -c "SELECT concat_ws('|', rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls, rolinherit) FROM pg_catalog.pg_roles WHERE rolname = 'cafe_fausse_api04_login';"
+if ($LASTEXITCODE -ne 0 -or $CafeAppAttributeEvidence -ne 't|f|f|f|f|f|f') {
+    throw "Deployment-login attribute audit failed; expected t|f|f|f|f|f|f, received: $CafeAppAttributeEvidence"
+}
 ```
 
-Required membership result: `true, false, true, false`. For both login rows,
-only `rolcanlogin` may be true; `rolinherit` and every elevated attribute must
-be false.
-
-Confirm that each login can authenticate and assume only its intended group
-role:
+Confirm that the app login assumes only the app role and the administrator can
+enter the external test-management boundary:
 
 ```powershell
 Set-CafeFausseCredential -Prompt "Password for $CafeAppLogin"
-& (Join-Path $CafePgBin 'psql.exe') -X -v ON_ERROR_STOP=1 `
+$CafeAppRoleEvidence = & (Join-Path $CafePgBin 'psql.exe') -X -qAt -v ON_ERROR_STOP=1 `
     -h 127.0.0.1 -p $CafePort -U $CafeAppLogin -d $CafeDatabase `
-    -c 'SET ROLE cafe_fausse_app; SELECT session_user, current_user; RESET ROLE;'
-if ($LASTEXITCODE -ne 0) { throw 'Deployment-login authentication failed.' }
+    -c "SET ROLE cafe_fausse_app; SELECT concat_ws('|', session_user, current_user); RESET ROLE;"
+if ($LASTEXITCODE -ne 0 -or $CafeAppRoleEvidence -ne "$CafeAppLogin|cafe_fausse_app") {
+    throw "Deployment-login role audit failed; received: $CafeAppRoleEvidence"
+}
 
-Set-CafeFausseCredential -Prompt "Password for $CafeTestLogin"
-& (Join-Path $CafePgBin 'psql.exe') -X -v ON_ERROR_STOP=1 `
-    -h 127.0.0.1 -p $CafePort -U $CafeTestLogin -d $CafeDatabase `
-    -c 'SET ROLE cafe_fausse_test; SELECT session_user, current_user; RESET ROLE;'
-if ($LASTEXITCODE -ne 0) { throw 'Test-management-login authentication failed.' }
+Set-CafeFausseCredential -Prompt "Password for $CafeAdminLogin"
+$CafeTestRoleEvidence = & (Join-Path $CafePgBin 'psql.exe') -X -qAt -v ON_ERROR_STOP=1 `
+    -h 127.0.0.1 -p $CafePort -U $CafeAdminLogin -d $CafeDatabase `
+    -c "SET ROLE cafe_fausse_test; SELECT concat_ws('|', session_user, current_user); RESET ROLE;"
+if ($LASTEXITCODE -ne 0 -or $CafeTestRoleEvidence -ne "$CafeAdminLogin|cafe_fausse_test") {
+    throw "Administrator test-role audit failed; received: $CafeTestRoleEvidence"
+}
 
-Write-Host 'STEP 7 PASS: role separation and both login paths verified.'
+Write-Host 'STEP 7 PASS: app-only deployment login and administrator test-management boundary verified.'
 ```
 
-The audit tables must show `t | f | t | f`; only `rolcanlogin` is true for
-each login. The two authentication queries must respectively show
-`cafe_fausse_app` and `cafe_fausse_test` as `current_user`. Expected final
-verbiage:
+Every comparison is automated. Any unexpected membership, deployment-login
+attribute, authentication failure, or wrong active role throws a targeted
+error. Expected final verbiage:
 
 ```text
-STEP 7 PASS: role separation and both login paths verified.
+STEP 7 PASS: app-only deployment login and administrator test-management boundary verified.
 ```
 
 ## 8. Run the complete PostgreSQL test suite
@@ -969,32 +1050,22 @@ STEP 10 PASS: default, unit, and API backend test selections passed.
 ## 11. Run backend PostgreSQL integration tests
 
 Select the ordinary deployment login for the application connection and the
-separate test-management login for fixture management. Keep both password
-entries in `PGPASSFILE` so each connection authenticates with its own secret.
+existing cluster administrator for external fixture management. The helper
+uses a protected passfile when present; otherwise it prompts securely for the
+deployment password and administrator password. It replaces prior test
+credential state on every call, so rerunning this step is safe.
 
 ```powershell
 Start-CafeFausseTestPostgres
-
-if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
-    throw 'Steps 11 and 12 require the protected passfile because pytest opens two differently credentialed login connections in one process.'
-}
-
-Set-CafeFausseCredential -Prompt 'This prompt is not used when the required passfile exists'
-
-foreach ($CafeRequiredLogin in @($CafeAppLogin, $CafeTestLogin)) {
-    if (-not (Select-String -LiteralPath $CafePassFile -SimpleMatch ":${CafeRequiredLogin}:" -Quiet)) {
-        throw "The passfile has no entry for required login: $CafeRequiredLogin"
-    }
-}
+Set-CafeFaussePytestCredentials
 
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:PGHOST = '127.0.0.1'
 $env:PGPORT = $CafePort
 $env:PGDATABASE = $CafeDatabase
 $env:PGUSER = $CafeAppLogin
-$env:CAFE_FAUSSE_TEST_MANAGER_USER = $CafeTestLogin
+$env:CAFE_FAUSSE_TEST_MANAGER_USER = $CafeAdminLogin
 $env:CAFE_FAUSSE_TEST_PGDATA = $CafeDataDir
-Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 
 Push-Location (Join-Path $CafeRepo 'backend')
 try {
@@ -1026,30 +1097,21 @@ STEP 11 PASS: backend PostgreSQL integration and recovery tests passed.
 
 ## 12. Run the combined backend coverage gate
 
-With the same application, test-management, database, passfile, and data
-directory variables still set:
+Reestablish the application, test-management, database, credential, and data
+directory variables. This makes Step 12 independently repeatable even after a
+new PowerShell command changed credentials:
 
 ```powershell
 Start-CafeFausseTestPostgres
-
-if (-not (Test-Path -LiteralPath $CafePassFile -PathType Leaf)) {
-    throw 'Steps 11 and 12 require the protected passfile because pytest opens two differently credentialed login connections in one process.'
-}
-Set-CafeFausseCredential -Prompt 'This prompt is not used when the required passfile exists'
-foreach ($CafeRequiredLogin in @($CafeAppLogin, $CafeTestLogin)) {
-    if (-not (Select-String -LiteralPath $CafePassFile -SimpleMatch ":${CafeRequiredLogin}:" -Quiet)) {
-        throw "The passfile has no entry for required login: $CafeRequiredLogin"
-    }
-}
+Set-CafeFaussePytestCredentials
 
 $env:CAFE_FAUSSE_ENVIRONMENT = 'test'
 $env:PGHOST = '127.0.0.1'
 $env:PGPORT = $CafePort
 $env:PGDATABASE = $CafeDatabase
 $env:PGUSER = $CafeAppLogin
-$env:CAFE_FAUSSE_TEST_MANAGER_USER = $CafeTestLogin
+$env:CAFE_FAUSSE_TEST_MANAGER_USER = $CafeAdminLogin
 $env:CAFE_FAUSSE_TEST_PGDATA = $CafeDataDir
-Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 
 Push-Location (Join-Path $CafeRepo 'backend')
 try {
@@ -1091,6 +1153,7 @@ stopped and replaced; a healthy prior process is reused.
 Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_PSQL -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_USER -ErrorAction SilentlyContinue
+Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_TEST_PGDATA -ErrorAction SilentlyContinue
 
 Start-CafeFausseTestPostgres
@@ -1341,6 +1404,7 @@ if ($CafeReadyAfterStopExitCode -eq 0) {
 
 Remove-Item Env:PGPASSWORD -ErrorAction SilentlyContinue
 Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
+Remove-Item Env:CAFE_FAUSSE_TEST_MANAGER_PASSWORD -ErrorAction SilentlyContinue
 Write-Host 'STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.'
 ```
 
@@ -1365,9 +1429,10 @@ STEP 16 PASS: task-owned Flask is absent and disposable PostgreSQL is stopped.
 - If Flask reports an unknown `CAFE_FAUSSE_*` setting, remove database-script
   and test-only variables as shown in the manual smoke-test step.
 - If authentication fails for only one identity, check that identity's exact
-  passfile entry or rerun `Set-CafeFausseCredential` and carefully enter that
-  identity's password. Do not work around the problem by giving the
-  application the administrator or test-management credentials.
+  passfile entry. In interactive mode, rerun `Set-CafeFausseCredential` for a
+  single-login step or `Set-CafeFaussePytestCredentials` for Steps 11 and 12,
+  then carefully enter the requested password. Do not work around the problem
+  by giving the application administrator/test authority.
 - If the recovery test refuses the data path, do not weaken its check. Create a
   genuinely disposable cluster beneath the Windows temporary directory.
 - If a database test leaves test data after a failure, run the guarded final

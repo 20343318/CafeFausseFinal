@@ -155,15 +155,29 @@ git diff --check
 
 The guarded database commands used explicit local host/port, the approved test
 database name, `CAFE_FAUSSE_ENVIRONMENT=test`, and
-`CAFE_FAUSSE_ALLOW_RESET=YES`. The integration process used separate
+`CAFE_FAUSSE_ALLOW_RESET=YES`. The original formal integration process used separate
 passwordless non-superuser logins for the deployment/app-role boundary and the
 external test-management boundary. No connection fact is stored in source.
+
+Targeted local-harness correction evidence was rerun on 2026-08-21. The
+separate app-only deployment login remains unchanged, while the disposable
+cluster administrator now also supplies the external `cafe_fausse_test`
+management connection. This reduces the programmer workflow from three login
+identities to two without putting admin/test authority inside Flask. The seven
+PostgreSQL integration tests passed under SCRAM authentication in both modes:
+two passwords supplied through separate process variables, and one external
+passfile containing both login entries. The combined 68-test coverage run also
+passed through the passfile code path. No real password, passfile, or connection
+secret was added to the repository or test output.
 
 - Unit: 51 passed.
 - Flask API: 10 passed.
 - PostgreSQL integration: 7 passed.
 - Consolidated coverage: 68 passed; 94% total statement/branch report. No
   unapproved threshold was imposed.
+- Credential-path correction: 7 integration tests passed through each of the
+  interactive-variable and optional-passfile SCRAM paths; 68 combined tests
+  passed through the passfile path.
 - Static/repository: CPython `compileall` passed; `git diff --check` passed.
 
 Integration evidence includes exact platform/dependency versions, role on a
