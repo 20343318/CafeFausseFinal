@@ -81,7 +81,9 @@ shell or use a properly secured PostgreSQL password file outside the repo.
 | `DB07_VERIFICATION_REPORT.md` | Records the final audit, catalogues, evidence, traceability, defects, limitations, and phase-gate assessment. |
 | `POSTGRESQL_CONTRACT_FOR_FLASK.md` | Freezes the versioned database-facing contract for later approved Flask design work. |
 | `DB07_MANUAL_DEMONSTRATION.md` | Gives a repeatable PostgreSQL-only Hard Gate 1 demonstration. |
-| `TestInstructions.md` | User-requested programmer-convenience runbook for ordered DB-05 through DB-07 validation with automated pass/fail markers; not a requirements or design authority. |
+| `TestInstructions.md` | User-requested programmer-convenience runbook for isolated, restartable, ordered DB-05 through DB-07 validation; not a requirements or design authority. |
+| `scripts/programmer_test.ps1` | Creates a uniquely named task-owned test database, runs the existing gate or a diagnostic checkpoint, and restores the caller environment while cleaning only ownership-proven resources. |
+| `scripts/programmer_test_safety.ps1` | Injects controlled failures and validates recovery, fail-safe ownership refusal, preservation, two-run repeatability, and absence of generated artifacts. |
 
 Migrations are intentionally psql-native and contain no migration metadata
 table, because DB-05 does not authorize an additional persistent table. A
@@ -91,9 +93,10 @@ replay policy. Extension and cluster roles are not automatically removed.
 
 ## Create an isolated database
 
-As a PostgreSQL administrator, create an empty nonproduction database. This is
-the only database-creation command; the repository scripts do not create or
-drop databases.
+For direct use of the core scripts, create an empty nonproduction database as a
+PostgreSQL administrator. The core rebuild, verification, and gate scripts do
+not create or drop databases. The optional programmer harness documented below
+does create and remove its own uniquely named, ownership-marked test database.
 
 ```powershell
 createdb cafe_fausse_dev
@@ -124,7 +127,14 @@ guarded rebuild returns the exact approved baseline.
 
 For the complete programmer-oriented setup and ordered validation workflow,
 including secure password entry, standardized validation markers, staged
-diagnostics, and cleanup, follow [`TestInstructions.md`](TestInstructions.md).
+diagnostics, recovery, and cleanup, follow
+[`TestInstructions.md`](TestInstructions.md). The convenience harness generates
+a dedicated `cafe_fausse_test_harness_<random-id>` database per run, requires
+the exact local PostgreSQL 18.3 target, records nonsecret ownership evidence
+before resource creation, and preserves all preexisting databases, roles,
+memberships, and caller environment values. The existing `scripts/test.ps1`
+remains the normative automated DB-05-through-DB-07 gate invoked by the
+convenience harness.
 
 Read-only verification of an existing DB-07 build:
 

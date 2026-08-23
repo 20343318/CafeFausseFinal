@@ -65,8 +65,19 @@ LIMIT 1;
     }
 }
 
+function Get-EffectiveApplicationName {
+    param([Parameter(Mandatory = $true)][string]$ApplicationName)
+    $effectiveApplicationName = $ApplicationName
+    if (-not [string]::IsNullOrWhiteSpace($env:PGAPPNAME)) {
+        $effectiveApplicationName = "$($env:PGAPPNAME):$ApplicationName"
+    }
+    return $effectiveApplicationName
+}
+
 function New-PsqlSession {
     param([Parameter(Mandatory = $true)][string]$ApplicationName)
+
+    $effectiveApplicationName = Get-EffectiveApplicationName $ApplicationName
 
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $psqlPath
@@ -76,7 +87,7 @@ function New-PsqlSession {
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.CreateNoWindow = $true
-    $startInfo.EnvironmentVariables['PGAPPNAME'] = $ApplicationName
+    $startInfo.EnvironmentVariables['PGAPPNAME'] = $effectiveApplicationName
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
@@ -126,12 +137,14 @@ function Wait-SessionMarker {
 function Wait-ForDatabaseLockWait {
     param([Parameter(Mandatory = $true)][string]$ApplicationName)
 
+    $effectiveApplicationName = Get-EffectiveApplicationName $ApplicationName
+
     $deadline = [datetime]::UtcNow.AddSeconds(10)
     do {
         $waiting = Invoke-ScalarSql @"
 SELECT EXISTS (
     SELECT 1 FROM pg_catalog.pg_stat_activity
-    WHERE application_name = '$ApplicationName'
+WHERE application_name = '$effectiveApplicationName'
       AND wait_event_type = 'Lock'
 );
 "@

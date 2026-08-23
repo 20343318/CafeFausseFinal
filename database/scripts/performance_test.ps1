@@ -84,45 +84,55 @@ function Measure-ConcurrentSamples {
         Reset-Reservations
         $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-        for ($submission = 1; $submission -le $SubmissionCount; $submission++) {
-            $email = "perf-concurrent-$SubmissionCount-$sample-$submission@example.com"
-            $sql = "SET ROLE cafe_fausse_app; SELECT outcome FROM cafe_fausse.book_reservation('Perf', NULL, 'Concurrent', '$email', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 4, 'no_change');"
-            $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-            $startInfo.FileName = $psqlPath
-            $startInfo.Arguments = "-X -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c `"$sql`""
-            $startInfo.UseShellExecute = $false
-            $startInfo.RedirectStandardOutput = $true
-            $startInfo.RedirectStandardError = $true
-            $startInfo.CreateNoWindow = $true
-            $process = [System.Diagnostics.Process]::new()
-            $process.StartInfo = $startInfo
-            if (-not $process.Start()) { throw 'Unable to start concurrent measurement process.' }
-            $processes.Add($process)
+        try {
+            for ($submission = 1; $submission -le $SubmissionCount; $submission++) {
+                $email = "perf-concurrent-$SubmissionCount-$sample-$submission@example.com"
+                $sql = "SET ROLE cafe_fausse_app; SELECT outcome FROM cafe_fausse.book_reservation('Perf', NULL, 'Concurrent', '$email', NULL, TIMESTAMP '$localStart', ($offset)::smallint, 4, 'no_change');"
+                $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+                $startInfo.FileName = $psqlPath
+                $startInfo.Arguments = "-X -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c `"$sql`""
+                $startInfo.UseShellExecute = $false
+                $startInfo.RedirectStandardOutput = $true
+                $startInfo.RedirectStandardError = $true
+                $startInfo.CreateNoWindow = $true
+                $process = [System.Diagnostics.Process]::new()
+                $process.StartInfo = $startInfo
+                if (-not $process.Start()) { throw 'Unable to start concurrent measurement process.' }
+                $processes.Add($process)
+            }
+            $bookedCount = 0
+            $retryableCount = 0
+            foreach ($process in $processes) {
+                if (-not $process.WaitForExit(20000)) {
+                    $process.Kill()
+                    throw 'Concurrent measurement exceeded its 20-second bound.'
+                }
+                $individualMeasurements.Add(
+                    ($process.ExitTime - $process.StartTime).TotalMilliseconds
+                )
+                $output = $process.StandardOutput.ReadToEnd().Trim()
+                $errorOutput = $process.StandardError.ReadToEnd().Trim()
+                if ($process.ExitCode -eq 0 -and $output -match '^booked$') {
+                    $bookedCount++
+                }
+                elseif ($process.ExitCode -ne 0 -and $errorOutput -match '(55P03|40P01|40001)') {
+                    $retryableCount++
+                }
+                else {
+                    throw "Concurrent measurement failed: output '$output'; error '$errorOutput'."
+                }
+            }
+            $stopwatch.Stop()
         }
-        $bookedCount = 0
-        $retryableCount = 0
-        foreach ($process in $processes) {
-            if (-not $process.WaitForExit(20000)) {
-                $process.Kill()
-                throw 'Concurrent measurement exceeded its 20-second bound.'
+        finally {
+            foreach ($process in $processes) {
+                if (-not $process.HasExited) {
+                    $process.Kill()
+                    [void]$process.WaitForExit(3000)
+                }
+                $process.Dispose()
             }
-            $individualMeasurements.Add(
-                ($process.ExitTime - $process.StartTime).TotalMilliseconds
-            )
-            $output = $process.StandardOutput.ReadToEnd().Trim()
-            $errorOutput = $process.StandardError.ReadToEnd().Trim()
-            if ($process.ExitCode -eq 0 -and $output -match '^booked$') {
-                $bookedCount++
-            }
-            elseif ($process.ExitCode -ne 0 -and $errorOutput -match '(55P03|40P01|40001)') {
-                $retryableCount++
-            }
-            else {
-                throw "Concurrent measurement failed: output '$output'; error '$errorOutput'."
-            }
-            $process.Dispose()
         }
-        $stopwatch.Stop()
         if ($bookedCount + $retryableCount -ne $SubmissionCount -or $bookedCount -lt 1) {
             throw 'Concurrent measurement produced an invalid outcome count.'
         }
