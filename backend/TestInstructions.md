@@ -7,6 +7,110 @@ root in Windows PowerShell unless a step says otherwise.
 This is a user-requested programmer-convenience runbook. It is not required by
 the SRS or rubric and is not an approved requirements or design authority.
 
+## API-05 recommended complete workflow
+
+For API-05, the single recommended command is the guarded runner below. It
+requires Windows PowerShell 5.1, standard GIL-enabled CPython 3.14.6 at
+`C:\Python314\python.exe`, PostgreSQL 18.3 under
+`C:\Program Files\PostgreSQL\18\bin`, and a repository checkout at the exact
+working directory shown. It does not require the caller to set or reveal a
+credential: the runner creates a loopback-only, trust-authenticated disposable
+cluster and uses a non-secret local-trust placeholder only to satisfy the
+test-manager fixture's explicit credential boundary.
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api05.ps1
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The runner refuses a wrong Python/PostgreSQL version, an occupied dedicated
+port, an unmarked cluster directory, or a marker mismatch. It creates only:
+
+- `%TEMP%\CafeFausse-api05-tests` with an ownership marker, disposable
+  PostgreSQL cluster, `cafe_fausse_test_api05` database, app/test-manager
+  logins, and task-owned test rows;
+- `%TEMP%\CafeFausse-api05-tests\artifacts`, containing the runner's virtual
+  environment, pytest cache, coverage data, Python bytecode, and pip cache.
+  The runner installs the fixed test dependencies without an editable project
+  install, so it creates no repository package/build metadata.
+
+It preserves every preexisting database, role, membership, row, file,
+listener, process, passfile, and process-environment value. Its `finally` path
+stops the child PostgreSQL server, proves the dedicated port is no longer
+served, removes only marker-owned resources, and restores every changed
+environment variable to its exact prior value or prior absence without
+displaying values. PostgreSQL/process cleanup, artifact cleanup, cluster-root
+cleanup, and environment restoration are attempted independently. Test or
+cleanup failure returns nonzero; the original test failure is reported first
+and cleanup failures are reported separately and prominently.
+
+Expected success includes these markers (counts may increase as tests are
+added): `API05 TEST PASS`, `224 passed`, zero-row evidence, and
+`API05 CLEANUP PASS`. Expected cleanup output states that the task-owned
+cluster directory is absent and that all 19 captured environment variables
+were restored.
+
+### Focused API-05 commands
+
+For focused unit/API work, use a developer-owned environment created as shown
+in `README.md`. The complete runner neither reads, changes, nor deletes that
+environment. PostgreSQL integration still requires the complete runner's
+isolated cluster and manager variables, so the integration line is diagnostic
+rather than a substitute for the complete workflow.
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse\backend
+& .\.venv\Scripts\python.exe -m pytest tests\unit\test_validation_identity.py tests\unit\test_newsletter_status_service.py tests\unit\test_customer_gateway.py
+& .\.venv\Scripts\python.exe -m pytest tests\api\test_newsletter_status.py
+& .\.venv\Scripts\python.exe -m pytest tests\integration\test_newsletter_status_postgresql.py -m "integration and postgres"
+```
+
+To prove ordinary-failure cleanup and restart, run the controlled failure and
+expect a nonzero result, then run the ordinary command and expect success:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api05.ps1 -InjectFailure
+if ($LASTEXITCODE -eq 0) { throw 'The controlled API-05 failure did not fail.' }
+& .\backend\tests\run_api05.ps1
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+To prove cleanup-failure handling, run the test-only cleanup injection. It must
+return nonzero, report the controlled artifact-cleanup failure, still restore
+all 19 environment variables, and use the independently attempted cluster-root
+cleanup to remove every task-owned artifact safely:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api05.ps1 -InjectCleanupFailure
+if ($LASTEXITCODE -eq 0) { throw 'The controlled API-05 cleanup failure did not fail.' }
+```
+
+The complete command may be repeated immediately in the same PowerShell
+session or after opening a new PowerShell session and returning to the exact
+repository root. After an interrupted run, invoke the same command: it removes
+a matching marked partial cluster before rebuilding. If the cluster path is
+unmarked, the marker differs, or ownership of a path/process/database/role is
+ambiguous, stop and inspect it; do not delete or adopt it.
+
+After any completed success, ordinary failure, or controlled cleanup failure,
+this read-only check must report `False` for the task root and no listener on
+port 55445. A preexisting `backend\.venv`, cache, coverage, bytecode, or
+package-metadata sentinel must retain its original bytes and may legitimately
+remain present:
+
+```powershell
+Test-Path -LiteralPath "$env:TEMP\CafeFausse-api05-tests"
+Get-NetTCPConnection -State Listen -LocalPort 55445 -ErrorAction SilentlyContinue
+git status --short
+```
+
+The legacy numbered API-04 convenience workflow remains below for manual
+foundation diagnostics. API-05's recommended complete command above is the
+authoritative programmer workflow for this increment.
+
 Working-directory contract: start Step 1 at the repository root and keep the
 same PowerShell session for Steps 2 through 16. Step 1 records that exact path
 in `$CafeRepo`. Later blocks either operate from that repository root or use
@@ -62,14 +166,14 @@ changes location itself.
 | Step | Repeatable behavior |
 |---|---|
 | 1 | Preserves the original process environment once, reassigns task variables, and redetects approved tools without overwriting the snapshot on a rerun. |
-| 2 | Reuses a valid marked cluster, adopts exact-path legacy state, recreates marker-owned partial data, or starts a stopped cluster. |
+| 2 | Reuses a valid marked cluster, recreates marker-owned partial data, or starts a stopped cluster; an unmarked/mismatched directory is refused. |
 | 3 | Replaces the active credential source; passfile entries are updated in place without duplicates. |
 | 4 | Creates a missing database or validates the existing database, owner, and version. |
 | 5 | Guardedly rebuilds the fixed schema and verifies the baseline. |
 | 6 | Creates or normalizes the one deployment login, resets and verifies its password, and reapplies the exact app-only grants. |
 | 7 | Repeats read-only role and authentication audits. |
 | 8 | Repeats the destructive nonproduction PostgreSQL gate and restores its baseline. |
-| 9 | Reuses a valid environment or safely recreates a partial/wrong-version `.venv`, then refreshes dependencies. |
+| 9 | Reuses or recreates only the task-owned temporary environment, then refreshes dependencies without touching a repository `.venv`. |
 | 10 | Repeats unit/API tests and always restores the caller's directory. |
 | 11 | Ensures PostgreSQL is running, then repeats integration/recovery tests and restores the caller's directory. |
 | 12 | Reestablishes all test variables, then repeats coverage and restores the caller's directory. |
@@ -115,13 +219,17 @@ $CafeManagedEnvironmentNames = @(
     'CAFE_FAUSSE_TEST_MANAGER_PASSWORD',
     'CAFE_FAUSSE_TEST_MANAGER_USER',
     'CAFE_FAUSSE_TEST_PGDATA',
+    'COVERAGE_FILE',
+    'PIP_CACHE_DIR',
     'PGDATABASE',
     'PGHOST',
     'PGOPTIONS',
     'PGPASSFILE',
     'PGPASSWORD',
     'PGPORT',
-    'PGUSER'
+    'PGUSER',
+    'PYTHONPATH',
+    'PYTHONPYCACHEPREFIX'
 )
 
 if (-not (Get-Variable CafePriorProcessEnvironment -Scope Script -ErrorAction SilentlyContinue)) {
@@ -215,8 +323,13 @@ $CafeClusterMarker = Join-Path $CafeClusterRoot '.cafe-fausse-api04-test-cluster
 $CafeFlaskPidFile = Join-Path $CafeClusterRoot 'flask.pid'
 $CafeFlaskOutputLog = Join-Path $CafeClusterRoot 'flask-output.log'
 $CafeFlaskErrorLog = Join-Path $CafeClusterRoot 'flask-error.log'
-$CafeVenvRoot = Join-Path $CafeRepo 'backend\.venv'
+$CafeArtifactRoot = Join-Path $CafeClusterRoot 'artifacts'
+$CafeVenvRoot = Join-Path $CafeArtifactRoot 'venv'
 $CafeVenvPython = Join-Path $CafeVenvRoot 'Scripts\python.exe'
+$CafePytestCache = Join-Path $CafeArtifactRoot 'pytest-cache'
+$CafeCoverageFile = Join-Path $CafeArtifactRoot '.coverage'
+$CafePythonCache = Join-Path $CafeArtifactRoot 'pycache'
+$CafePipCache = Join-Path $CafeArtifactRoot 'pip-cache'
 $CafePort = '55435'
 $CafeFlaskPort = '55004'
 $CafeDatabase = 'cafe_fausse_test_api04'
@@ -311,7 +424,8 @@ This step is repeatable after successful, failed, or interrupted runs. It uses
 a task-specific marker beneath the exact temporary path. A valid existing
 cluster is reused; a marker-owned partial initialization is removed and
 recreated; a stopped valid cluster is restarted; and a running valid cluster
-is left running. An unrecognized directory is never overwritten.
+is left running. An unmarked, mismatched, or otherwise ambiguous directory is
+never adopted, overwritten, or deleted.
 
 ```powershell
 $CafeExpectedClusterRoot = [System.IO.Path]::GetFullPath(
@@ -336,37 +450,7 @@ if (-not (Test-Path -LiteralPath $CafeClusterRoot)) {
     New-Item -ItemType Directory -Path $CafeClusterRoot | Out-Null
     Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
 } elseif (-not (Test-Path -LiteralPath $CafeClusterMarker -PathType Leaf)) {
-    # One-time adoption of state created by an earlier version of this guide.
-    # A complete cluster must match version, port, and loopback binding. A
-    # partial initialization may contain only the known data/log paths.
-    if (-not (Test-Path -LiteralPath $CafeVersionFile -PathType Leaf)) {
-        $CafeUnexpectedLegacyItems = @(
-            Get-ChildItem -LiteralPath $CafeClusterRoot -Force | Where-Object {
-                $_.Name -notin @('data', 'postgres.log')
-            }
-        )
-        if ($CafeUnexpectedLegacyItems.Count -gt 0) {
-            throw "Existing unmarked directory contains unexpected items and will not be adopted: $($CafeUnexpectedLegacyItems.FullName -join ', ')"
-        }
-        Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
-        Write-Host 'Marked an exact-path legacy partial initialization for safe recreation.'
-    }
-    else {
-        $CafeExistingMajor = (Get-Content -LiteralPath $CafeVersionFile -Raw).Trim()
-        $CafePostmasterOptionsFile = Join-Path $CafeDataDir 'postmaster.opts'
-        $CafePostmasterOptions = if (Test-Path -LiteralPath $CafePostmasterOptionsFile) {
-            Get-Content -LiteralPath $CafePostmasterOptionsFile -Raw
-        } else {
-            ''
-        }
-        if ($CafeExistingMajor -ne '18' -or
-            $CafePostmasterOptions -notmatch [regex]::Escape($CafePort) -or
-            $CafePostmasterOptions -notmatch '127\.0\.0\.1') {
-            throw "Refusing to adopt an unrecognized cluster at $CafeClusterRoot"
-        }
-        Set-Content -LiteralPath $CafeClusterMarker -Value $CafeMarkerText -Encoding UTF8
-        Write-Host 'Recognized and marked the existing task-specific PostgreSQL cluster.'
-    }
+    throw "Existing task path has no ownership marker and will not be adopted or deleted: $CafeClusterRoot"
 }
 
 $CafeRecordedMarker = (Get-Content -LiteralPath $CafeClusterMarker -Raw).Trim()
@@ -1217,10 +1301,11 @@ STEP 8 PASS: complete PostgreSQL test suite passed and restored its baseline.
 
 ## 9. Create or refresh the backend Python environment
 
-Create or repair the virtual environment, then reinstall the editable test
-extras. A valid environment is reused. A partial, broken, or wrong-version
-environment is removed only after its exact repository path is checked and is
-then recreated.
+Create or repair the marker-owned temporary virtual environment and install
+the fixed test dependency set. A valid task-owned environment is reused. A
+partial, broken, or wrong-version task-owned environment is removed only after
+its exact path beneath the marked temporary root is checked. No repository
+`.venv`, cache, coverage, bytecode, or package metadata is read or removed.
 
 ```powershell
 $CafeRebuildVenv = $false
@@ -1239,9 +1324,13 @@ if (Test-Path -LiteralPath $CafeVenvRoot) {
 }
 
 if ($CafeRebuildVenv) {
+    $CafeRecordedMarker = (Get-Content -LiteralPath $CafeClusterMarker -Raw).Trim()
+    if ($CafeRecordedMarker -ne $CafeMarkerText) {
+        throw "Cluster ownership marker does not match before environment cleanup."
+    }
     $CafeResolvedVenv = [System.IO.Path]::GetFullPath($CafeVenvRoot)
     $CafeExpectedVenv = [System.IO.Path]::GetFullPath(
-        (Join-Path $CafeRepo 'backend\.venv')
+        (Join-Path $CafeExpectedClusterRoot 'artifacts\venv')
     )
     if (-not $CafeResolvedVenv.Equals(
         $CafeExpectedVenv,
@@ -1253,11 +1342,24 @@ if ($CafeRebuildVenv) {
 }
 
 if (-not (Test-Path -LiteralPath $CafeVenvPython -PathType Leaf)) {
+    New-Item -ItemType Directory -Path $CafeArtifactRoot -Force | Out-Null
     & $CafePythonExecutable @CafePythonLauncherArguments -m venv $CafeVenvRoot
     if ($LASTEXITCODE -ne 0) { throw 'Backend virtual-environment creation failed.' }
 }
 
-& $CafeVenvPython -m pip install --disable-pip-version-check -e "backend[test]"
+$env:COVERAGE_FILE = $CafeCoverageFile
+$env:PIP_CACHE_DIR = $CafePipCache
+$env:PYTHONPATH = Join-Path $CafeRepo 'backend\src'
+$env:PYTHONPYCACHEPREFIX = $CafePythonCache
+
+& $CafeVenvPython -m pip install `
+    --disable-pip-version-check --quiet `
+    --cache-dir $CafePipCache `
+    'Flask==3.1.3' `
+    'psycopg[binary]==3.2.13' `
+    'psycopg-pool==3.2.8' `
+    'pytest==9.1.1' `
+    'pytest-cov==7.1.0'
 if ($LASTEXITCODE -ne 0) { throw 'Backend test dependency installation failed.' }
 
 $CafePythonVersionLines = & $CafeVenvPython -c "import platform; print(platform.python_version())" 2>&1
@@ -1298,13 +1400,13 @@ tests do not require the database server:
 ```powershell
 Push-Location (Join-Path $CafeRepo 'backend')
 try {
-    & $CafeVenvPython -m pytest
+    & $CafeVenvPython -m pytest -o "cache_dir=$CafePytestCache"
     if ($LASTEXITCODE -ne 0) { throw 'Default backend tests failed.' }
 
-    & $CafeVenvPython -m pytest -m unit
+    & $CafeVenvPython -m pytest -o "cache_dir=$CafePytestCache" -m unit
     if ($LASTEXITCODE -ne 0) { throw 'Backend unit tests failed.' }
 
-    & $CafeVenvPython -m pytest -m api
+    & $CafeVenvPython -m pytest -o "cache_dir=$CafePytestCache" -m api
     if ($LASTEXITCODE -ne 0) { throw 'Backend API tests failed.' }
 }
 finally {
@@ -1347,7 +1449,7 @@ $env:CAFE_FAUSSE_TEST_PGDATA = $CafeDataDir
 
 Push-Location (Join-Path $CafeRepo 'backend')
 try {
-    & $CafeVenvPython -m pytest -m "integration and postgres"
+    & $CafeVenvPython -m pytest -o "cache_dir=$CafePytestCache" -m "integration and postgres"
     $CafeIntegrationExit = $LASTEXITCODE
 }
 finally {
@@ -1393,7 +1495,8 @@ $env:CAFE_FAUSSE_TEST_PGDATA = $CafeDataDir
 
 Push-Location (Join-Path $CafeRepo 'backend')
 try {
-    & $CafeVenvPython -m pytest -m "unit or api or integration" `
+    & $CafeVenvPython -m pytest -o "cache_dir=$CafePytestCache" `
+        -m "unit or api or integration" `
         --cov=cafe_fausse `
         --cov-report=term-missing
     $CafeCoverageExit = $LASTEXITCODE
@@ -1819,9 +1922,9 @@ safe to repeat and removes the objects created by this runbook:
 - the app login, legacy three-login test-manager login if present, and the
   three Cafe Fausse group roles;
 - the app and legacy test-manager entries from the external passfile;
-- the task-owned Flask process, PID file, Flask/PostgreSQL logs, virtual
-  environment, pytest/coverage caches, `__pycache__` directories, and editable
-  install metadata;
+- the task-owned Flask process, PID file, Flask/PostgreSQL logs, and temporary
+  `artifacts` directory containing the virtual environment, pytest/coverage
+  data, Python bytecode, and pip cache;
 - the entire task-owned `%TEMP%\CafeFausse-api04-local` directory, including
   `PGDATA` and its safety marker;
 - task-set process environment values, after which every captured variable is
@@ -1853,6 +1956,15 @@ if ($CafeDatabase -ne 'cafe_fausse_test_api04' -or
 if ($CafeAppLogin -ne 'cafe_fausse_api04_login' -or
     $CafeAdminLogin -ne 'cafe_fausse_admin') {
     throw 'Refusing cleanup for unexpected PostgreSQL login names.'
+}
+if (Test-Path -LiteralPath $CafeResolvedCleanupRoot) {
+    if (-not (Test-Path -LiteralPath $CafeClusterMarker -PathType Leaf)) {
+        throw "Refusing cleanup because the task root has no ownership marker: $CafeResolvedCleanupRoot"
+    }
+    $CafeCleanupMarkerText = (Get-Content -LiteralPath $CafeClusterMarker -Raw).Trim()
+    if ($CafeCleanupMarkerText -ne $CafeMarkerText) {
+        throw "Refusing cleanup because the task-root ownership marker differs."
+    }
 }
 
 # Stop only a recorded Flask listener/launcher pair whose interpreter,
@@ -2019,47 +2131,20 @@ if (Test-Path -LiteralPath $CafePassFile -PathType Leaf) {
     }
 }
 
-# Remove generated repository files only after validating every resolved path
-# is a child of backend/. Source and documentation files are never selected.
-$CafeBackendRoot = [System.IO.Path]::GetFullPath((Join-Path $CafeRepo 'backend'))
-$CafeBackendPrefix = $CafeBackendRoot.TrimEnd('\') + '\'
-function Remove-CafeFausseGeneratedPath {
-    param([Parameter(Mandatory)][string]$Path)
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return
-    }
-    $CafeGeneratedFullPath = [System.IO.Path]::GetFullPath($Path)
-    if (-not $CafeGeneratedFullPath.StartsWith(
-        $CafeBackendPrefix,
-        [System.StringComparison]::OrdinalIgnoreCase
-    )) {
-        throw "Refusing generated-file cleanup outside backend: $CafeGeneratedFullPath"
-    }
-    $CafeGeneratedItem = Get-Item -LiteralPath $CafeGeneratedFullPath -Force
-    if ($CafeGeneratedItem.PSIsContainer) {
-        Remove-Item -LiteralPath $CafeGeneratedFullPath -Recurse -Force
-    } else {
-        Remove-Item -LiteralPath $CafeGeneratedFullPath -Force
-    }
-}
-
-$CafeFixedGeneratedPaths = @(
-    $CafeVenvRoot,
-    (Join-Path $CafeBackendRoot '.pytest_cache'),
-    (Join-Path $CafeBackendRoot '.coverage')
+# Generated Python artifacts exist only under the marker-owned task root.
+# Never scan the repository for names that may belong to the developer.
+$CafeResolvedArtifactRoot = [System.IO.Path]::GetFullPath($CafeArtifactRoot)
+$CafeExpectedArtifactRoot = [System.IO.Path]::GetFullPath(
+    (Join-Path $CafeResolvedCleanupRoot 'artifacts')
 )
-foreach ($CafeGeneratedPath in $CafeFixedGeneratedPaths) {
-    Remove-CafeFausseGeneratedPath -Path $CafeGeneratedPath
+if (-not $CafeResolvedArtifactRoot.Equals(
+    $CafeExpectedArtifactRoot,
+    [System.StringComparison]::OrdinalIgnoreCase
+)) {
+    throw "Refusing cleanup for an unexpected artifact root: $CafeResolvedArtifactRoot"
 }
-
-$CafeDiscoveredGeneratedPaths = @(
-    Get-ChildItem -LiteralPath $CafeBackendRoot -Force -File -Filter '.coverage.*' -ErrorAction SilentlyContinue
-    Get-ChildItem -LiteralPath $CafeBackendRoot -Force -Directory -Recurse -Filter '__pycache__' -ErrorAction SilentlyContinue
-    Get-ChildItem -LiteralPath $CafeBackendRoot -Force -Directory -Recurse -Filter '*.egg-info' -ErrorAction SilentlyContinue
-)
-foreach ($CafeGeneratedItem in $CafeDiscoveredGeneratedPaths) {
-    Remove-CafeFausseGeneratedPath -Path $CafeGeneratedItem.FullName
+if (Test-Path -LiteralPath $CafeResolvedArtifactRoot) {
+    Remove-Item -LiteralPath $CafeResolvedArtifactRoot -Recurse -Force
 }
 
 # Remove task logs/PID files beneath the validated temporary cluster root.
@@ -2138,7 +2223,7 @@ Expected final output:
 
 ```text
 STEP 16 EVIDENCE: task-owned cluster directory is absent: C:\Users\<you>\AppData\Local\Temp\<session>\CafeFausse-api04-local
-STEP 16 EVIDENCE: restored prior presence/values for 13 process environment variables without displaying values.
+STEP 16 EVIDENCE: restored prior presence/values for 17 process environment variables without displaying values.
 STEP 16 PASS: test database, generated roles/files, app credential, processes, and entire task-owned cluster removed; external administrator credential retained when present.
 ```
 

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from flask import Flask
+from flask import Flask, g
 from werkzeug.exceptions import MethodNotAllowed, NotFound, RequestEntityTooLarge
 
-from .parsing import InvalidRequest
+from ..services.newsletter_status import NewsletterStatusIndeterminate
+from .parsing import InvalidRequest, ProtocolError
 from .responses import error_response
 
 
@@ -13,6 +14,24 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(InvalidRequest)
     def invalid_request(_error: InvalidRequest):
         return error_response("invalid_request", 400)
+
+    @app.errorhandler(ProtocolError)
+    def protocol_error(error: ProtocolError):
+        return error_response(error.code, error.status)
+
+    @app.errorhandler(NewsletterStatusIndeterminate)
+    def newsletter_status_indeterminate(error: NewsletterStatusIndeterminate):
+        g.cafe_fausse_pool_wait_ms = error.pool_wait_ms
+        g.cafe_fausse_database_ms = error.database_ms
+        safe_logger = app.extensions.get("cafe_fausse_logger")
+        if safe_logger is not None:
+            safe_logger.event(
+                "unexpected_error",
+                severity="WARNING",
+                operation="OP-03",
+                error_code="newsletter_status_indeterminate",
+            )
+        return error_response("newsletter_status_indeterminate", 503)
 
     @app.errorhandler(NotFound)
     def route_not_found(_error: NotFound):

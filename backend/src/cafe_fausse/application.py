@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import time
+from random import uniform
 from uuid import uuid4
 
 from flask import Flask, g, request
 from werkzeug.exceptions import MethodNotAllowed
 
 from .config import Settings
+from .db.customer_gateway import CustomerGateway
 from .db.health_gateway import PsycopgHealthGateway
 from .db.pool import create_pool
 from .dependencies import Dependencies
@@ -18,19 +20,47 @@ from .http.responses import apply_common_headers
 from .observability.logging import configure_safe_logging
 from .observability.timing import RequestTimer
 from .services.health import LivenessService, ReadinessService
+from .services.newsletter_status import NewsletterStatusService
+from .services.retry import RetryPolicy
 
 
-def _production_dependencies(settings: Settings) -> Dependencies:
+def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
     pool = create_pool(settings)
     try:
         pool.open(wait=False)
         gateway = PsycopgHealthGateway(pool)
+        customer_gateway = CustomerGateway(
+            pool,
+            acquire_timeout_ms=settings.pool_acquire_timeout_ms,
+        )
+        retry_policy = RetryPolicy(
+            settings.max_db_attempts,
+            settings.retry_base_delay_ms,
+            settings.retry_cap_delay_ms,
+            float(settings.retry_jitter_ratio),
+            settings.retry_min_remaining_ms,
+        )
+        newsletter_status_service = NewsletterStatusService(
+            customer_gateway,
+            deadline_ms=settings.read_deadline_ms,
+            retry_policy=retry_policy,
+            monotonic=time.monotonic,
+            sleeper=time.sleep,
+            uniform=uniform,
+            retry_observer=lambda attempt: safe_logger.event(
+                "retry",
+                operation="OP-03",
+                attempt=attempt,
+                retry_class="read_transient",
+            ),
+        )
         return Dependencies(
             settings=settings,
             liveness_service=LivenessService(),
             readiness_service=ReadinessService(gateway, settings.readiness_deadline_ms),
             monotonic=time.monotonic,
             correlation_id_factory=lambda: str(uuid4()),
+            newsletter_status_service=newsletter_status_service,
             resource=pool,
         )
     except Exception:
@@ -57,7 +87,7 @@ def create_app(settings: Settings | None = None, dependencies: Dependencies | No
     app.extensions["cafe_fausse_logger"] = logger
     try:
         if created_dependencies is None:
-            created_dependencies = _production_dependencies(validated_settings)
+            created_dependencies = _production_dependencies(validated_settings, logger)
         elif created_dependencies.settings != validated_settings:
             raise ValueError("Injected dependencies and settings must agree.")
         app.extensions["cafe_fausse"] = created_dependencies
@@ -82,6 +112,8 @@ def create_app(settings: Settings | None = None, dependencies: Dependencies | No
                 operation = "OP-06"
             elif route == "/api/v1/health/readiness":
                 operation = "OP-07"
+            elif route == "/api/v1/newsletter-status-queries":
+                operation = "OP-03"
             timer = getattr(g, "cafe_fausse_timer", None)
             logger.event(
                 "request_complete",

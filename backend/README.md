@@ -1,10 +1,10 @@
-# Cafe Fausse Flask backend through API-04
+# Cafe Fausse Flask backend through API-05
 
-This directory contains only API-04: the Flask application foundation, direct
-Psycopg connectivity, common JSON/error/logging policy, and OP-06/OP-07 health
-operations. PostgreSQL remains the business authority. There is no ORM, CORS,
-session/cookie feature, startup migration, React code, or production-server
-selection here.
+This directory contains the API-04 Flask/PostgreSQL foundation and API-05's
+read-only OP-03 customer identity/newsletter-status query. PostgreSQL remains
+the business authority. There is no newsletter mutation, customer mutation,
+reservation operation, ORM, CORS, session/cookie feature, startup migration,
+React code, or production-server selection here.
 
 ## Supported and initially verified platform
 
@@ -111,7 +111,58 @@ confirm PostgreSQL 18.3, the deployment login's role membership, `pgcrypto`,
 the approved rebuild/verification state, and connection availability. The API
 intentionally exposes none of those details and never repairs them.
 
+## Newsletter-status query (OP-03)
+
+`POST /api/v1/newsletter-status-queries` accepts only `first_name`, optional
+`middle_initial`, `last_name`, `email`, and `confirmation_email` in a UTF-8
+JSON object. It performs one bounded read-only customer projection and never
+creates or changes a customer, newsletter preference, or reservation.
+
+Example request for a fictitious identity:
+
+```json
+{"first_name":"Ada","middle_initial":"m.","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com"}
+```
+
+The exact success variants are:
+
+```json
+{"status":"not_found"}
+```
+
+```json
+{"status":"matched","subscribed":true}
+```
+
+An identity mismatch is a generic `409 customer_identity_conflict`; a field
+failure is `422 validation_failed` with ordered safe field entries. When the
+read outcome cannot be established, the endpoint returns
+`503 newsletter_status_indeterminate` with `retryable:true` and
+`outcome_unknown:false`. None of these responses exposes stored identity,
+contact, customer-ID, SQL, or database details.
+
 ## Tests
+
+The recommended complete API-05 workflow is self-contained and removes its
+marked disposable PostgreSQL cluster, roles, database, and every generated
+Python artifact in `%TEMP%\CafeFausse-api05-tests\artifacts`. Its virtual
+environment, pytest cache, coverage file, bytecode, and pip cache never use
+repository paths. A developer's existing `backend\.venv`, caches, coverage,
+bytecode, and package metadata are preserved exactly. Ownership requires both
+the exact task-root path and its exact API-05 port/database marker; a missing or
+mismatched marker causes refusal without deletion. Independent finalization
+phases attempt PostgreSQL/process cleanup, artifact cleanup, cluster-root
+cleanup, and exact environment restoration even when an earlier phase fails:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api05.ps1
+```
+
+See [TestInstructions.md](TestInstructions.md) for prerequisites, focused
+commands, ordinary and cleanup failure injection, interruption recovery,
+ownership-marker refusal rules, sentinel-preservation evidence, and cleanup
+verification.
 
 Required starting directory: the repository root. Run unit and Flask API tests
 (the default local selection) with:

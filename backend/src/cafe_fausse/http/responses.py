@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Iterable, Mapping
 
 from flask import Response
 
@@ -15,12 +15,34 @@ COMMON_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 
-ERRORS: dict[str, tuple[str, bool, bool]] = {
-    "invalid_request": ("The request is not valid for this endpoint.", False, False),
-    "route_not_found": ("The requested route was not found.", False, False),
-    "method_not_allowed": ("The request method is not allowed for this route.", False, False),
-    "service_not_ready": ("The service is not ready.", True, False),
-    "internal_error": ("An unexpected error occurred.", False, False),
+ERRORS: dict[str, tuple[int, str, bool, bool]] = {
+    "invalid_json": (400, "The request body is not valid JSON.", False, False),
+    "request_body_required": (400, "A JSON request body is required.", False, False),
+    "invalid_request": (400, "The request is not valid for this endpoint.", False, False),
+    "route_not_found": (404, "The requested route was not found.", False, False),
+    "method_not_allowed": (405, "The request method is not allowed for this route.", False, False),
+    "unsupported_media_type": (415, "This endpoint requires application/json.", False, False),
+    "validation_failed": (422, "One or more fields need attention.", False, False),
+    "customer_identity_conflict": (
+        409,
+        "The submitted identity details do not match.",
+        False,
+        False,
+    ),
+    "middle_initial_conflict": (
+        409,
+        "The submitted middle initial conflicts with the existing identity details.",
+        False,
+        False,
+    ),
+    "newsletter_status_indeterminate": (
+        503,
+        "Newsletter status could not be checked right now. You may retry, or continue a booking without changing it.",
+        True,
+        False,
+    ),
+    "service_not_ready": (503, "The service is not ready.", True, False),
+    "internal_error": (500, "An unexpected error occurred.", False, False),
 }
 
 
@@ -35,20 +57,44 @@ def json_response(payload: dict[str, Any], status: int = 200, headers: dict[str,
     return response
 
 
-def error_response(code: str, status: int, headers: dict[str, str] | None = None) -> Response:
-    message, retryable, outcome_unknown = ERRORS[code]
+def error_response(
+    code: str,
+    status: int | None = None,
+    headers: dict[str, str] | None = None,
+    *,
+    fields: Iterable[Mapping[str, str]] | None = None,
+) -> Response:
+    expected_status, message, retryable, outcome_unknown = ERRORS[code]
+    if status is not None and status != expected_status:
+        raise ValueError("public error status does not match its code")
+    error: dict[str, Any] = {
+        "code": code,
+        "message": message,
+        "retryable": retryable,
+        "outcome_unknown": outcome_unknown,
+    }
+    if fields is not None:
+        serialized_fields = [dict(field) for field in fields]
+        if code != "validation_failed" or not serialized_fields:
+            raise ValueError("only validation failures contain nonempty field errors")
+        error["fields"] = serialized_fields
     return json_response(
-        {
-            "error": {
-                "code": code,
-                "message": message,
-                "retryable": retryable,
-                "outcome_unknown": outcome_unknown,
-            }
-        },
-        status,
+        {"error": error},
+        expected_status,
         headers,
     )
+
+
+def validation_error_response(fields: Iterable[Mapping[str, str]]) -> Response:
+    return error_response("validation_failed", fields=fields)
+
+
+def projection_response(projection: Any) -> Response:
+    if projection.error_code is not None:
+        return error_response(projection.error_code, projection.status)
+    if projection.payload is None:
+        raise ValueError("successful response projection requires a payload")
+    return json_response(projection.payload, projection.status)
 
 
 def apply_common_headers(response: Response) -> Response:
