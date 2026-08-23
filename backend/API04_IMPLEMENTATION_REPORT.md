@@ -2,8 +2,9 @@
 
 ## Increment and status
 
-API-04 - Flask Foundation and PostgreSQL Connectivity is implemented and ready
-for human review. It is not approved, and API-05 has not begun.
+API-04 - Flask Foundation and PostgreSQL Connectivity was approved by Abdul on
+2026-08-22. API-05 has not begun and will not begin until Abdul provides its
+revised prompt.
 
 Phase 0 result: **READY**. The worktree was initially clean at committed Prompt
 13 (`ac6fb0e`), `main` matched `origin/main`, no nested `AGENTS.md` applied, and
@@ -13,12 +14,9 @@ later user-requested convenience documents were added, the database tree had no
 diff from the DB-07 approval commit.
 
 The actual API-04 review baseline remains Prompt 13 commit
-`ac6fb0e5e64a459e603155f1be0c0ef0724ee86f`. The committed API-04 range inspected
-for this report is `ac6fb0e..ef14969` (16 commits), ending at the user-pushed
-database-guide rename commit
-`ef149692266702747b135152c2c0138350376be5`. The final review comparison is the
-same baseline through the current working tree, including the uncommitted
-corrections recorded below. History was inspected, not rewritten.
+`ac6fb0e5e64a459e603155f1be0c0ef0724ee86f`. The approved committed API-04 range
+is `ac6fb0e..d5ea0e0` (17 commits), ending at the user-committed and pushed
+review-fixes commit `d5ea0e0`. History was inspected, not rewritten.
 
 ## Authorities and versions
 
@@ -397,15 +395,20 @@ provisioning, reset, seed, scripts, SQL tests, verification, approved reports,
 the manual demonstration, and the frozen PostgreSQL Contract are unchanged.
 No approved design artifact or frontend file differs. API-03 1.0.2, API-02
 1.0.1, API-01 1.0.1, DB-07 Hard Gate 1, and PostgreSQL Contract 1.0 remain
-compatible without revision. The current correction is uncommitted; no history
-rewrite, commit, push, or pull request was performed.
+compatible without revision. The review corrections were committed and pushed
+by the user as `d5ea0e0`; recording this approval changes only this report and
+does not rewrite history or introduce an assistant-created commit, push, or
+pull request.
 
 ## Approval checkpoint
 
-> API-04 - Flask Foundation and PostgreSQL Connectivity is complete and ready
-> for Abdul's review. Completion does not equal approval. API-04 approval is
-> required before API-05 may begin.
+> API-04 - Flask Foundation and PostgreSQL Connectivity was approved by Abdul
+> on 2026-08-22. The approval accepts the Flask foundation and PostgreSQL
+> connectivity implementation, readiness-classification and retry-deadline
+> corrections, test evidence, implementation report, and the user-requested
+> backend and database `TestInstructions.md` convenience runbooks.
 
-Approval would authorize only API-05 - Customer Identity and Newsletter-Status
-Query. It would not authorize API-06 through API-09, React, integration-phase
-work, deployment, or PostgreSQL changes.
+This approval authorizes only API-05 - Customer Identity and Newsletter-Status
+Query. It does not authorize API-06 through API-09, React, integration-phase
+work, deployment, or changes to the approved PostgreSQL layer. API-05 remains
+unstarted pending Abdul's revised prompt.
