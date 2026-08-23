@@ -59,8 +59,16 @@ def execute_with_retry(
         raise ValueError("retry attempts must be between one and three")
     deadline = monotonic() + deadline_ms / 1000
     attempt = 1
+    retry_guard_failure: AttemptFailure | None = None
     while True:
         remaining = max(0.0, deadline - monotonic())
+        if (
+            attempt > 1
+            and remaining * 1000 < policy.min_remaining_ms
+        ):
+            if retry_guard_failure is None:
+                raise RuntimeError("retry deadline guard lost its failure context")
+            raise retry_guard_failure
         try:
             return operation(attempt, remaining)
         except AttemptFailure as exc:
@@ -72,4 +80,8 @@ def execute_with_retry(
             if remaining_ms - delay_ms < policy.min_remaining_ms:
                 raise
             sleeper(delay_ms / 1000)
+            post_sleep_remaining_ms = (deadline - monotonic()) * 1000
+            if post_sleep_remaining_ms < policy.min_remaining_ms:
+                raise
+            retry_guard_failure = exc
             attempt += 1

@@ -4,6 +4,9 @@ This guide puts the Cafe Fausse database and backend test workflow in the
 order in which it should be performed. Run the commands from the repository
 root in Windows PowerShell unless a step says otherwise.
 
+This is a user-requested programmer-convenience runbook. It is not required by
+the SRS or rubric and is not an approved requirements or design authority.
+
 Working-directory contract: start Step 1 at the repository root and keep the
 same PowerShell session for Steps 2 through 16. Step 1 records that exact path
 in `$CafeRepo`. Later blocks either operate from that repository root or use

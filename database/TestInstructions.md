@@ -4,6 +4,9 @@ Use this runbook to validate DB-05, DB-06, and DB-07 in that order. It is
 written for programmers using PowerShell and the repository scripts; no manual
 database administration knowledge is assumed.
 
+This is a user-requested programmer-convenience runbook. It is not required by
+the SRS or rubric and is not an approved requirements or design authority.
+
 The commands are destructive only to the fixed `cafe_fausse` schema in the
 explicitly named nonproduction database. Never use a production or
 production-like database. The recommended database name is

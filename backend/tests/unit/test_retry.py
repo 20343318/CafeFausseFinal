@@ -68,3 +68,37 @@ def test_ut_api_retry_read_only_connection_loss_is_eligible():
         return "read-ok"
     assert execute_with_retry(operation, deadline_ms=5000, policy=POLICY, monotonic=clock, sleeper=clock.sleep, uniform=lambda *_: 1.0) == "read-ok"
     assert calls == 2
+
+
+@pytest.mark.unit
+def test_ut_api_retry_oversleep_prevents_next_attempt():
+    """UT-API-RETRY-004: actual post-sleep time can cancel a planned retry."""
+    clock = Clock()
+    calls = []
+    failure = AttemptFailure(
+        sqlstate="55P03",
+        safe_to_retry=True,
+        mutation_dispatched=True,
+    )
+
+    def operation(attempt, remaining):
+        calls.append((attempt, remaining))
+        raise failure
+
+    def oversleep(seconds):
+        clock.sleeps.append(seconds)
+        clock.now += seconds + 0.6
+
+    with pytest.raises(AttemptFailure) as raised:
+        execute_with_retry(
+            operation,
+            deadline_ms=1000,
+            policy=POLICY,
+            monotonic=clock,
+            sleeper=oversleep,
+            uniform=lambda *_: 1.0,
+        )
+
+    assert raised.value is failure
+    assert [attempt for attempt, _ in calls] == [1]
+    assert clock.sleeps == [0.025]

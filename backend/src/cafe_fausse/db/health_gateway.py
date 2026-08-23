@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from time import monotonic
 
+from psycopg import InterfaceError, OperationalError
 from psycopg_pool import ConnectionPool
 
 from ..services.health import ReadinessProbeFailure
@@ -42,6 +43,17 @@ SELECT
 """
 
 
+def _post_acquisition_failure_category(exc: Exception) -> ReadinessCategory:
+    sqlstate = getattr(exc, "sqlstate", None)
+    if (
+        isinstance(exc, (InterfaceError, OperationalError))
+        or isinstance(sqlstate, str)
+        and sqlstate.startswith("08")
+    ):
+        return ReadinessCategory.POOL
+    return ReadinessCategory.CONTRACT
+
+
 class PsycopgHealthGateway:
     def __init__(self, pool: ConnectionPool, clock=monotonic) -> None:
         self._pool = pool
@@ -52,6 +64,7 @@ class PsycopgHealthGateway:
         deadline = started + deadline_ms / 1000
         acquired = started
         database_started = started
+        connection_acquired = False
         try:
             remaining = deadline - self._clock()
             if remaining <= 0:
@@ -59,6 +72,7 @@ class PsycopgHealthGateway:
             with self._pool.connection(timeout=remaining) as connection:
                 acquired = self._clock()
                 database_started = acquired
+                connection_acquired = True
                 remaining_ms = int((deadline - self._clock()) * 1000)
                 if remaining_ms <= 0:
                     raise ReadinessProbeFailure(ReadinessCategory.POOL)
@@ -72,10 +86,17 @@ class PsycopgHealthGateway:
             raise
         except Exception as exc:
             now = self._clock()
+            category = (
+                _post_acquisition_failure_category(exc)
+                if connection_acquired
+                else ReadinessCategory.POOL
+            )
             raise ReadinessProbeFailure(
-                ReadinessCategory.POOL,
+                category,
                 round(max(0.0, acquired - started) * 1000, 3),
-                round(max(0.0, now - database_started) * 1000, 3) if acquired != started else 0.0,
+                round(max(0.0, now - database_started) * 1000, 3)
+                if connection_acquired
+                else 0.0,
             ) from exc
         finished = self._clock()
         pool_wait_ms = round(max(0.0, acquired - started) * 1000, 3)

@@ -8,8 +8,17 @@ for human review. It is not approved, and API-05 has not begun.
 Phase 0 result: **READY**. The worktree was initially clean at committed Prompt
 13 (`ac6fb0e`), `main` matched `origin/main`, no nested `AGENTS.md` applied, and
 `backend/` contained no prior work. The exact SRS/rubric PDFs and every required
-authority were present and readable. The database tree has no diff from the
-DB-07 approval commit.
+authority were present and readable. At that initial Phase 0 point, before the
+later user-requested convenience documents were added, the database tree had no
+diff from the DB-07 approval commit.
+
+The actual API-04 review baseline remains Prompt 13 commit
+`ac6fb0e5e64a459e603155f1be0c0ef0724ee86f`. The committed API-04 range inspected
+for this report is `ac6fb0e..ef14969` (16 commits), ending at the user-pushed
+database-guide rename commit
+`ef149692266702747b135152c2c0138350376be5`. The final review comparison is the
+same baseline through the current working tree, including the uncommitted
+corrections recorded below. History was inspected, not rewritten.
 
 ## Authorities and versions
 
@@ -57,13 +66,19 @@ resolved Setuptools **80.10.2** exactly.
 - `src/cafe_fausse/observability/`: monotonic timing and allowlist-only text/JSON
   logging with private UUIDv4 request correlation.
 - `tests/unit/`, `tests/api/`, `tests/integration/`: API-04 traceable executable
-  evidence.
+  evidence, including concrete readiness-gateway classification and
+  post-sleep retry-deadline tests.
 - `README.md`: safe Windows setup, run, configuration, lifecycle, and test guide.
 - `TestInstructions.md`: user-requested convenience guide for repeatable,
   guarded Windows PostgreSQL/backend testing, secure interactive or passfile
   credentials, verification evidence, and complete task-owned cleanup. It is
   not an SRS, rubric, approved design authority, or required Prompt 13/API-04
   deliverable.
+- `database/TestInstructions.md`: user-requested programmer-convenience runbook
+  for DB-05 through DB-07 testing. It is not an SRS/rubric deliverable or an
+  approved requirements/design authority.
+- `database/README.md`: links to the plural database convenience-runbook path
+  and labels its non-authoritative role.
 - root `.gitignore`: backend virtual environment and generated artifacts only.
 
 Exact changed paths:
@@ -99,11 +114,14 @@ backend/src/cafe_fausse/observability/redaction.py
 backend/src/cafe_fausse/observability/timing.py
 backend/tests/conftest.py
 backend/tests/unit/test_config.py
+backend/tests/unit/test_health_gateway.py
 backend/tests/unit/test_logging_and_lifecycle.py
 backend/tests/unit/test_pool.py
 backend/tests/unit/test_retry.py
 backend/tests/api/test_health.py
 backend/tests/integration/test_foundation_postgresql.py
+database/README.md
+database/TestInstructions.md
 ```
 
 There are no responsibility-preserving path deviations from API-03. Later
@@ -203,8 +221,9 @@ The correction pass remained within API-04 and made these corrections:
   `backend/TestInstructions.md`, repaired the backend README link, and proved
   that neither the retired backend singular path nor a singular reference
   remains under `backend/`;
-- retained the distinct approved programmer test guide under `database/`; it
-  is not a reference to the backend convenience guide and was not changed;
+- identified the separately added database test guide as another
+  user-requested programmer-convenience runbook, not an approved artifact;
+  later commits renamed it and the current correction repairs its README link;
 - made the required working directory explicit for every command block in the
   backend README and established one unambiguous repository-root contract for
   every numbered command block in the convenience test guide;
@@ -296,6 +315,59 @@ No Flask source or test behavior changed. No database migration, database
 object, approved design artifact, OP-01 through OP-05 capability, frontend
 file, API-05 work, commit, or push was introduced.
 
+### Readiness, retry, and review-history correction - 2026-08-22
+
+This final API-04 correction preserves the public API-02 response and all
+approved PostgreSQL behavior while repairing two internal classifications:
+
+- `PsycopgHealthGateway` now distinguishes failures before a connection is
+  acquired from failures during the read-only contract query. Pool acquisition,
+  connectivity, Psycopg interface failures, and SQLSTATE class `08` remain the
+  internal `pool` category. Post-acquisition SQL, privilege, missing-object,
+  query, decoding, and shape defects are `contract`. Explicit version mismatch
+  remains `platform`, and readable but invalid populations remain `foundation`.
+  Every category still produces the same public generic API-02
+  `503 service_not_ready` response.
+- `execute_with_retry` now reads the injected monotonic clock after every sleep
+  and again immediately before a later attempt. If actual remaining time is
+  below `CAFE_FAUSSE_RETRY_MIN_REMAINING_MS`, the original attempt failure is
+  raised without dispatching that attempt. The three-attempt ceiling, approved
+  SQLSTATEs, exponential delay/cap/jitter, rollback/certainty rules, mutation
+  dispatch, and outcome-unknown handling are unchanged.
+
+Concrete gateway tests cover acquisition failure, post-acquisition programming,
+undefined-table, insufficient-privilege, result-decoding, and connectivity
+failures. The retry test uses a deterministic sleeper that advances the clock
+625 ms for a requested 25 ms delay and proves attempt 2 is never invoked.
+
+The committed review range is `ac6fb0e..ef14969` (16 commits). It includes the
+user-requested `backend/TestInstructions.md` and
+`database/TestInstructions.md` programmer-convenience runbooks plus the
+`backend/README.md` and `database/README.md` links. Neither runbook is required
+by the SRS or rubric, and neither is an approved requirements/design authority.
+The database file is now plural and the database README points to that plural
+path. These documentation additions change no PostgreSQL schema, migration,
+function, procedure, privilege, seed, reset, transaction, or runtime behavior.
+
+Fresh correction verification used Windows Server 2025, standard GIL-enabled
+64-bit CPython 3.14.6, and a guarded disposable PostgreSQL 18.3 SCRAM cluster
+and `cafe_fausse_test_api04_correction` database. Generated one-run passwords
+were never displayed or stored in the repository. The cluster, passfile, and
+test database were removed and the prior process environment restored.
+
+- Targeted readiness/retry tests: 12 passed.
+- Complete unit suite: 58 passed, 17 deselected.
+- Complete Flask API suite: 10 passed, 65 deselected.
+- PostgreSQL integration suite: 7 passed, 68 deselected.
+- Combined coverage: 75 passed; 94% total statement/branch report.
+- Static/repository: `compileall`, PowerShell runbook parsing,
+  `git diff --check`, both retired-singular-path searches, approved PostgreSQL
+  executable-artifact comparison, and API-05/OP-01-through-OP-05 scope search
+  passed.
+- Complete review diff: generated from the Prompt 13 baseline through the
+  working tree at `%TEMP%\CafeFausse_API04_complete_review.diff` as UTF-8
+  without a byte-order mark, including the new untracked gateway test.
+
 ## Warnings, limitations, and exclusions
 
 The Windows `py` launcher was unavailable; direct CPython 3.14.6 execution was
@@ -313,15 +385,20 @@ all PostgreSQL contract decisions remain unchanged.
 
 ## Diff and compatibility assessment
 
-The intended final diff consists only of `.gitignore` plus API-04-owned files
-under `backend/`. API-03 1.0.2, API-02 1.0.1, API-01 1.0.1, DB-07 Hard Gate 1,
-and PostgreSQL Contract 1.0 remain compatible without revision.
+The complete review comparison begins at the committed Prompt 13 baseline
+`ac6fb0e5e64a459e603155f1be0c0ef0724ee86f`. It consists of `.gitignore`, the
+API-04 implementation/tests/documentation under `backend/`, and exactly two
+database documentation paths: `database/README.md` and the user-requested
+`database/TestInstructions.md`. The exact path catalogue appears under Files
+and responsibility mapping above.
 
-The correction-pass diff is limited to `backend/pyproject.toml`,
-`backend/README.md`, `backend/API04_IMPLEMENTATION_REPORT.md`, and the
-user-requested `backend/TestInstructions.md` convenience guide. No database
-migration, database artifact, approved design artifact, application behavior,
-test behavior, frontend file, or API-05 file changed.
+No database executable artifact differs from the baseline: migrations,
+provisioning, reset, seed, scripts, SQL tests, verification, approved reports,
+the manual demonstration, and the frozen PostgreSQL Contract are unchanged.
+No approved design artifact or frontend file differs. API-03 1.0.2, API-02
+1.0.1, API-01 1.0.1, DB-07 Hard Gate 1, and PostgreSQL Contract 1.0 remain
+compatible without revision. The current correction is uncommitted; no history
+rewrite, commit, push, or pull request was performed.
 
 ## Approval checkpoint
 
