@@ -6,8 +6,10 @@ param(
     [ValidateSet(
         'None',
         'Setup',
+        'AfterDatabaseCreationBeforeTagging',
         'AfterDatabaseCreation',
         'AfterRoleProvisioning',
+        'AfterChildCleanup',
         'AfterMigrationsBegin',
         'AfterDB05',
         'AfterDB06',
@@ -17,6 +19,11 @@ param(
     [string]$FailurePoint = 'None',
 
     [switch]$LeaveOwnedResourcesForRecovery,
+
+    [ValidateSet('None', 'FixedRole', 'FixedMembership', 'ProvisionerRole')]
+    [string]$TestOnlyOwnershipRace = 'None',
+
+    [string]$NonProductionClusterAuthorization,
 
     [ValidateSet('127.0.0.1')]
     [string]$HostName = '127.0.0.1',
@@ -33,8 +40,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:MarkerSchemaVersion = 1
+$script:RequiredNonProductionAuthorization = 'AUTHORIZED_NONPRODUCTION'
+$script:MarkerSchemaVersion = 2
 $script:OwnedDatabasePrefix = 'cafe_fausse_test_harness_'
+$script:ProvisionerRolePrefix = 'cafe_fausse_harness_'
 $script:OwnershipCommentPrefix = 'cafe_fausse_test_harness:'
 $script:GroupRoles = @('cafe_fausse_owner', 'cafe_fausse_app', 'cafe_fausse_test')
 $script:MembershipRoles = @('cafe_fausse_owner', 'cafe_fausse_test')
@@ -62,6 +71,8 @@ $script:SecurePassword = $null
 $script:ResolvedPsqlPath = $null
 $script:CreatedbPath = $null
 $script:DropdbPath = $null
+$script:DatabaseCreatedThisInvocation = $false
+$script:ProvisionerCreatedThisInvocation = $false
 
 function Write-HarnessMarker {
     param(
@@ -71,6 +82,13 @@ function Write-HarnessMarker {
     )
 
     Write-Host "[HARNESS:$Area`:$State] $Message"
+}
+
+function Assert-NonProductionAuthorization {
+    if ($NonProductionClusterAuthorization -cne $script:RequiredNonProductionAuthorization) {
+        throw "Explicit nonproduction-cluster authorization is required. Pass -NonProductionClusterAuthorization $($script:RequiredNonProductionAuthorization) only after confirming the selected PostgreSQL cluster is nonproduction."
+    }
+    Write-HarnessMarker 'AUTHORIZATION' 'PASS' 'Caller explicitly authorized the selected cluster as nonproduction.'
 }
 
 function Get-EnvironmentSnapshot {
@@ -231,25 +249,38 @@ SELECT pg_catalog.concat_ws('|',
     Write-HarnessMarker 'TARGET' 'PASS' 'Connected to the expected local PostgreSQL 18.3 server.'
 }
 
-function Test-DirectMembership {
+function Get-DirectMembershipEvidence {
     param(
         [Parameter(Mandatory = $true)][string]$GrantedRole,
         [Parameter(Mandatory = $true)][string]$MemberRole
     )
 
-    $result = Invoke-MaintenanceScalar @"
-SELECT EXISTS (
-    SELECT 1
+    return Invoke-MaintenanceScalar @"
+SELECT COALESCE(pg_catalog.string_agg(
+    pg_catalog.concat_ws('|', grantor_role.rolname,
+        membership.admin_option, membership.inherit_option,
+        membership.set_option), ',' ORDER BY grantor_role.rolname), '')
     FROM pg_catalog.pg_auth_members AS membership
     JOIN pg_catalog.pg_roles AS granted_role
       ON granted_role.oid = membership.roleid
     JOIN pg_catalog.pg_roles AS member_role
       ON member_role.oid = membership.member
+    JOIN pg_catalog.pg_roles AS grantor_role
+      ON grantor_role.oid = membership.grantor
     WHERE granted_role.rolname = '$GrantedRole'
       AND member_role.rolname = '$MemberRole'
-)::text;
+;
 "@
-    return $result -eq 'true'
+}
+
+function Test-DirectMembership {
+    param(
+        [Parameter(Mandatory = $true)][string]$GrantedRole,
+        [Parameter(Mandatory = $true)][string]$MemberRole
+    )
+    return -not [string]::IsNullOrEmpty(
+        (Get-DirectMembershipEvidence $GrantedRole $MemberRole)
+    )
 }
 
 function Test-RoleExists {
@@ -262,17 +293,10 @@ function Test-RoleExists {
 function New-MarkerData {
     $runId = [guid]::NewGuid().ToString('D').ToLowerInvariant()
     $compactRunId = $runId.Replace('-', '').Substring(0, 12)
-    $createdRoles = [System.Collections.Generic.List[string]]::new()
+    $plannedCreatedRoles = [System.Collections.Generic.List[string]]::new()
     foreach ($roleName in $script:GroupRoles) {
         if (-not (Test-RoleExists $roleName)) {
-            [void]$createdRoles.Add($roleName)
-        }
-    }
-
-    $addedMemberships = [System.Collections.Generic.List[string]]::new()
-    foreach ($roleName in $script:MembershipRoles) {
-        if (-not (Test-DirectMembership $roleName $AdministratorRole)) {
-            [void]$addedMemberships.Add($roleName)
+            [void]$plannedCreatedRoles.Add($roleName)
         }
     }
 
@@ -282,8 +306,8 @@ function New-MarkerData {
         databaseName = $script:OwnedDatabasePrefix + $compactRunId
         applicationName = 'cfh_' + $compactRunId
         administratorRole = $AdministratorRole
-        createdRoles = @($createdRoles)
-        addedMemberships = @($addedMemberships)
+        provisionerRole = $script:ProvisionerRolePrefix + $compactRunId
+        plannedCreatedRoles = @($plannedCreatedRoles)
     }
 }
 
@@ -338,7 +362,7 @@ function Read-ValidatedMarker {
 
     $expectedProperties = @(
         'schemaVersion', 'runId', 'databaseName', 'applicationName',
-        'administratorRole', 'createdRoles', 'addedMemberships'
+        'administratorRole', 'provisionerRole', 'plannedCreatedRoles'
     )
     $actualProperties = @($marker.PSObject.Properties.Name | Sort-Object)
     if (($actualProperties -join '|') -cne (($expectedProperties | Sort-Object) -join '|')) {
@@ -367,18 +391,17 @@ function Read-ValidatedMarker {
     if ([string]$marker.applicationName -cne ('cfh_' + $compactRunId)) {
         throw 'Ownership marker application name does not match its run identifier; no resource was deleted.'
     }
+    if ([string]$marker.provisionerRole -cne ($script:ProvisionerRolePrefix + $compactRunId)) {
+        throw 'Ownership marker provisioner role does not match its run identifier; no resource was deleted.'
+    }
     if ([string]$marker.administratorRole -notmatch '^[a-z_][a-z0-9_]{0,62}$') {
         throw 'Ownership marker administrator role is invalid; no resource was deleted.'
     }
 
-    $marker.createdRoles = ConvertTo-ValidatedStringArray `
-        -Value $marker.createdRoles `
+    $marker.plannedCreatedRoles = ConvertTo-ValidatedStringArray `
+        -Value $marker.plannedCreatedRoles `
         -Allowed $script:GroupRoles `
-        -PropertyName 'createdRoles'
-    $marker.addedMemberships = ConvertTo-ValidatedStringArray `
-        -Value $marker.addedMemberships `
-        -Allowed $script:MembershipRoles `
-        -PropertyName 'addedMemberships'
+        -PropertyName 'plannedCreatedRoles'
 
     $unexpectedFiles = @(Get-ChildItem -LiteralPath $script:TaskRoot -Force | Where-Object {
         $_.Name -notin @('ownership.json', 'provisioning-wrapper.sql')
@@ -439,6 +462,10 @@ function New-OwnedDatabase {
     if ($LASTEXITCODE -ne 0) {
         throw "createdb failed with exit code $LASTEXITCODE."
     }
+    $script:DatabaseCreatedThisInvocation = $true
+    if ($FailurePoint -eq 'AfterDatabaseCreationBeforeTagging') {
+        Throw-InjectedFailure $FailurePoint
+    }
     [void](Invoke-MaintenanceScalar (
         "COMMENT ON DATABASE $($Marker.databaseName) IS '$comment'; SELECT 'commented';"
     ))
@@ -459,6 +486,91 @@ WHERE database_row.datname = '$($Marker.databaseName)';
     Write-HarnessMarker 'DATABASE' 'PASS' "Created task-owned database $($Marker.databaseName)."
 }
 
+function New-OwnedProvisionerRole {
+    param([Parameter(Mandatory = $true)]$Marker)
+
+    $createdComment = "$($script:OwnershipCommentPrefix)$($Marker.runId):created"
+    $preexistingMembershipRoles = @($script:MembershipRoles | Where-Object {
+        $_ -notin @($Marker.plannedCreatedRoles)
+    })
+    $sql = @"
+BEGIN;
+DO `$provisioner`$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_catalog.pg_roles
+        WHERE rolname = '$($Marker.provisionerRole)'
+    ) THEN
+        RAISE EXCEPTION 'Provisioner-role ownership race detected';
+    END IF;
+    CREATE ROLE $($Marker.provisionerRole)
+        NOLOGIN NOSUPERUSER NOCREATEDB CREATEROLE NOINHERIT
+        NOREPLICATION NOBYPASSRLS;
+END
+`$provisioner`$;
+COMMENT ON ROLE $($Marker.provisionerRole) IS '$createdComment';
+GRANT $($Marker.provisionerRole) TO $($Marker.administratorRole)
+    WITH ADMIN FALSE, INHERIT TRUE, SET TRUE;
+"@
+    foreach ($roleName in $preexistingMembershipRoles) {
+        $sql += @"
+DO `$membership_race`$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_auth_members AS membership
+        JOIN pg_catalog.pg_roles AS granted_role
+          ON granted_role.oid = membership.roleid
+        JOIN pg_catalog.pg_roles AS member_role
+          ON member_role.oid = membership.member
+        WHERE granted_role.rolname = '$roleName'
+          AND member_role.rolname = '$($Marker.provisionerRole)'
+    ) THEN
+        RAISE EXCEPTION 'Provisioner-membership ownership race detected for $roleName';
+    END IF;
+END
+`$membership_race`$;
+GRANT $roleName TO $($Marker.provisionerRole)
+    WITH ADMIN TRUE, INHERIT FALSE, SET FALSE;
+"@
+    }
+    $sql += @"
+GRANT CONNECT, CREATE, TEMPORARY ON DATABASE $($Marker.databaseName)
+    TO $($Marker.provisionerRole) WITH GRANT OPTION;
+COMMIT;
+SELECT 'created';
+"@
+    [void](Invoke-MaintenanceScalar $sql)
+    $script:ProvisionerCreatedThisInvocation = $true
+
+    $roleEvidence = Invoke-MaintenanceScalar @"
+SELECT pg_catalog.concat_ws('|',
+    COALESCE(pg_catalog.shobj_description(role_row.oid, 'pg_authid'), ''),
+    role_row.rolcanlogin, role_row.rolsuper, role_row.rolcreatedb,
+    role_row.rolcreaterole, role_row.rolinherit,
+    role_row.rolreplication, role_row.rolbypassrls
+)
+FROM pg_catalog.pg_roles AS role_row
+WHERE role_row.rolname = '$($Marker.provisionerRole)';
+"@
+    if ($roleEvidence -cne "$createdComment|f|f|f|t|f|f|f") {
+        throw 'Task provisioner role does not have exact ownership evidence and attributes.'
+    }
+    $membershipEvidence = Get-DirectMembershipEvidence `
+        $Marker.provisionerRole $Marker.administratorRole
+    if ($membershipEvidence -cne "$($Marker.administratorRole)|f|t|t") {
+        throw 'Task provisioner administrator-membership evidence is not exact.'
+    }
+    foreach ($roleName in $preexistingMembershipRoles) {
+        $membershipEvidence = Get-DirectMembershipEvidence `
+            $roleName $Marker.provisionerRole
+        if ($membershipEvidence -cne "$($Marker.administratorRole)|t|f|f") {
+            throw "Run-owned provisioner membership in $roleName is not exact."
+        }
+    }
+    Write-HarnessMarker 'PROVISIONER' 'PASS' 'Created and tagged the run-specific provisioning role and direct membership.'
+}
+
 function Invoke-OwnedProvisioning {
     param([Parameter(Mandatory = $true)]$Marker)
 
@@ -468,12 +580,40 @@ function Invoke-OwnedProvisioning {
     $lines = [System.Collections.Generic.List[string]]::new()
     [void]$lines.Add('\set ON_ERROR_STOP on')
     [void]$lines.Add('BEGIN;')
-    [void]$lines.Add("\i '$provisioningPath'")
-    foreach ($roleName in $Marker.createdRoles) {
+    [void]$lines.Add("SET ROLE $($Marker.provisionerRole);")
+    [void]$lines.Add('DO $application_name$')
+    [void]$lines.Add('BEGIN')
+    [void]$lines.Add(
+        "    IF current_setting('application_name') <> '$($Marker.applicationName)' THEN"
+    )
+    [void]$lines.Add("        RAISE EXCEPTION 'Run-specific application name is missing during provisioning';")
+    [void]$lines.Add('    END IF;')
+    [void]$lines.Add('END')
+    [void]$lines.Add('$application_name$;')
+    foreach ($roleName in $Marker.plannedCreatedRoles) {
+        [void]$lines.Add('DO $owned_role$')
+        [void]$lines.Add('BEGIN')
+        [void]$lines.Add(
+            "    IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = '$roleName') THEN"
+        )
+        [void]$lines.Add(
+            "        RAISE EXCEPTION 'Role ownership race detected for $roleName';"
+        )
+        [void]$lines.Add('    END IF;')
+        [void]$lines.Add(
+            "    CREATE ROLE $roleName NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;"
+        )
+        [void]$lines.Add('END')
+        [void]$lines.Add('$owned_role$;')
         [void]$lines.Add(
             "COMMENT ON ROLE $roleName IS '$($script:OwnershipCommentPrefix)$($Marker.runId)';"
         )
     }
+    [void]$lines.Add("\i '$provisioningPath'")
+    [void]$lines.Add('RESET ROLE;')
+    [void]$lines.Add(
+        "COMMENT ON ROLE $($Marker.provisionerRole) IS '$($script:OwnershipCommentPrefix)$($Marker.runId):provisioned';"
+    )
     [void]$lines.Add('COMMIT;')
     [System.IO.File]::WriteAllLines(
         $script:ProvisioningWrapperPath,
@@ -506,11 +646,31 @@ WHERE rolname = '$roleName';
         }
     }
     foreach ($roleName in $script:MembershipRoles) {
-        if (-not (Test-DirectMembership $roleName $AdministratorRole)) {
-            throw "Required direct membership was not established: $roleName -> $AdministratorRole"
+        $membershipEvidence = Get-DirectMembershipEvidence `
+            $roleName $Marker.provisionerRole
+        $expectedMembershipEvidence = @(
+            "$($Marker.administratorRole)|t|f|f",
+            "$($Marker.provisionerRole)|f|f|t"
+        ) | Sort-Object
+        $expectedMembershipEvidence = $expectedMembershipEvidence -join ','
+        if ($membershipEvidence -cne $expectedMembershipEvidence) {
+            throw "Provisioner membership in $roleName does not have exact direct evidence."
         }
     }
-    foreach ($roleName in $Marker.createdRoles) {
+    $applicationMembershipEvidence = Get-DirectMembershipEvidence `
+        'cafe_fausse_app' $Marker.provisionerRole
+    $expectedApplicationMembershipEvidence = if (
+        'cafe_fausse_app' -in @($Marker.plannedCreatedRoles)
+    ) {
+        "$($Marker.administratorRole)|t|f|f"
+    }
+    else {
+        ''
+    }
+    if ($applicationMembershipEvidence -cne $expectedApplicationMembershipEvidence) {
+        throw 'Provisioner membership in cafe_fausse_app does not have exact direct evidence.'
+    }
+    foreach ($roleName in $Marker.plannedCreatedRoles) {
         $comment = Invoke-MaintenanceScalar @"
 SELECT COALESCE(pg_catalog.shobj_description(role_row.oid, 'pg_authid'), '')
 FROM pg_catalog.pg_roles AS role_row
@@ -519,6 +679,14 @@ WHERE role_row.rolname = '$roleName';
         if ($comment -cne ($script:OwnershipCommentPrefix + $Marker.runId)) {
             throw "Created role $roleName lacks matching ownership evidence."
         }
+    }
+    $provisionerComment = Invoke-MaintenanceScalar @"
+SELECT COALESCE(pg_catalog.shobj_description(role_row.oid, 'pg_authid'), '')
+FROM pg_catalog.pg_roles AS role_row
+WHERE role_row.rolname = '$($Marker.provisionerRole)';
+"@
+    if ($provisionerComment -cne "$($script:OwnershipCommentPrefix)$($Marker.runId):provisioned") {
+        throw 'Provisioner role lacks durable completed-provisioning evidence.'
     }
     Write-HarnessMarker 'ROLES' 'PASS' 'Provisioning completed with preexisting-state evidence retained.'
 }
@@ -628,6 +796,15 @@ function Invoke-RequestedExecution {
         Invoke-Db07Checkpoint
         Throw-InjectedFailure $FailurePoint
     }
+    if ($FailurePoint -eq 'AfterChildCleanup') {
+        & (Join-Path $PSScriptRoot 'rebuild.ps1') `
+            -ThroughMigration '009_reservation_privileges.sql'
+        & (Join-Path $PSScriptRoot 'concurrency_test.ps1') `
+            -Iterations 2 -RunChildCleanupSelfTest
+        & (Join-Path $PSScriptRoot 'performance_test.ps1') `
+            -Samples 10 -RunChildCleanupSelfTest
+        Throw-InjectedFailure $FailurePoint
+    }
     if ($FailurePoint -eq 'BeforeFinalBaseline') {
         & (Join-Path $PSScriptRoot 'rebuild.ps1') -SkipProvisioning
         & (Join-Path $PSScriptRoot 'performance_test.ps1') -Samples 10
@@ -648,7 +825,10 @@ function Invoke-RequestedExecution {
 }
 
 function Remove-OwnedResources {
-    param([Parameter(Mandatory = $true)]$Marker)
+    param(
+        [Parameter(Mandatory = $true)]$Marker,
+        [switch]$AllowUntaggedDatabaseCreatedThisInvocation
+    )
 
     if ([string]$Marker.administratorRole -cne $AdministratorRole) {
         throw 'Marker administrator does not match the requested administrator; no resource was deleted.'
@@ -667,10 +847,17 @@ SELECT COALESCE((
 
     if ($databaseEvidence -ne 'absent') {
         $expectedDatabaseEvidence = "$($Marker.administratorRole)|$expectedComment"
-        $incompleteCreationEvidence = "$($Marker.administratorRole)|"
+        $sameInvocationUntaggedEvidence = "$($Marker.administratorRole)|"
+        $mayRemoveSameInvocationUntaggedDatabase =
+            $AllowUntaggedDatabaseCreatedThisInvocation -and
+            $script:DatabaseCreatedThisInvocation -and
+            $databaseEvidence -ceq $sameInvocationUntaggedEvidence
         if ($databaseEvidence -cne $expectedDatabaseEvidence -and
-            $databaseEvidence -cne $incompleteCreationEvidence) {
+            -not $mayRemoveSameInvocationUntaggedDatabase) {
             throw 'Database ownership evidence does not match the marker; no resource was deleted.'
+        }
+        if ($mayRemoveSameInvocationUntaggedDatabase) {
+            Write-HarnessMarker 'OWNERSHIP-GAP' 'PASS' 'Same-invocation creation evidence authorizes cleanup of the not-yet-tagged database.'
         }
 
         $unexpectedSessions = Invoke-MaintenanceScalar @"
@@ -724,15 +911,74 @@ FROM (
         Write-HarnessMarker 'CLEANUP-DATABASE' 'PASS' 'Task-owned database was already absent.'
     }
 
-    foreach ($roleName in $Marker.addedMemberships) {
-        if (Test-DirectMembership $roleName $Marker.administratorRole) {
-            [void](Invoke-MaintenanceScalar (
-                "REVOKE $roleName FROM $($Marker.administratorRole); SELECT 'revoked';"
-            ))
+    $provisionerExists = Test-RoleExists $Marker.provisionerRole
+    if ($provisionerExists) {
+        $provisionerEvidence = Invoke-MaintenanceScalar @"
+SELECT pg_catalog.concat_ws('|',
+    COALESCE(pg_catalog.shobj_description(role_row.oid, 'pg_authid'), ''),
+    role_row.rolcanlogin, role_row.rolsuper, role_row.rolcreatedb,
+    role_row.rolcreaterole, role_row.rolinherit,
+    role_row.rolreplication, role_row.rolbypassrls
+)
+FROM pg_catalog.pg_roles AS role_row
+WHERE role_row.rolname = '$($Marker.provisionerRole)';
+"@
+        $createdProvisionerEvidence = "$expectedComment`:created|f|f|f|t|f|f|f"
+        $provisionedProvisionerEvidence = "$expectedComment`:provisioned|f|f|f|t|f|f|f"
+        if ($provisionerEvidence -cne $createdProvisionerEvidence -and
+            $provisionerEvidence -cne $provisionedProvisionerEvidence) {
+            throw 'Provisioner-role ownership evidence is absent or ambiguous; role deletion refused.'
         }
+
+        $membershipEvidence = Invoke-MaintenanceScalar @"
+SELECT COALESCE(pg_catalog.string_agg(
+    pg_catalog.concat_ws('|', granted_role.rolname, member_role.rolname,
+        grantor_role.rolname, membership.admin_option,
+        membership.inherit_option, membership.set_option),
+    ',' ORDER BY granted_role.rolname, member_role.rolname,
+        grantor_role.rolname), '')
+FROM pg_catalog.pg_auth_members AS membership
+JOIN pg_catalog.pg_roles AS granted_role ON granted_role.oid = membership.roleid
+JOIN pg_catalog.pg_roles AS member_role ON member_role.oid = membership.member
+JOIN pg_catalog.pg_roles AS grantor_role ON grantor_role.oid = membership.grantor
+WHERE '$($Marker.provisionerRole)' IN (
+    granted_role.rolname, member_role.rolname, grantor_role.rolname
+);
+"@
+        $expectedAdminEdge = "$($Marker.provisionerRole)|$($Marker.administratorRole)|$($Marker.administratorRole)|f|t|t"
+        $expectedProvisionedEdges = @(
+            "cafe_fausse_owner|$($Marker.provisionerRole)|$($Marker.provisionerRole)|f|f|t",
+            "cafe_fausse_owner|$($Marker.provisionerRole)|$($Marker.administratorRole)|t|f|f",
+            "cafe_fausse_test|$($Marker.provisionerRole)|$($Marker.provisionerRole)|f|f|t",
+            "cafe_fausse_test|$($Marker.provisionerRole)|$($Marker.administratorRole)|t|f|f",
+            $expectedAdminEdge
+        )
+        if ('cafe_fausse_app' -in @($Marker.plannedCreatedRoles)) {
+            $expectedProvisionedEdges += "cafe_fausse_app|$($Marker.provisionerRole)|$($Marker.administratorRole)|t|f|f"
+        }
+        $expectedProvisionedEdges = @($expectedProvisionedEdges | Sort-Object)
+        $expectedCreatedEdges = @($expectedAdminEdge)
+        foreach ($roleName in $script:MembershipRoles) {
+            if ($roleName -notin @($Marker.plannedCreatedRoles)) {
+                $expectedCreatedEdges += "$roleName|$($Marker.provisionerRole)|$($Marker.administratorRole)|t|f|f"
+            }
+        }
+        $expectedCreatedEdges = @($expectedCreatedEdges | Sort-Object) -join ','
+        $expectedMembershipEvidence = if ($provisionerEvidence -ceq $createdProvisionerEvidence) {
+            $expectedCreatedEdges
+        }
+        else {
+            $expectedProvisionedEdges -join ','
+        }
+        if ($membershipEvidence -cne $expectedMembershipEvidence) {
+            throw 'Provisioner direct-membership evidence is unexpected; role deletion refused.'
+        }
+        [void](Invoke-MaintenanceScalar (
+            "DROP ROLE $($Marker.provisionerRole); SELECT 'dropped';"
+        ))
     }
 
-    $createdRolesInDropOrder = @($Marker.createdRoles)
+    $createdRolesInDropOrder = @($Marker.plannedCreatedRoles)
     [array]::Reverse($createdRolesInDropOrder)
     foreach ($roleName in $createdRolesInDropOrder) {
         if (-not (Test-RoleExists $roleName)) {
@@ -752,19 +998,22 @@ FROM pg_catalog.pg_roles AS role_row
 WHERE role_row.rolname = '$roleName';
 "@
         if ($roleEvidence -cne "$expectedComment|f|f|f|f|f|f") {
-            throw "Role ownership evidence does not match for $roleName; role deletion refused."
+            Write-HarnessMarker 'CLEANUP-ROLE-PRESERVED' 'PASS' "Role $roleName was not tagged by this run and was preserved."
+            continue
         }
         [void](Invoke-MaintenanceScalar "DROP ROLE $roleName; SELECT 'dropped';")
     }
 
-    foreach ($roleName in $Marker.createdRoles) {
-        if (Test-RoleExists $roleName) {
-            throw "Task-created role still exists after cleanup: $roleName"
-        }
+    if (Test-RoleExists $Marker.provisionerRole) {
+        throw 'Task-created provisioner role still exists after cleanup.'
     }
-    foreach ($roleName in $Marker.addedMemberships) {
-        if (Test-DirectMembership $roleName $Marker.administratorRole) {
-            throw "Task-added membership still exists after cleanup: $roleName"
+    foreach ($roleName in $Marker.plannedCreatedRoles) {
+        if ((Test-RoleExists $roleName) -and
+            (Invoke-MaintenanceScalar @"
+SELECT COALESCE(pg_catalog.shobj_description(role_row.oid, 'pg_authid'), '')
+FROM pg_catalog.pg_roles AS role_row WHERE role_row.rolname = '$roleName';
+"@) -ceq $expectedComment) {
+            throw "Task-created role still exists after cleanup: $roleName"
         }
     }
     Write-HarnessMarker 'CLEANUP-ROLES' 'PASS' 'Task-created roles and memberships were removed; preexisting roles were preserved.'
@@ -801,6 +1050,7 @@ $skipResourceCleanup = $false
 
 try {
     Write-HarnessMarker 'SETUP' 'BEGIN' 'Validate prerequisites and recover any prior owned leftovers.'
+    Assert-NonProductionAuthorization
     Assert-TaskRoot
     Resolve-PostgreSqlTools
     Initialize-CredentialSource
@@ -808,6 +1058,7 @@ try {
 
     if (Test-Path -LiteralPath $script:MarkerPath -PathType Leaf) {
         $recoveryMarker = Read-ValidatedMarker
+        $env:PGAPPNAME = $recoveryMarker.applicationName
         Write-HarnessMarker 'RECOVERY' 'BEGIN' "Recover prior run $($recoveryMarker.runId)."
         Remove-OwnedResources $recoveryMarker
         Write-HarnessMarker 'RECOVERY' 'PASS' 'Prior marker-proven leftovers were removed.'
@@ -823,6 +1074,7 @@ try {
 
     $activeMarker = New-MarkerData
     Write-NewMarker $activeMarker
+    $env:PGAPPNAME = $activeMarker.applicationName
     if ($FailurePoint -eq 'Setup') {
         Throw-InjectedFailure $FailurePoint
     }
@@ -832,7 +1084,30 @@ try {
         Throw-InjectedFailure $FailurePoint
     }
 
+    if ($TestOnlyOwnershipRace -eq 'ProvisionerRole') {
+        [void](Invoke-MaintenanceScalar (
+            "CREATE ROLE $($activeMarker.provisionerRole) NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS; SELECT 'race-created';"
+        ))
+    }
+    New-OwnedProvisionerRole $activeMarker
+
+    if ($TestOnlyOwnershipRace -eq 'FixedRole') {
+        $raceRole = @($activeMarker.plannedCreatedRoles | Select-Object -First 1)
+        if ($raceRole.Count -ne 1) {
+            throw 'The fixed-role race fixture requires at least one initially absent fixed role.'
+        }
+        [void](Invoke-MaintenanceScalar (
+            "CREATE ROLE $($raceRole[0]) NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS; SELECT 'race-created';"
+        ))
+    }
+
     Invoke-OwnedProvisioning $activeMarker
+    if ($TestOnlyOwnershipRace -eq 'FixedMembership') {
+        [void](Invoke-MaintenanceScalar (
+            "GRANT cafe_fausse_owner TO $AdministratorRole WITH ADMIN FALSE, INHERIT TRUE, SET TRUE; SELECT 'race-granted';"
+        ))
+        throw '[HARNESS:TEST-RACE:FAIL] Controlled fixed-membership ambiguity after provisioning.'
+    }
     if ($FailurePoint -eq 'AfterRoleProvisioning') {
         Throw-InjectedFailure $FailurePoint
     }
@@ -854,7 +1129,8 @@ finally {
     if ($null -ne $activeMarker -and -not $skipResourceCleanup) {
         try {
             Write-HarnessMarker 'CLEANUP' 'BEGIN' 'Remove only marker-proven task resources.'
-            Remove-OwnedResources $activeMarker
+            Remove-OwnedResources $activeMarker `
+                -AllowUntaggedDatabaseCreatedThisInvocation:$script:DatabaseCreatedThisInvocation
         }
         catch {
             $cleanupError = $_

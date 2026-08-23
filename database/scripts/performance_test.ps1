@@ -1,6 +1,8 @@
 param(
     [ValidateRange(10, 100)]
-    [int]$Samples = 20
+    [int]$Samples = 20,
+
+    [switch]$RunChildCleanupSelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -16,6 +18,77 @@ function Invoke-ScalarSql {
     $output = & $psqlPath -X -qAt -v ON_ERROR_STOP=1 -c $Sql
     if ($LASTEXITCODE -ne 0) { throw 'Performance measurement SQL failed.' }
     return (($output | Select-Object -Last 1) -as [string]).Trim()
+}
+
+function Close-PsqlChildBounded {
+    param([Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process)
+
+    $cleanupMessages = [System.Collections.Generic.List[string]]::new()
+    try {
+        if (-not $Process.HasExited) {
+            try {
+                if ($Process.StartInfo.RedirectStandardInput) {
+                    $Process.StandardInput.WriteLine('\q')
+                    $Process.StandardInput.Flush()
+                }
+            }
+            catch {
+                if (-not $Process.HasExited) {
+                    [void]$cleanupMessages.Add("Graceful-exit request failed: $($_.Exception.Message)")
+                }
+            }
+        }
+        if (-not $Process.HasExited -and -not $Process.WaitForExit(3000)) {
+            try { $Process.Kill() }
+            catch { [void]$cleanupMessages.Add("Kill failed: $($_.Exception.Message)") }
+            if (-not $Process.HasExited -and -not $Process.WaitForExit(3000)) {
+                [void]$cleanupMessages.Add('Process did not exit within three seconds after kill.')
+            }
+        }
+        if (-not $Process.HasExited) {
+            [void]$cleanupMessages.Add('Process is still running after bounded cleanup.')
+        }
+    }
+    finally {
+        $Process.Dispose()
+    }
+    if ($cleanupMessages.Count -ne 0) {
+        throw ($cleanupMessages -join ' ')
+    }
+}
+
+function Close-PsqlChildrenBounded {
+    param([System.Diagnostics.Process[]]$Processes)
+
+    $failures = [System.Collections.Generic.List[string]]::new()
+    foreach ($process in @($Processes)) {
+        if ($null -eq $process) { continue }
+        try { Close-PsqlChildBounded $process }
+        catch { [void]$failures.Add($_.Exception.Message) }
+    }
+    if ($failures.Count -ne 0) { throw ($failures -join ' ') }
+}
+
+function Invoke-ChildCleanupSelfTest {
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $psqlPath
+    $startInfo.Arguments = '-X -qAt -v ON_ERROR_STOP=1 -c "SELECT pg_sleep(60);"'
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+    $startInfo.EnvironmentVariables['PGAPPNAME'] = "$($env:PGAPPNAME):performance_cleanup_hang"
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw 'Unable to start the hanging-child fixture.' }
+    Start-Sleep -Milliseconds 250
+    if ($process.HasExited) {
+        $process.Dispose()
+        throw 'The hanging-child fixture exited before cleanup was exercised.'
+    }
+    Close-PsqlChildBounded $process
+    Write-Host 'DB-07 performance hanging-child bounded termination: PASS'
 }
 
 function Reset-Reservations {
@@ -84,6 +157,8 @@ function Measure-ConcurrentSamples {
         Reset-Reservations
         $processes = [System.Collections.Generic.List[System.Diagnostics.Process]]::new()
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $primaryError = $null
+        $cleanupError = $null
         try {
             for ($submission = 1; $submission -le $SubmissionCount; $submission++) {
                 $email = "perf-concurrent-$SubmissionCount-$sample-$submission@example.com"
@@ -92,6 +167,7 @@ function Measure-ConcurrentSamples {
                 $startInfo.FileName = $psqlPath
                 $startInfo.Arguments = "-X -qAt -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -c `"$sql`""
                 $startInfo.UseShellExecute = $false
+                $startInfo.RedirectStandardInput = $true
                 $startInfo.RedirectStandardOutput = $true
                 $startInfo.RedirectStandardError = $true
                 $startInfo.CreateNoWindow = $true
@@ -104,7 +180,6 @@ function Measure-ConcurrentSamples {
             $retryableCount = 0
             foreach ($process in $processes) {
                 if (-not $process.WaitForExit(20000)) {
-                    $process.Kill()
                     throw 'Concurrent measurement exceeded its 20-second bound.'
                 }
                 $individualMeasurements.Add(
@@ -124,15 +199,18 @@ function Measure-ConcurrentSamples {
             }
             $stopwatch.Stop()
         }
+        catch { $primaryError = $_ }
         finally {
-            foreach ($process in $processes) {
-                if (-not $process.HasExited) {
-                    $process.Kill()
-                    [void]$process.WaitForExit(3000)
-                }
-                $process.Dispose()
-            }
+            try { Close-PsqlChildrenBounded $processes.ToArray() }
+            catch { $cleanupError = $_ }
         }
+        if ($null -ne $primaryError) {
+            if ($null -ne $cleanupError) {
+                throw "Concurrent measurement primary failure: $($primaryError.Exception.Message) Cleanup failure: $($cleanupError.Exception.Message)"
+            }
+            throw $primaryError
+        }
+        if ($null -ne $cleanupError) { throw $cleanupError }
         if ($bookedCount + $retryableCount -ne $SubmissionCount -or $bookedCount -lt 1) {
             throw 'Concurrent measurement produced an invalid outcome count.'
         }
@@ -174,6 +252,11 @@ function Measure-ConcurrentSamples {
             RetryableOutcomes = $totalRetryable
         }
     )
+}
+
+if ($RunChildCleanupSelfTest) {
+    Invoke-ChildCleanupSelfTest
+    return
 }
 
 $slotText = Invoke-ScalarSql @"

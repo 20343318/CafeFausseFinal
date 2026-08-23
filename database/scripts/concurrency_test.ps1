@@ -1,6 +1,8 @@
 param(
     [ValidateRange(2, 20)]
-    [int]$Iterations = 3
+    [int]$Iterations = 3,
+
+    [switch]$RunChildCleanupSelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -107,6 +109,95 @@ function Send-SessionSql {
     )
     $Session.StandardInput.WriteLine($Sql)
     $Session.StandardInput.Flush()
+}
+
+function Close-PsqlChildBounded {
+    param([Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process)
+
+    $cleanupMessages = [System.Collections.Generic.List[string]]::new()
+    try {
+        if (-not $Process.HasExited) {
+            try {
+                if ($Process.StartInfo.RedirectStandardInput) {
+                    $Process.StandardInput.WriteLine('\q')
+                    $Process.StandardInput.Flush()
+                }
+            }
+            catch {
+                if (-not $Process.HasExited) {
+                    [void]$cleanupMessages.Add("Graceful-exit request failed: $($_.Exception.Message)")
+                }
+            }
+        }
+        if (-not $Process.HasExited -and -not $Process.WaitForExit(3000)) {
+            try { $Process.Kill() }
+            catch { [void]$cleanupMessages.Add("Kill failed: $($_.Exception.Message)") }
+            if (-not $Process.HasExited -and -not $Process.WaitForExit(3000)) {
+                [void]$cleanupMessages.Add('Process did not exit within three seconds after kill.')
+            }
+        }
+        if (-not $Process.HasExited) {
+            [void]$cleanupMessages.Add('Process is still running after bounded cleanup.')
+        }
+    }
+    finally {
+        $Process.Dispose()
+    }
+    if ($cleanupMessages.Count -ne 0) {
+        throw ($cleanupMessages -join ' ')
+    }
+}
+
+function Close-PsqlChildrenBounded {
+    param([System.Diagnostics.Process[]]$Processes)
+
+    $failures = [System.Collections.Generic.List[string]]::new()
+    foreach ($process in @($Processes)) {
+        if ($null -eq $process) { continue }
+        try { Close-PsqlChildBounded $process }
+        catch { [void]$failures.Add($_.Exception.Message) }
+    }
+    if ($failures.Count -ne 0) {
+        throw ($failures -join ' ')
+    }
+}
+
+function Complete-PsqlProtectedBlock {
+    param(
+        $PrimaryError,
+        $CleanupError,
+        [Parameter(Mandatory = $true)][string]$Context
+    )
+    if ($null -ne $PrimaryError) {
+        if ($null -ne $CleanupError) {
+            throw "$Context primary failure: $($PrimaryError.Exception.Message) Cleanup failure: $($CleanupError.Exception.Message)"
+        }
+        throw $PrimaryError
+    }
+    if ($null -ne $CleanupError) { throw $CleanupError }
+}
+
+function Invoke-ChildCleanupSelfTest {
+    $applicationName = Get-EffectiveApplicationName 'db06_cleanup_hang'
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $psqlPath
+    $startInfo.Arguments = '-X -qAt -v ON_ERROR_STOP=1 -c "SELECT pg_sleep(60);"'
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+    $startInfo.EnvironmentVariables['PGAPPNAME'] = $applicationName
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw 'Unable to start the hanging-child fixture.' }
+    Start-Sleep -Milliseconds 250
+    if ($process.HasExited) {
+        $process.Dispose()
+        throw 'The hanging-child fixture exited before cleanup was exercised.'
+    }
+    Close-PsqlChildBounded $process
+    Write-Host 'DB-06 hanging-child bounded termination: PASS'
 }
 
 function Wait-SessionMarker {
@@ -246,6 +337,8 @@ function Invoke-LockedPair {
         $appB = "db06_B_${safeName}_$iteration"
         $sessionA = New-PsqlSession $appA
         $sessionB = New-PsqlSession $appB
+        $primaryError = $null
+        $cleanupError = $null
         try {
             Send-SessionSql $sessionA "BEGIN; SET LOCAL ROLE cafe_fausse_test; $SessionASql; \echo A_READY"
             $aLines = Wait-SessionMarker $sessionA 'A_READY'
@@ -267,24 +360,22 @@ function Invoke-LockedPair {
                 throw "$Name iteration ${iteration}: session B result '$bText' did not match '$ExpectedB'."
             }
         }
+        catch { $primaryError = $_ }
         finally {
-            foreach ($session in @($sessionA, $sessionB)) {
-                if ($null -ne $session -and -not $session.HasExited) {
-                    Send-SessionSql $session '\q'
-                    if (-not $session.WaitForExit(3000)) {
-                        $session.Kill()
-                    }
-                }
-                if ($null -ne $session) {
-                    $session.Dispose()
-                }
-            }
+            try { Close-PsqlChildrenBounded @($sessionA, $sessionB) }
+            catch { $cleanupError = $_ }
         }
+        Complete-PsqlProtectedBlock $primaryError $cleanupError "$Name iteration $iteration"
 
         Assert-CommonCommittedState $FinalPredicate
         $script:ScenarioCount++
         Write-Host "$Name iteration $iteration`: PASS"
     }
+}
+
+if ($RunChildCleanupSelfTest) {
+    Invoke-ChildCleanupSelfTest
+    return
 }
 
 $slot = Get-TestSlot
@@ -390,6 +481,8 @@ Invoke-LockedPair 'booking newsletter versus independent preference' $newsletter
 Reset-ScenarioState
 $timeoutA = New-PsqlSession 'db06_timeout_holder'
 $timeoutB = New-PsqlSession 'db06_timeout_waiter'
+$primaryError = $null
+$cleanupError = $null
 try {
     Send-SessionSql $timeoutA "BEGIN; SET LOCAL ROLE cafe_fausse_test; $singleA; \echo TIMEOUT_A_READY"
     [void](Wait-SessionMarker $timeoutA 'TIMEOUT_A_READY')
@@ -409,15 +502,12 @@ try {
     [void](Wait-SessionMarker $timeoutA 'TIMEOUT_A_COMMITTED')
     $lockHoldStopwatch.Stop()
 }
+catch { $primaryError = $_ }
 finally {
-    foreach ($session in @($timeoutA, $timeoutB)) {
-        if (-not $session.HasExited) {
-            Send-SessionSql $session '\q'
-            if (-not $session.WaitForExit(3000)) { $session.Kill() }
-        }
-        $session.Dispose()
-    }
+    try { Close-PsqlChildrenBounded @($timeoutA, $timeoutB) }
+    catch { $cleanupError = $_ }
 }
+Complete-PsqlProtectedBlock $primaryError $cleanupError 'bounded lock-timeout scenario'
 Assert-CommonCommittedState "(SELECT count(*) = 1 FROM cafe_fausse.customers) AND (SELECT count(*) = 1 FROM cafe_fausse.reservations)"
 $script:ScenarioCount++
 Write-Host 'bounded restaurant-lock timeout and retryable classification: PASS'
@@ -435,6 +525,8 @@ VALUES ('Deadlock','A','deadlock-a@example.com'), ('Deadlock','B','deadlock-b@ex
 "@)
 $deadlockA = New-PsqlSession 'db06_deadlock_a'
 $deadlockB = New-PsqlSession 'db06_deadlock_b'
+$primaryError = $null
+$cleanupError = $null
 try {
     Send-SessionSql $deadlockA "\set VERBOSITY verbose`nBEGIN; SET LOCAL ROLE cafe_fausse_test; SELECT customer_id FROM cafe_fausse.customers WHERE email='deadlock-a@example.com' FOR UPDATE; \echo DEADLOCK_A_FIRST"
     Send-SessionSql $deadlockB "\set VERBOSITY verbose`nBEGIN; SET LOCAL ROLE cafe_fausse_test; SELECT customer_id FROM cafe_fausse.customers WHERE email='deadlock-b@example.com' FOR UPDATE; \echo DEADLOCK_B_FIRST"
@@ -455,15 +547,12 @@ try {
         throw "Expected retryable SQLSTATE 40P01, received: $deadlockError"
     }
 }
+catch { $primaryError = $_ }
 finally {
-    foreach ($session in @($deadlockA, $deadlockB)) {
-        if (-not $session.HasExited) {
-            Send-SessionSql $session 'ROLLBACK; \q'
-            if (-not $session.WaitForExit(3000)) { $session.Kill() }
-        }
-        $session.Dispose()
-    }
+    try { Close-PsqlChildrenBounded @($deadlockA, $deadlockB) }
+    catch { $cleanupError = $_ }
 }
+Complete-PsqlProtectedBlock $primaryError $cleanupError 'forced-deadlock scenario'
 if ((Invoke-ScalarSql "SELECT (count(*) = 2)::text FROM cafe_fausse.customers WHERE email LIKE 'deadlock-%';") -ne 'true') {
     throw 'Deadlock test changed committed customer state.'
 }
@@ -473,17 +562,18 @@ Write-Host 'forced deadlock and retryable SQLSTATE preservation: PASS'
 # Lost response simulation: commit, discard the first returned row, reconnect, and retry normally.
 Reset-ScenarioState
 $lostSession = New-PsqlSession 'db06_lost_response'
+$primaryError = $null
+$cleanupError = $null
 try {
     Send-SessionSql $lostSession "BEGIN; SET LOCAL ROLE cafe_fausse_test; $exactA; COMMIT; \echo COMMITTED_WITH_RESPONSE_DISCARDED"
     [void](Wait-SessionMarker $lostSession 'COMMITTED_WITH_RESPONSE_DISCARDED')
 }
+catch { $primaryError = $_ }
 finally {
-    if (-not $lostSession.HasExited) {
-        Send-SessionSql $lostSession '\q'
-        [void]$lostSession.WaitForExit(3000)
-    }
-    $lostSession.Dispose()
+    try { Close-PsqlChildrenBounded @($lostSession) }
+    catch { $cleanupError = $_ }
 }
+Complete-PsqlProtectedBlock $primaryError $cleanupError 'lost-response scenario'
 $retryOutcome = Invoke-ScalarSql "SET ROLE cafe_fausse_test; $exactB; RESET ROLE;"
 if ($retryOutcome -notmatch '^exact_retry\|') {
     throw "Lost-response resubmission returned '$retryOutcome'."

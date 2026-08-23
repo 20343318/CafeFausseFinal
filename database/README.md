@@ -1,10 +1,9 @@
 # Cafe Fausse PostgreSQL layer through DB-07
 
-DB-07 was explicitly approved by Abdul at Hard Gate 1 on 2026-08-20. The next
-authorized increment is API-01, a design-only backend operation inventory, but
-it must not begin without a separate instruction. Flask implementation,
-REST-contract design, API-02 or later increments, React work, and changes to the
-approved PostgreSQL Contract for Flask v1.0 remain unauthorized.
+DB-07 was explicitly approved by Abdul at Hard Gate 1 on 2026-08-20. API-01
+through API-04 were subsequently approved. This database documentation does
+not authorize any API increment, and the optional programmer-harness
+correction does not authorize API-05.
 
 This directory preserves the approved DB-05 PostgreSQL foundation and extends
 it with DB-06 reservation persistence, provisional availability, authoritative
@@ -82,8 +81,8 @@ shell or use a properly secured PostgreSQL password file outside the repo.
 | `POSTGRESQL_CONTRACT_FOR_FLASK.md` | Freezes the versioned database-facing contract for later approved Flask design work. |
 | `DB07_MANUAL_DEMONSTRATION.md` | Gives a repeatable PostgreSQL-only Hard Gate 1 demonstration. |
 | `TestInstructions.md` | User-requested programmer-convenience runbook for isolated, restartable, ordered DB-05 through DB-07 validation; not a requirements or design authority. |
-| `scripts/programmer_test.ps1` | Creates a uniquely named task-owned test database, runs the existing gate or a diagnostic checkpoint, and restores the caller environment while cleaning only ownership-proven resources. |
-| `scripts/programmer_test_safety.ps1` | Injects controlled failures and validates recovery, fail-safe ownership refusal, preservation, two-run repeatability, and absence of generated artifacts. |
+| `scripts/programmer_test.ps1` | After explicit operator authorization of the cluster as nonproduction, creates a uniquely named ownership-tagged test database and run-specific provisioner role, runs the existing gate or a diagnostic checkpoint, and restores the caller environment while cleaning only proven resources. |
+| `scripts/programmer_test_safety.ps1` | Injects controlled authorization, ownership-gap, race, child-process, and execution failures and validates recovery, fail-safe refusal, preservation, two-run repeatability, and artifact absence. |
 
 Migrations are intentionally psql-native and contain no migration metadata
 table, because DB-05 does not authorize an additional persistent table. A
@@ -129,12 +128,16 @@ For the complete programmer-oriented setup and ordered validation workflow,
 including secure password entry, standardized validation markers, staged
 diagnostics, recovery, and cleanup, follow
 [`TestInstructions.md`](TestInstructions.md). The convenience harness generates
-a dedicated `cafe_fausse_test_harness_<random-id>` database per run, requires
-the exact local PostgreSQL 18.3 target, records nonsecret ownership evidence
-before resource creation, and preserves all preexisting databases, roles,
-memberships, and caller environment values. The existing `scripts/test.ps1`
-remains the normative automated DB-05-through-DB-07 gate invoked by the
-convenience harness.
+a dedicated `cafe_fausse_test_harness_<random-id>` database per run. It
+requires an explicit caller-supplied authorization asserting that the selected
+cluster is nonproduction; localhost, a port, and the PostgreSQL version do not
+prove that status. The harness also verifies the exact local PostgreSQL 18.3
+target, records nonsecret durable ownership evidence before resource creation,
+refuses ambiguous deletion, and preserves all preexisting databases, roles,
+direct membership options, and caller environment values. The existing
+`scripts/test.ps1` remains the normative automated DB-05-through-DB-07 gate
+invoked by the optional convenience harness; neither file is an SRS/rubric
+deliverable or API authorization.
 
 Read-only verification of an existing DB-07 build:
 
