@@ -201,7 +201,7 @@ function Invoke-MaintenanceScalar {
     $output = & $script:ResolvedPsqlPath `
         -X -qAt -v ON_ERROR_STOP=1 `
         -h $HostName -p $Port -U $AdministratorRole -d postgres `
-        -c $Sql 2>&1
+        -c $Sql
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         throw "PostgreSQL maintenance query failed with exit code $exitCode."
@@ -218,9 +218,9 @@ function Assert-MaintenanceTarget {
 SELECT pg_catalog.concat_ws('|',
     pg_catalog.current_setting('server_version_num'),
     pg_catalog.current_database(),
-    COALESCE(pg_catalog.inet_server_addr()::text, ''),
+    COALESCE(pg_catalog.host(pg_catalog.inet_server_addr()), ''),
     pg_catalog.inet_server_port()::text,
-    pg_catalog.current_user,
+    current_user,
     pg_catalog.pg_is_in_recovery()::text
 );
 "@
@@ -485,7 +485,7 @@ function Invoke-OwnedProvisioning {
         -X -v ON_ERROR_STOP=1 `
         -h $HostName -p $Port -U $AdministratorRole `
         -d $Marker.databaseName `
-        -f $script:ProvisioningWrapperPath 2>&1
+        -f $script:ProvisioningWrapperPath
     $exitCode = $LASTEXITCODE
     $output | ForEach-Object { Write-Host $_ }
     if ($exitCode -ne 0) {
@@ -550,7 +550,7 @@ function Invoke-RepositorySqlFile {
         $arguments += @('-v', 'ON_ERROR_STOP=1')
     }
     $arguments += @('-f', $resolvedPath)
-    $output = & $script:ResolvedPsqlPath @arguments 2>&1
+    $output = & $script:ResolvedPsqlPath @arguments
     $exitCode = $LASTEXITCODE
     $output | ForEach-Object { Write-Host $_ }
     if ($exitCode -ne 0) {

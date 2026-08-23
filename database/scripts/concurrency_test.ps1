@@ -71,6 +71,9 @@ function Get-EffectiveApplicationName {
     if (-not [string]::IsNullOrWhiteSpace($env:PGAPPNAME)) {
         $effectiveApplicationName = "$($env:PGAPPNAME):$ApplicationName"
     }
+    if ($effectiveApplicationName.Length -gt 63) {
+        $effectiveApplicationName = $effectiveApplicationName.Substring(0, 63)
+    }
     return $effectiveApplicationName
 }
 

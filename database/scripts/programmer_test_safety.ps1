@@ -142,7 +142,7 @@ function Initialize-CredentialSource {
 function Invoke-Scalar {
     param([Parameter(Mandatory = $true)][string]$Sql)
     $output = & $script:ResolvedPsqlPath -X -qAt -v ON_ERROR_STOP=1 `
-        -h $HostName -p $Port -U $AdministratorRole -d postgres -c $Sql 2>&1
+        -h $HostName -p $Port -U $AdministratorRole -d postgres -c $Sql
     if ($LASTEXITCODE -ne 0) {
         throw 'Safety-validation PostgreSQL query failed.'
     }
