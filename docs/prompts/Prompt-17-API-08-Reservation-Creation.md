@@ -8,6 +8,9 @@ reservation discovery capability.
 
 API-07 is approved and frozen.
 
+Treat the API-07 approval checkpoint commit as the baseline for this
+work.
+
 Do not modify API-07 behavior unless a defect is discovered.
 
 ## Requirements Baseline
@@ -25,6 +28,7 @@ Maintain:
 -   PostgreSQL → Flask → React implementation order.
 -   Least-to-most implementation strategy.
 -   Existing approved contracts and architectural decisions.
+-   Traceability from requirements to implementation and tests.
 
 ## Scope
 
@@ -58,6 +62,8 @@ The implementation must:
 2.  Validate:
 
     -   customer information;
+    -   normalized email identity rules;
+    -   name consistency rules;
     -   email format;
     -   phone rules;
     -   party size;
@@ -85,7 +91,10 @@ displays valid slots.
     -   overlapping table assignments;
     -   inconsistent customer/reservation state.
 
-8.  Return:
+8.  Preserve approved retry/idempotency behavior when creating
+    reservations.
+
+9.  Return:
 
     -   successful reservation confirmation;
     -   appropriate failure responses.
@@ -113,9 +122,10 @@ Add or update automated tests.
 Cover:
 
 -   validation;
--   service behavior;
 -   customer handling;
+-   service behavior;
 -   table selection;
+-   idempotency/retry behavior;
 -   failure conditions.
 
 ### Integration tests
@@ -143,17 +153,24 @@ Maintain:
 
 ## Completion Requirements
 
-Before stopping:
-
-Provide:
+Before stopping, provide:
 
 -   changed files;
 -   implementation summary;
+-   SRS/Rubric/Addendum requirement IDs addressed;
 -   API contract changes, if any;
 -   tests added or updated;
 -   test execution results;
 -   deviations from approved requirements;
 -   unresolved risks.
+
+Confirm:
+
+-   API-07 behavior remains unchanged unless a documented defect
+    required correction.
+-   API-08 is complete only.
+-   React work has not started.
+-   No unapproved schema or architectural changes were introduced.
 
 Stop at the API-08 approval checkpoint.
 
