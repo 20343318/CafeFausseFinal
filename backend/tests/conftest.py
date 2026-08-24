@@ -17,6 +17,20 @@ from cafe_fausse.services.health import LivenessService, ReadinessProbeFailure, 
 from cafe_fausse.services.results import ReadinessCategory
 
 
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
+    """Print sanitized API-09 timing evidence when the performance test ran."""
+    evidence = getattr(config, "_cafe_fausse_api09_performance", None)
+    if evidence is None:
+        return
+    terminalreporter.section("API-09 performance evidence")
+    for operation, values in evidence.items():
+        terminalreporter.write_line(
+            f"{operation}: count={values['count']} p50={values['p50_ms']:.3f} ms "
+            f"p95={values['p95_ms']:.3f} ms p99={values['p99_ms']:.3f} ms "
+            f"max={values['max_ms']:.3f} ms"
+        )
+
+
 class FakeGateway:
     def __init__(self, category: ReadinessCategory | None = None, unexpected: bool = False) -> None:
         self.category = category

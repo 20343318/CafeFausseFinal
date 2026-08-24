@@ -1,16 +1,18 @@
-# Cafe Fausse Flask backend through API-08
+# Cafe Fausse Flask backend through API-09 verification
 
 This directory contains the API-04 Flask/PostgreSQL foundation, API-05's
 read-only OP-03 customer identity/newsletter-status query, API-06's OP-04
 independent newsletter-preference mutation, API-07's read-only reservation
-discovery, and API-08's OP-05 transactional reservation creation. PostgreSQL
+discovery, API-08's OP-05 transactional reservation creation, and API-09's
+complete Flask verification gate. PostgreSQL
 remains the business authority for allocation, overlap protection, customer
 reuse, availability revalidation, and exact retries. There is no ORM, CORS,
 session/cookie feature, startup migration, React code, or production-server
 selection here.
 
-API-01 through API-08 are approved and frozen. API-09 and React work have not
-started.
+API-01 through API-09 and Hard Gate 2 are approved and frozen. API-09 added
+verification and documentation only; it added no route or business capability.
+The next React/JSX increment is authorized according to the approved roadmap.
 
 ## Supported and initially verified platform
 
@@ -229,6 +231,24 @@ responses. Known rollback, unknown commit, and a failed post-commit
 confirmation read remain distinct `503` recovery cases.
 
 ## Tests
+
+The API-09 gate validates all seven operations, all 36 authoritative API-02
+JSON examples, cross-operation customer/newsletter/reservation behavior,
+PostgreSQL concurrency and rollback, privacy/redaction, lifecycle cleanup, and
+representative API performance. Its default workflow deliberately executes the
+complete guarded backend suite twice consecutively:
+
+```powershell
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The runner creates only marker-owned disposable PostgreSQL/Python resources
+under the system temporary directory, compiles into a separately owned
+temporary cache, restores the caller environment, and verifies that Git HEAD
+and the real index are unchanged. See [TestInstructions.md](TestInstructions.md)
+for focused selections, performance output, controlled failure/restart,
+interruption recovery, ownership-refusal, and final cleanup checks.
 
 API-07 adds `GET /api/v1/reservation-context` and
 `GET /api/v1/reservation-availability?local_date=YYYY-MM-DD&party_size=N`.

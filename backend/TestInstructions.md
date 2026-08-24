@@ -7,10 +7,150 @@ root in Windows PowerShell unless a step says otherwise.
 This is a user-requested programmer-convenience runbook. It is not required by
 the SRS or rubric and is not an approved requirements or design authority.
 
+## API-09 final Flask verification workflow
+
+API-01 through API-09 and Hard Gate 2 are approved and frozen. Hard Gate 2
+authorizes the next React/JSX increment according to the approved roadmap.
+These commands remain backend verification only and do not authorize
+deployment, a new endpoint, or a PostgreSQL change. Run them from the repository
+root in Windows PowerShell 5.1 against PostgreSQL 18.3 with standard GIL-enabled
+CPython 3.14.6.
+
+The recommended command performs static parsing/compilation checks and two
+consecutive complete guarded passes. Each pass runs 458 unit/API tests, 62
+PostgreSQL integration/concurrency/performance tests, and the combined 520-test
+branch-aware coverage suite. Exact counts can increase only when an approved
+test is added; rely on a zero exit status rather than hard-coding counts in
+automation.
+
+```powershell
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+For a fast non-PostgreSQL check after installing `backend[test]`:
+
+```powershell
+Set-Location backend
+& .\.venv\Scripts\python.exe -m pytest -m 'unit'
+& .\.venv\Scripts\python.exe -m pytest -m 'api'
+& .\.venv\Scripts\python.exe -m pytest 'tests\api\test_api09_contract_examples.py'
+Set-Location ..
+```
+
+When the guarded PostgreSQL environment from Sections 1-9 below is already
+active, the focused real-database selections are:
+
+```powershell
+Set-Location backend
+& .\.venv\Scripts\python.exe -m pytest -m 'integration and postgres'
+& .\.venv\Scripts\python.exe -m pytest -m 'integration and postgres and concurrency'
+& .\.venv\Scripts\python.exe -m pytest -m 'integration and postgres and performance'
+& .\.venv\Scripts\python.exe -m pytest -m 'unit or api or (integration and postgres)' --cov=cafe_fausse --cov-branch --cov-report=term-missing
+Set-Location ..
+```
+
+The performance test uses five excluded warm-ups and 30 measured sequential
+samples per scenario, one in-process Flask test client, a local bounded pool,
+and the disposable PostgreSQL server. It reports nearest-rank p50, p95, p99,
+and maximum for newsletter status, preference mutation, context, availability,
+reservation creation, exact retry, and a validation failure. Treat this as
+backend evidence, not browser/network or contended full-stack proof.
+
+### Repeat and ordinary-failure recovery
+
+The normal command is safe to rerun in the same PowerShell session or a new
+one because each completed pass removes its exact owned roots and restores all
+managed environment values. Demonstrate ordinary failure and restart with:
+
+```powershell
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -InjectFailure
+$CafeApi09ExpectedFailure = $LASTEXITCODE
+if ($CafeApi09ExpectedFailure -eq 0) { throw 'The controlled API-09 failure unexpectedly passed.' }
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+Demonstrate a cleanup failure, guarded recovery, and a successful restart with:
+
+```powershell
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -InjectCleanupFailure
+$CafeApi09ExpectedCleanupFailure = $LASTEXITCODE
+if ($CafeApi09ExpectedCleanupFailure -eq 0) { throw 'The controlled API-09 cleanup failure unexpectedly passed.' }
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -CleanupOwnedRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+### Interruption and ownership-refusal recovery
+
+The interruption preparation intentionally returns exit code 86 only after
+durable outer/contained/process ownership evidence exists. The cleanup call
+validates the exact marker, child process, PostgreSQL postmaster, executable,
+and listener before stopping or removing anything:
+
+```powershell
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -PrepareInterruptionState
+$CafeApi09InterruptionExit = $LASTEXITCODE
+if ($CafeApi09InterruptionExit -ne 86) { throw "Expected interruption evidence exit 86; received $CafeApi09InterruptionExit." }
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -CleanupOwnedRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+To demonstrate mismatch refusal, first prepare the interruption state as
+above. Change only the outer marker in memory, require cleanup to refuse and
+preserve the root, restore the original bytes, and then use the guarded cleanup.
+Never delete a missing, malformed, or mismatched root directly.
+
+```powershell
+$CafeApi09OuterRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) 'CafeFausse-api07-tests')).TrimEnd('\')
+$CafeApi09OuterMarker = Join-Path $CafeApi09OuterRoot 'ownership.json'
+$CafeApi09OriginalMarker = [IO.File]::ReadAllBytes($CafeApi09OuterMarker)
+$CafeApi09MarkerObject = Get-Content -LiteralPath $CafeApi09OuterMarker -Raw -Encoding UTF8 | ConvertFrom-Json
+$CafeApi09MarkerObject.owner_id = 'deliberate-api09-mismatch'
+[IO.File]::WriteAllText($CafeApi09OuterMarker, ($CafeApi09MarkerObject | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -CleanupOwnedRoot
+$CafeApi09RefusalExit = $LASTEXITCODE
+if ($CafeApi09RefusalExit -eq 0) { throw 'Mismatched ownership was not refused.' }
+if (-not (Test-Path -LiteralPath $CafeApi09OuterRoot -PathType Container)) { throw 'The mismatched root was altered.' }
+[IO.File]::WriteAllBytes($CafeApi09OuterMarker, $CafeApi09OriginalMarker)
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -CleanupOwnedRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+### Final API-09 cleanup verification
+
+The final step is always a successful normal API-09 run. It removes all
+API-09-owned resources and verifies zero business rows before destroying the
+test database. After it completes, confirm the two inherited owned roots and
+the PostgreSQL listener are absent. Existing developer `.venv`, cache,
+coverage, bytecode, or package-metadata paths are not API-09-owned and must not
+be deleted by name.
+
+```powershell
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+$CafeApi09Temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
+$CafeApi09OwnedRoots = @(
+    (Join-Path $CafeApi09Temp 'CafeFausse-api07-tests'),
+    (Join-Path $CafeApi09Temp 'CafeFausse-api07-contained-api06-tests')
+)
+foreach ($CafeApi09OwnedRoot in $CafeApi09OwnedRoots) {
+    if (Test-Path -LiteralPath $CafeApi09OwnedRoot) { throw "Owned root survived: $CafeApi09OwnedRoot" }
+}
+if (@(Get-NetTCPConnection -State Listen -LocalPort 55446 -ErrorAction SilentlyContinue).Count -ne 0) {
+    throw 'Owned PostgreSQL listener 55446 survived.'
+}
+git diff --check
+git status --short
+```
+
 ## API-08 recommended complete workflow
 
-API-01 through API-08 are approved and frozen. API-09, React, deployment, and
-database changes are not authorized by this workflow.
+API-01 through API-09 and Hard Gate 2 are approved and frozen. The React/JSX
+phase is now authorized by Hard Gate 2; deployment and database changes are not
+authorized by this workflow.
 
 Run the complete API-08 gate from the repository root in Windows PowerShell
 5.1. It requires CPython 3.14.6, PostgreSQL 18.3, and explicit nonproduction
