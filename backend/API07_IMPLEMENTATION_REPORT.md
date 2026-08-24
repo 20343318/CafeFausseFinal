@@ -3,14 +3,29 @@
 ## Status and scope
 
 API-07 implements only OP-01 current reservation context and OP-02 daily
-provisional availability. It remains unapproved at the Prompt 16 independent
-review checkpoint. API-08, API-09, reservation creation, React, integration,
-deployment, and PostgreSQL changes were not started.
+provisional availability. It completed independent review and is approved and
+frozen at Git checkpoint `2d45fc4` (`API-07 approved`). API-08, API-09,
+reservation creation, React, integration, deployment, and PostgreSQL changes
+were not started.
 
 Baseline HEAD is `ddf800a1e7539d35d0168fa7820cedfdaa30f91a`. The approved
 API-01 v1.0.2 and API-03 v1.0.3 reconciliation is present. Initial real-index
 SHA-256 was
 `0adfac19fa960b284d0983e068f94bd308bda015e8ab451ce9f260a441c2d7d4`.
+
+## Approval checkpoint
+
+- **API-07 approval status:** Approved.
+- **Git checkpoint:** `2d45fc4` — `API-07 approved`.
+- **Scope approved:** reservation context retrieval; provisional availability
+  discovery; and the associated validation, services, gateways, serialization,
+  error handling, and tests.
+- **Verification summary:** focused API-07 tests passed; the complete backend
+  suite passed; PostgreSQL integration and concurrency verification passed;
+  and repeatable, restartable, ownership-validated cleanup verification passed.
+- **Boundary confirmation:** API-08 has not started; React work has not started;
+  no schema, migration, role, grant, or deployment changes were introduced;
+  and there are no deviations from the approved API-07 contract.
 
 ## Corrected implementation boundary
 
@@ -218,5 +233,5 @@ enumeration, temporary-index apply verification, and byte-identical
 regeneration are reported alongside the generated artifact; embedding the
 artifact's digest in its own included report would be self-referential.
 
-API-07 is not approved by this report. It stops at the Prompt 16 independent
-review checkpoint.
+API-07 is approved and frozen at commit `2d45fc4`. Work remains stopped at the
+API-07 approval checkpoint; API-08 has not started.
