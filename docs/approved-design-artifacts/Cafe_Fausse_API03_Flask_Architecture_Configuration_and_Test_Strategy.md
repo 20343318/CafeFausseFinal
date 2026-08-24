@@ -1,6 +1,6 @@
 # Cafe Fausse API-03 Flask Architecture, Configuration, and Test Strategy
 
-**Document version:** 1.0.3
+**Document version:** 1.0.4
 
 **Date:** 2026-08-21
 
@@ -12,13 +12,13 @@
 
 **Approval record:** Approved by Abdul on 2026-08-21. Approval of this document authorizes only API-04 - Flask Foundation and PostgreSQL Connectivity. It does not authorize API-05 or later Flask capabilities, React work, integration work, deployment work, or PostgreSQL changes.
 
-**Reconciliation record:** Version 1.0.3 applies the approved `API-07 OP-02 timezone/snapshot reconciliation` from 2026-08-23. It changes no API-02 public contract or frozen PostgreSQL contract.
+**Reconciliation record:** Version 1.0.4 applies the approved API08-RC-01/02 reconciliation from 2026-08-24. It preserves the API-02 wire shape and booking transaction boundary while adopting the reconciled database classification and minimum post-commit confirmation projection.
 
 ## 1. Executive summary
 
 Cafe Fausse Version 1 will be one modular Flask application on Windows Server 2025 using standard GIL-enabled CPython 3.14.x, with installed CPython 3.14.6 as the initial implementation and verification patch, backed directly by the frozen PostgreSQL 18.3 contract. The application uses an application factory, a single bounded Psycopg 3 connection pool, one versioned Flask blueprint, operation-specific services and gateways, pure validation/serialization functions, and a small dependency container held in `app.extensions`. It does not use an ORM, schema creation, Flask-side business-rule reimplementation, or a generic repository abstraction.
 
-The HTTP boundary remains exactly API-02 version 1.0.1. Each of its seven endpoints maps one-to-one to one API-01 operation. PostgreSQL remains authoritative for current configuration, operating hours, inventory, availability, booking, allocation, overlap prevention, exact retry, and persisted newsletter state. Flask owns protocol parsing, caller-visible validation, orchestration, bounded technical retry, safe outcome translation, confirmation shaping, response policy, and observability.
+The HTTP boundary remains exactly API-02 version 1.0.2. Each of its seven endpoints maps one-to-one to one API-01 operation. PostgreSQL remains authoritative for current configuration, operating hours, inventory, availability, booking, allocation, overlap prevention, exact retry, and persisted newsletter state. Flask owns protocol parsing, caller-visible validation, orchestration, bounded technical retry, safe outcome translation, confirmation shaping, response policy, and observability.
 
 This document chooses the Python/dependency families, logical source tree, lifecycle, complete configuration surface, numeric timeout/retry policy, transaction ownership, health design, error policy, logging/redaction boundary, deterministic test seams, and test strategy needed by API-04 through API-09. Node.js 24.15.0 is an installed platform fact reserved for future React implementation and verification; it is not a Flask runtime dependency, is not used by API-03 or API-04, and creates no Node.js package or frontend compatibility decision here. This document creates no Flask implementation and does not begin API-04.
 
@@ -60,10 +60,10 @@ API-03 does not reinterpret the SRS two-second expectation as a guarantee. DB-07
 | Approved design sources | All files named in section 2 under `docs/approved-design-artifacts/` | PASS |
 | Implemented database source | `database/provisioning/`, `database/migrations/001` through `011`, `database/reset/`, `database/verification/`, `database/tests/`, and `database/scripts/` | PASS |
 | DB completion evidence | `DB05_IMPLEMENTATION_REPORT.md`, `DB06_IMPLEMENTATION_REPORT.md`, `DB07_VERIFICATION_REPORT.md`, and `DB07_MANUAL_DEMONSTRATION.md` | PASS |
-| Frozen DB contract | `database/POSTGRESQL_CONTRACT_FOR_FLASK.md`, version 1.0, explicitly approved and frozen | PASS |
+| Frozen DB contract | `database/POSTGRESQL_CONTRACT_FOR_FLASK.md`, reconciled version 1.1 | PASS |
 | DB-07 approval | Hard Gate 1 approved by Abdul on 2026-08-20 | PASS |
-| API-01 approval | Version 1.0.1 explicitly approved; authorizes API-02 only | PASS |
-| API-02 approval | Version 1.0.1 explicitly approved by Abdul on 2026-08-21; authorizes API-03 only | PASS |
+| API-01 approval | Version 1.0.1 explicitly approved; reconciled through version 1.0.3 | PASS |
+| API-02 approval | Version 1.0.1 explicitly approved by Abdul on 2026-08-21; reconciled through version 1.0.2 | PASS |
 | API-02 examples | All fenced `json` blocks parsed independently: 36 present, 36 valid, 0 invalid | PASS |
 | Existing backend implementation | `backend/` contains no Flask source, tests, or dependency manifest | PASS - no overlap |
 | Authorized artifact | This path did not exist at gate time | PASS |
@@ -281,7 +281,7 @@ backend/
 | `services/newsletter_preferences.py` | OP-04 routine orchestration and known/unknown mutation mapping. |
 | `services/reservation_context.py` | OP-01 coherent current foundation snapshot orchestration. |
 | `services/reservation_availability.py` | OP-02 provisional availability orchestration. |
-| `services/reservations.py` | OP-05 booking/reconstruction, commit certainty, stored-name read, and confirmation assembly. |
+| `services/reservations.py` | OP-05 booking/reconstruction, commit certainty, stored-name/current-timezone confirmation read, and confirmation assembly. |
 | `validation/common.py` | Exact primitive/type/length/whitespace/date/time/offset helpers and ordered field-error construction. |
 | `validation/identity.py` | API-02 name, middle-initial, email, and optional-phone normalization/validation. |
 | `validation/newsletter.py` | Newsletter action/preference request validation. |
@@ -538,13 +538,13 @@ The newsletter gateway calls only `cafe_fausse.set_newsletter_preference(text,te
 
 ### 15.5 OP-05 reservation creation or reconstruction
 
-The reservation gateway calls only `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` with validated bound values in `READ COMMITTED`. It consumes exactly one result and validates its stable shape/outcome. `booked`, `booked_phone_notice`, and `exact_retry` are known reservation results; all other stable outcomes follow the frozen mapping.
+The reservation gateway calls only `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` with validated bound values in `READ COMMITTED`. It consumes exactly one result and validates its stable shape/outcome. `booked`, `booked_phone_notice`, and `exact_retry` are known reservation results; all other stable outcomes follow the reconciled frozen mapping. Specifically, `duration_or_party_size_out_of_range` paired with `invalid_request` is caller-controlled party-size validation, while the same detail paired with `invalid_database_configuration` is invalid server-controlled duration.
 
-On a known successful booking or exact retry, the mutation transaction commits first. While retaining the same healthy leased physical connection, the gateway begins a separate `READ COMMITTED READ ONLY` transaction and selects the approved stored first/middle/last name projection from `customers` by canonical email. The separation is mandatory: the name read is not part of, and cannot roll back, the booking. Reusing the clean lease avoids a second pool wait but does not reuse the mutation transaction.
+On a known successful booking or exact retry, the mutation transaction commits first. While retaining the same healthy leased physical connection, the gateway begins a separate `READ COMMITTED READ ONLY` transaction and retrieves only the approved stored first/middle/last name projection from `customers` by canonical email plus current `reservation_configuration.restaurant_timezone`. The separation is mandatory: the confirmation read is not part of, and cannot roll back, the booking. Reusing the clean lease avoids a second pool wait but does not reuse the mutation transaction.
 
-The public confirmation uses the routine's committed reservation facts plus stored customer-name spelling. It never echoes submitted spelling as authoritative. If the post-commit name read succeeds, the connection returns idle to the pool. If that read fails or returns an impossible shape, the known reservation facts are retained internally, the connection is discarded when needed, and the response is `reservation_confirmation_unavailable` (`retryable:true`, `outcome_unknown:false`). The service does not call booking again merely to repair a confirmation-name read.
+The public confirmation uses the routine's committed reservation facts plus stored customer-name spelling and the current restaurant IANA timezone. It never echoes submitted spelling or reuses the submitted numeric start offset as confirmation authority. The serializer converts each committed start/end instant through the IANA timezone independently, including across offset transitions. If the post-commit confirmation read succeeds, the connection returns idle to the pool. If that read fails, returns an impossible shape, or supplies an invalid timezone, the known reservation facts are retained internally, the connection is discarded when needed, and the response is `reservation_confirmation_unavailable` (`retryable:true`, `outcome_unknown:false`). The service does not call booking again merely to repair the confirmation read.
 
-If connection/commit failure leaves the booking transaction uncertain, there is no post-commit name read and no automatic retry. The response is `reservation_outcome_unknown` (`retryable:true`, `outcome_unknown:true`). An unchanged client resubmission is safe because the frozen database fingerprint/exact-retry logic reconstructs the committed outcome if the first attempt committed. Known rollback or pre-dispatch failure remains distinct and maps to the applicable temporary response.
+If connection/commit failure leaves the booking transaction uncertain, there is no post-commit confirmation read and no automatic retry. The response is `reservation_outcome_unknown` (`retryable:true`, `outcome_unknown:true`). An unchanged client resubmission is safe because the frozen database fingerprint/exact-retry logic reconstructs the committed outcome if the first attempt committed. Known rollback or pre-dispatch failure remains distinct and maps to the applicable temporary response.
 
 ### 15.6 OP-06 liveness
 
@@ -564,7 +564,7 @@ Internally the result categories are `pool`, `platform`, `contract`, and `founda
 | OP-02 | Validated `date` and exact integer party size | In one snapshot, reads only `reservation_configuration.restaurant_timezone`, then calls `provisional_availability(date,integer)` and consumes `outcome`, nullable `detail_code`, `local_start`, `starts_at`, `ends_at`, `available` for every row | Gateway owns one `REPEATABLE READ READ ONLY` transaction; safe read retry uses a fresh lease/transaction | `AvailabilityResult` containing the serialization timezone and every legitimate start or frozen invalid/config category; no other foundation read, holds, candidates, assignments, capacity query, or persistence | `AvailabilityGateway.get_day(date, party_size)` |
 | OP-03 | Normalized names/middle and canonical email | Minimal `customers` projection of first/middle/last and `newsletter_subscribed` by canonical email | Gateway owns one short read-only transaction; safe read retry | `NewsletterStatusResult` for no customer/exact match/generic mismatch/current Boolean; no phone, ID, profile, reservation, assignment, or write | `CustomerGateway.get_newsletter_status(identity)` |
 | OP-04 | Normalized names/middle/email and exact Boolean | `set_newsletter_preference(...)`; consumes `outcome`, `newsletter_subscribed` | Gateway owns explicit `READ COMMITTED`; commit on returned result, rollback before eligible retry; discard uncertain connection | `PreferenceResult` or frozen conflict/known/unknown technical category; no direct customer DML/read-after-write or second subscriber state | `NewsletterGateway.set_preference(command)` |
-| OP-05 | Normalized names/middle/email, optional phone, local start, `smallint` offset, integer party, newsletter action | `book_reservation(...)`; consumes `outcome`, `detail_code`, `reservation_id`, `starts_at`, `ends_at`, `party_size`, sorted `assigned_table_numbers`, `newsletter_subscribed`, `phone_notice`, internal fingerprint version/bytes; after known commit, minimal stored-name SELECT | Gateway owns explicit booking `READ COMMITTED`, commit/rollback/certainty, then separate read-only name transaction; only approved retry classes | `BookingResult`, known confirmation-unavailable, or unknown-booking result; fingerprint stays internal and is not logged; no direct reservations/assignments read, DML, allocator, or test helper | `ReservationGateway.book(command)` returning a certainty-aware attempt result |
+| OP-05 | Normalized names/middle/email, optional phone, local start, `smallint` offset, integer party, newsletter action | `book_reservation(...)`; consumes `outcome`, `detail_code`, `reservation_id`, `starts_at`, `ends_at`, `party_size`, sorted `assigned_table_numbers`, `newsletter_subscribed`, `phone_notice`, internal fingerprint version/bytes; after known commit, minimal stored-name/current-timezone confirmation projection | Gateway owns explicit booking `READ COMMITTED`, commit/rollback/certainty, then separate read-only confirmation transaction; only approved retry classes | `BookingResult`, known confirmation-unavailable, or unknown-booking result; fingerprint stays internal and is not logged; no direct reservations/assignments read, DML, allocator, test helper, or unrelated configuration | `ReservationGateway.book(command)` returning a certainty-aware attempt result |
 | OP-06 | None | No database access or returned DB fact | No transaction/retry/lease | `LiveResult`; no I/O or diagnostics | `LivenessService` is pure; a gateway double is unnecessary |
 | OP-07 | None | Fixed catalog privilege/platform checks and minimum foundation projections through the app-role lease | Gateway owns one short read-only transaction; one probe attempt, no retry | `ReadyResult` or coarse internal component failure; no mutation routine invocation, test/verification helper, repair, or public diagnostic | `HealthGateway.check_readiness()` |
 
@@ -577,11 +577,11 @@ The gateway protocols return typed values and raise only the internal technical 
 | Read success (OP-01/02/03) | Parse/validate -> start monotonic deadline -> acquire app-role lease -> begin read-only transaction -> execute fixed projection/routine -> consume and validate rows -> commit/end read transaction -> release lease -> serialize exact 200 response. |
 | Read transient | Failure -> end/rollback transaction -> discard broken lease when necessary -> classify as safely repeatable -> apply bounded delay if eligible/budgeted -> use a new lease/transaction -> otherwise emit the operation's API-02 503 with known outcome. |
 | Mutation success (OP-04) | Parse/validate -> acquire lease -> begin `READ COMMITTED` -> call the single preference routine -> consume expected result -> commit -> release lease -> serialize authoritative 200 state. |
-| Booking success/exact retry (OP-05) | Parse/validate -> acquire lease -> begin `READ COMMITTED` -> call booking routine -> consume known result -> commit -> begin a separate read-only transaction on the clean lease -> read stored name -> end transaction/release -> serialize 201 created or 200 exact-retry confirmation. |
+| Booking success/exact retry (OP-05) | Parse/validate -> acquire lease -> begin `READ COMMITTED` -> call booking routine -> consume known result -> commit -> begin a separate read-only transaction on the clean lease -> read stored name components and current restaurant timezone only -> end transaction/release -> serialize committed instants through that IANA timezone as a 201 created or 200 exact-retry confirmation. |
 | Approved retryable mutation failure | Routine returns SQLSTATE `55P03`, `40P01`, or `40001` -> transaction is conclusively rolled back -> release/discard as health requires -> check attempts/deadline -> jittered sleep -> new lease and new `READ COMMITTED` transaction -> at most three total attempts. |
 | Known mutation rollback/exhaustion | Rollback/no commit is proven but no allowed retry remains -> release/discard -> emit `temporary_failure`, `retryable:true`, `outcome_unknown:false`. |
-| Unknown mutation | Connection/result/commit certainty is lost after dispatch -> discard connection -> do not auto-retry or perform OP-05 name read -> emit the operation-specific outcome-unknown 503; client may resubmit the identical body. |
-| Known booking, failed confirmation read | Booking/exact retry commit is proven -> separate stored-name read fails -> discard if needed -> do not undo/rebook -> emit `reservation_confirmation_unavailable`, `retryable:true`, `outcome_unknown:false`. |
+| Unknown mutation | Connection/result/commit certainty is lost after dispatch -> discard connection -> do not auto-retry or perform OP-05 confirmation read -> emit the operation-specific outcome-unknown 503; client may resubmit the identical body. |
+| Known booking, failed confirmation read | Booking/exact retry commit is proven -> separate stored-name/current-timezone read fails -> discard if needed -> do not undo/rebook -> emit `reservation_confirmation_unavailable`, `retryable:true`, `outcome_unknown:false`. |
 | Unexpected defect | Roll back if possible -> determine mutation certainty before response selection -> log only allowlisted metadata -> emit `internal_error` only for a known nonmutation/noncommit; otherwise preserve the operation-specific unknown-outcome response. |
 
 These sequences make response selection occur only after the transaction certainty boundary. Logging occurs after safe result selection and cannot change the HTTP/database outcome.
@@ -622,7 +622,7 @@ Serialization functions accept only typed internal results. They emit exact API-
 | Expected business outcome | Routine/read returned a frozen non-success outcome | Typed result value |
 | Known transient dependency failure | No mutation or confirmed rollback; service temporarily unavailable | Typed technical exception with certainty `known` |
 | Unknown mutation outcome | Dispatch/commit may have persisted state | Typed technical exception with certainty `unknown` |
-| Known post-commit confirmation failure | Booking known committed; stored-name projection unavailable | Typed OP-05 result retaining safe reservation facts internally |
+| Known post-commit confirmation failure | Booking known committed; stored-name/current-timezone projection unavailable | Typed OP-05 result retaining safe reservation facts internally |
 | Contract/invariant defect | Unexpected row count/type/outcome or impossible state | Internal exception; log safe class/category |
 | Unexpected defect | Unhandled programming/runtime fault | Outer exception handler; generic public response |
 
@@ -646,7 +646,7 @@ Every error body has `code`, `message`, `retryable`, and `outcome_unknown`. `fie
 | 503 | `newsletter_status_indeterminate` | true | false | Read outcome temporarily cannot be established; safe identical lookup retry |
 | 503 | `temporary_failure` | true | false | Known no-commit/rollback dependency failure where unchanged retry is safe |
 | 503 | `newsletter_preference_outcome_unknown` | true | true | OP-04 commit outcome cannot be established |
-| 503 | `reservation_confirmation_unavailable` | true | false | OP-05 booking known, post-commit stored-name read failed |
+| 503 | `reservation_confirmation_unavailable` | true | false | OP-05 booking known, post-commit stored-name/current-timezone confirmation read failed |
 | 503 | `reservation_outcome_unknown` | true | true | OP-05 booking commit may or may not have occurred |
 | 503 | `service_unavailable` | true | false | Liveness-independent dependency unavailable for a workflow |
 | 503 | `service_not_ready` | true | false | OP-07 coarse not-ready result |
@@ -701,7 +701,7 @@ The formatter constructs output from an allowlist rather than trying to redact a
 
 An internal UUIDv4 is generated for every request, stored request-locally, and used only in logs. Incoming correlation headers are ignored and the ID is never returned publicly. Tests inject deterministic IDs.
 
-Monotonic timers measure total request time, cumulative pool wait, cumulative database time, retry sleeps, and post-commit name-read time. Values are numeric milliseconds and contain no labels derived from input. External metrics/tracing systems are not added in Version 1; API-09 may summarize sanitized log timings. Readiness logs transition events at INFO/WARNING and repeated unchanged failures at a bounded cadence to avoid floods.
+Monotonic timers measure total request time, cumulative pool wait, cumulative database time, retry sleeps, and post-commit confirmation-read time. Values are numeric milliseconds and contain no labels derived from input. External metrics/tracing systems are not added in Version 1; API-09 may summarize sanitized log timings. Readiness logs transition events at INFO/WARNING and repeated unchanged failures at a bounded cadence to avoid floods.
 
 ## 20. Liveness and readiness architecture
 
@@ -793,7 +793,7 @@ Minimum planned pure tests:
 | Identity/newsletter | Canonical email; stored identity match/mismatch; absent/present middle initial; subscribe/unsubscribe/no-change rules; no phone identity |
 | Reservation | Required/optional fields, cross-field rules, arbitrary slot rejection at boundary where applicable, offset and local timestamp shapes, newsletter action |
 | Retry | Attempts 1-3, all approved SQLSTATEs, excluded SQLSTATEs, deadline exhaustion, minimum remaining guard, base/cap, exact jitter endpoints, rollback uncertainty, no sleep after final attempt |
-| Services | Every expected DB outcome/detail, unknown literal defect, read failure, known rollback, pre-dispatch failure, commit ambiguity, exact retry, post-commit name-read failure |
+| Services | Every expected DB outcome/detail, including deterministic party-size/server-duration classification, unknown literal defect, read failure, known rollback, pre-dispatch failure, commit ambiguity, exact retry, post-commit confirmation-read failure |
 | Serialization | Every API-02 response variant, nullability, enum, decimal-string BIGINT, stored spelling, full slot list/order, multi-table confirmation, no internal fields |
 | Error mapping | Every public code/status/flag combination; fields presence rule; generic 404/405/413/500; no exception/database text |
 | Response policy | Exact content type, no-store headers, security headers, no CORS/cookie/correlation/Retry-After |
@@ -832,7 +832,7 @@ For every route, test exact allowed method, wrong method/`Allow`, unknown near-m
 | `IT-DBAPI-OP05-*` | Single/multi-table, 30-table maximum, stale slot/full slot, same-customer overlap, exact retry, changed overlap, mismatch, phone notice, atomic preference+booking, rollback |
 | `IT-DBAPI-RETRY-*` | Controlled `55P03`, `40P01`, `40001`; max attempts; new transaction/lease; deadline; excluded timeout classes |
 | `IT-DBAPI-UNKNOWN-*` | Connection loss before dispatch, after dispatch, during commit; OP-04 unknown; OP-05 unknown; unchanged client resubmission/exact reconstruction |
-| `IT-DBAPI-CONFIRM-*` | Commit then stored-name read; same clean lease/new transaction; forced post-commit read failure gives known confirmation-unavailable; stored spelling only |
+| `IT-DBAPI-CONFIRM-*` | Commit then stored-name/current-timezone read; same clean lease/new transaction; forced post-commit read failure gives known confirmation-unavailable; stored spelling and IANA-derived local times only, including an offset-transition interval |
 | `IT-DBAPI-CONCUR-*` | Simultaneous conflicting bookings, no over/double booking, same customer, concurrent preference create/update, accepted DB-07 2/5/8-request patterns |
 
 Failure injection is external to production code. It uses controllable fake adapters for unit/API certainty transitions and existing PostgreSQL test-role locks/helpers plus test-process connection termination for integration cases. Production packages contain no failure flag, endpoint, alternate routine name, injected SQL string, or test role credential.
@@ -849,7 +849,7 @@ API-09 will run performance tests on Windows Server 2025 under standard GIL-enab
 - Thirty measured sequential requests for OP-01, OP-02 representative available/full dates, OP-03 new/existing, OP-04 idempotent changes, OP-05 single-table, all-table fast path, general equal-capacity, general heterogeneous-capacity, exact retry, conflict, and unavailable outcomes.
 - Twenty measured readiness probes in ready and dependency-failure states.
 - Twenty coordinated groups each at 2, 5, and 8 conflicting/distinct booking clients, matching the accepted DB-07 contention shapes.
-- Separately measure whole HTTP latency, pool wait, database transaction, retry sleep, and OP-05 post-commit name read through sanitized timers.
+- Separately measure whole HTTP latency, pool wait, database transaction, retry sleep, and OP-05 post-commit confirmation read through sanitized timers.
 
 Report count, successes/errors by public code, min, median/p50, p95, p99, maximum, and group-completion time. Use nearest-rank percentiles with the method stated. Do not mix warm-ups, retries, errors, sequential, and contention samples into one percentile.
 
@@ -863,7 +863,7 @@ Correctness gates first: no duplication, overbooking, partial mutation, privacy 
 | OP-02 | `GET /api/v1/reservation-availability` | `reservation_availability.py` | `reservation.py` date/party | `reservation_availability.py` | `availability_gateway.py`: same-snapshot timezone projection plus `provisional_availability(date,integer)` | `serialization/reservation.py` slots |
 | OP-03 | `POST /api/v1/newsletter-status-queries` | `newsletter_status.py` | `identity.py` | `newsletter_status.py` | `customer_gateway.py`: narrow customer SELECT | common newsletter projection |
 | OP-04 | `POST /api/v1/newsletter-preferences` | `newsletter_preferences.py` | `identity.py`, `newsletter.py` | `newsletter_preferences.py` | `newsletter_gateway.py`: `set_newsletter_preference(...)` | common newsletter projection |
-| OP-05 | `POST /api/v1/reservations` | `reservations.py` | `identity.py`, `reservation.py`, `newsletter.py` | `reservations.py`, `retry.py` | `reservation_gateway.py`: `book_reservation(...)`, then stored-name SELECT after known commit | `serialization/reservation.py` confirmation |
+| OP-05 | `POST /api/v1/reservations` | `reservations.py` | `identity.py`, `reservation.py`, `newsletter.py` | `reservations.py`, `retry.py` | `reservation_gateway.py`: `book_reservation(...)`, then stored-name/current-timezone confirmation SELECTs after known commit | `serialization/reservation.py` confirmation |
 | OP-06 | `GET /api/v1/health/liveness` | `health.py` | GET/body/query rules | `health.py` | none | exact live body |
 | OP-07 | `GET /api/v1/health/readiness` | `health.py` | GET/body/query rules | `health.py` | `health_gateway.py`: fixed read-only contract checks | exact ready body or generic envelope |
 
@@ -871,9 +871,9 @@ This is one-to-one: no operation has multiple public endpoints and no endpoint i
 
 ## 28. API-02 endpoint, error, and example coverage confirmation
 
-The seven methods/routes above exactly match API-02 version 1.0.1. No route, method, request property, response property, HTTP status, error code, retry flag, unknown-outcome flag, or media representation is revised here.
+The seven methods/routes above exactly match API-02 version 1.0.2. No route, method, request property, response property, HTTP status, error code, retry flag, unknown-outcome flag, or media representation is revised here.
 
-The public error inventory is exactly the 19 codes in section 17.2: three 400 codes, one 404, one 405, one 415, one 422, four 409 codes, seven 503 codes, and one 500 code. `reservation_unavailable` remains non-retryable; OP-04 and OP-05 unknown outcomes remain distinct; OP-05 known post-commit name-read failure remains `reservation_confirmation_unavailable` with `outcome_unknown:false`.
+The public error inventory is exactly the 19 codes in section 17.2: three 400 codes, one 404, one 405, one 415, one 422, four 409 codes, seven 503 codes, and one 500 code. `reservation_unavailable` remains non-retryable; OP-04 and OP-05 unknown outcomes remain distinct; OP-05 known post-commit confirmation-read failure remains `reservation_confirmation_unavailable` with `outcome_unknown:false`.
 
 Read-only Phase 0 independently found 36 fenced JSON examples in API-02 and parsed all 36 successfully. Future API tests parameterize those exact examples; API-03 adds, deletes, or edits none. API-04 must treat API-02 as test input, not copy a divergent schema.
 
@@ -947,15 +947,15 @@ API-04 may adjust file grouping only if responsibilities and dependency directio
 | Authority | Proof of preservation |
 |---|---|
 | API-01 1.0.1 | Sections 15 and 27 give one service/access specification per OP-01 through OP-07. |
-| API-02 1.0.1 | Sections 17, 18, 27, and 28 preserve endpoints, statuses, bodies, flags, examples, privacy, and no-store semantics. |
+| API-02 1.0.2 | Sections 17, 18, 27, and 28 preserve endpoints, statuses, bodies, flags, examples, privacy, and no-store semantics. |
 | DB-07 Hard Gate 1 | PostgreSQL 18.3, performance evidence, accepted contention, least privilege, and exact routines are unchanged. |
-| Frozen DB contract 1.0 | Only four approved foundation reads and three routine signatures are used; no unauthorized DML/read/test helper is reachable. |
+| Reconciled frozen DB contract 1.1 | Only four approved foundation tables and three unchanged production routine signatures are used; no unauthorized DML/read/test helper is reachable. |
 
 ## 31. Privacy and least-privilege assessment
 
 The deployment login is not a database owner or test role. Every pooled session must enter `cafe_fausse_app`, which has schema `USAGE`, `SELECT` only on the four approved foundation tables, and `EXECUTE` only on the three frozen production routines. It has no direct reservation/assignment read, business-table DML, sequence, DDL, reset, controlled-writer, internal-helper, or test-routine access. Readiness positively verifies the expected usable boundary but never attempts forbidden work as a probe.
 
-Flask selects the smallest operation-specific projection. OP-03 cannot retrieve phone/reservations; OP-05's post-commit query retrieves only stored name parts by canonical email. Public responses never add database IDs, table identifiers/capacities, fingerprints, query details, health diagnostics, or unrelated customer data. Logs use an allowlist and deliberately exclude all request values. Database-management credentials and test seams remain outside the production dependency graph.
+Flask selects the smallest operation-specific projection. OP-03 cannot retrieve phone/reservations; OP-05's post-commit confirmation transaction retrieves only stored name parts by canonical email and current `reservation_configuration.restaurant_timezone`. The timezone is used only to serialize committed confirmation instants. Public responses never add database IDs, table identifiers/capacities, fingerprints, unrelated configuration, query details, health diagnostics, or unrelated customer data. Logs use an allowlist and deliberately exclude all request values. Database-management credentials and test seams remain outside the production dependency graph.
 
 No derived/transient business data is persisted or cached by Flask. In-memory validated commands, results, and confirmation material are request-scoped and discarded after response/log timing completion.
 
@@ -975,17 +975,17 @@ No derived/transient business data is persisted or cached by Flask. In-memory va
 
 1. OP-01 through OP-07 map one-to-one to the seven exact endpoints in section 27.
 2. API-03 changes no API-02 route, method, request/response field, status, public code, retry/unknown flag, or JSON example.
-3. It changes no PostgreSQL table, column, constraint, index, role, grant, routine, signature, outcome/detail, migration, lock, or retry rule. The approved API-07 reconciliation changes only OP-02's caller-managed read-only isolation from `READ COMMITTED` to `REPEATABLE READ` so its timezone projection and routine result share one snapshot.
+3. API08-RC-01 changes only the booking outcome paired with the existing combined detail for invalid server-controlled duration. It changes no table, column, constraint, index, role, grant, routine signature/result shape, detail identifier, lock, allocation, or retry rule.
 4. All database paths activate `cafe_fausse_app` and use only four granted foundation reads or three granted production routines.
 5. Current configuration, hours, capacities, availability, booking, allocation, overlap, exact retry, and persisted newsletter state stay PostgreSQL-authoritative.
-6. OP-05 returns stored customer-name spelling after a known booking/exact retry and never treats submitted spelling as confirmation authority.
-7. A failed post-commit name read is a known booking with `reservation_confirmation_unavailable`; an uncertain commit is `reservation_outcome_unknown`.
+6. OP-05 returns stored customer-name spelling and IANA-derived local times after a known booking/exact retry and never treats submitted spelling or fixed submitted offset as confirmation authority.
+7. A failed post-commit stored-name/current-timezone confirmation read is a known booking with `reservation_confirmation_unavailable`; an uncertain commit is `reservation_outcome_unknown`.
 8. No secret, PII, internal database fact, or second persistent source is added to the public contract or Flask architecture.
-9. This increment creates only this Markdown document; no Flask source, test, SQL, manifest, React, or deployment file is created.
+9. This reconciliation changes only approved contract/design text, the authoritative booking routine branch, and its database behavior tests; it creates no Flask implementation, manifest, React, or deployment work.
 10. The selected Flask/Psycopg/pytest families have authoritative Python 3.14 and Windows compatibility evidence; Psycopg is constrained to 3.2.10 or newer within 3.2 because that is where official Python 3.14 support begins.
 11. The initial Flask implementation and verification platform is Windows Server 2025 with standard GIL-enabled CPython 3.14.6 and PostgreSQL 18.3. The OS and exact patch are formal evidence facts rather than Flask configuration/startup gates; project metadata remains `>=3.14,<3.15`. Node.js 24.15.0 is only a recorded future-React platform fact and is absent from the Flask dependency/runtime/test/performance graph.
 
-Therefore API-03 is compatible with API-01 1.0.2, API-02 1.0.1, DB-07 Hard Gate 1, and PostgreSQL Contract for Flask 1.0 without revising the public or database contract.
+Therefore API-03 version 1.0.4 is compatible with API-01 1.0.3, API-02 1.0.2, DB-07 Hard Gate 1, and PostgreSQL Contract for Flask 1.1. The public wire shape and production routine signature/result shape remain unchanged.
 
 ## 34. Unresolved issues and deviations
 
@@ -1012,10 +1012,10 @@ The accepted database performance limitations remain explicit evidence items for
 | OS/exact-patch checks separated from Flask configuration/startup | Complete: formal acceptance evidence only; compatible standard GIL-enabled CPython 3.14.x remains the runtime range |
 | Seven operations and API-02 contract covered one-to-one | Complete |
 | API-04 through API-09 ownership bounded | Complete |
-| Upstream database/API contracts preserved | Complete |
+| Upstream database/API contracts coherently reconciled | Complete: API08-RC-01/02 only |
 | API-04 implementation absent | Complete |
 
-API-03 version 1.0.3 is complete as a reconciled design artifact and is ready for independent review. This documentation reconciliation does not authorize API-07 implementation by itself.
+API-03 version 1.0.4 is complete as a reconciled design artifact and is ready for independent review. This reconciliation does not authorize API-08 implementation correction by itself.
 
 ## 36. Version record
 
@@ -1025,9 +1025,10 @@ API-03 version 1.0.3 is complete as a reconciled design artifact and is ready fo
 | 1.0.1 | 2026-08-21 | Added the implementation-platform and dependency-compatibility correction using the then-supplied Python patch value; tightened Psycopg 3.2 to 3.2.10+, preserved PostgreSQL 18.3, and recorded Node.js 24.15.0 only for future React work. Superseded by 1.0.2 for the corrected Python patch and evidence/startup distinction. |
 | 1.0.2 | 2026-08-21 | Corrected the authoritative installed/initial Python patch to standard GIL-enabled CPython 3.14.6; changed the read-only result from mismatch to match; removed the OS/exact-patch Flask configuration/startup gate; retained formal API-04/API-09 evidence checks, `requires-python = ">=3.14,<3.15"`, Psycopg 3.2.10+, PostgreSQL 18.3, and Node.js's future-React-only status. No API/database/transaction/architecture behavior changed. |
 | 1.0.3 | 2026-08-23 | Applied the approved `API-07 OP-02 timezone/snapshot reconciliation`: OP-02 now reads only `reservation_configuration.restaurant_timezone` and calls the unchanged provisional-availability routine within one `REPEATABLE READ READ ONLY` snapshot. API-02 and the frozen PostgreSQL contract remain unchanged. |
+| 1.0.4 | 2026-08-24 | Applied API08-RC-01/02: adopted deterministic caller-party/server-duration outcome classification and authorized OP-05's existing post-commit read-only confirmation transaction to retrieve only stored name components plus current restaurant IANA timezone. Booking mutation boundaries, public wire shape, privileges, and routine result shape remain unchanged. |
 
 ## 37. Approval checkpoint
 
-**Current checkpoint:** API-03 version 1.0.3 contains the approved API-07 OP-02 timezone/snapshot reconciliation and awaits independent review before revised Prompt 16 is executed.
+**Current checkpoint:** API-08 contract reconciliation is complete at API-03 version 1.0.4 and awaits approval before the subsequent API-08 implementation-correction prompt.
 
-The original API-03 approval boundary is preserved. Prompt 16A authorizes only this documentation reconciliation; it does not authorize API-07 implementation, API-08/API-09, React, integration, deployment, or PostgreSQL changes.
+The original API-03 approval boundary is preserved. Prompt 17B authorizes only this contract/routine/test reconciliation; it does not authorize API-08 Flask correction, API-09, React, integration, or deployment work.

@@ -1,11 +1,12 @@
 # Cafe Fausse API-02 Flask REST Contract
 
-**Document version:** 1.0.1<br>
+**Document version:** 1.0.2<br>
 **Date:** 2026-08-21  
 **Roadmap increment:** API-02 - Flask REST Contract  
 **Status:** Approved<br>
 **Author:** Codex, prepared for Abdul  
 **Approval record:** Approved by Abdul on 2026-08-21. This approval authorizes only API-03 - Flask Architecture, Configuration, and Test Strategy. It does not authorize Flask implementation, API-04 or later increments, React work, integration work, or PostgreSQL changes.
+**Reconciliation record:** Version 1.0.2 applies the approved API08-RC-01/02 reconciliation from 2026-08-24 without changing any public request or response shape.
 
 ## 1. Executive summary
 
@@ -13,7 +14,7 @@ This document is the complete Version 1 HTTP/JSON compatibility boundary for the
 
 PostgreSQL remains authoritative for current hours and configuration, provisional availability, customer state, booking validation, concurrency, allocation, persistence, and exact retry. The API exposes no database object names, SQL outcomes, fingerprints, customer identifiers, free-table facts, or reservation-query capability. This increment creates no executable specification or application code.
 
-No source contradiction or database change is required. API-02 can therefore complete as a design phase gate and pause for approval before API-03.
+The approved API08-RC-01/02 reconciliation resolves the later-discovered booking-classification and confirmation-timezone source gaps while preserving this public wire shape.
 
 ## 2. Authority and accepted baseline
 
@@ -24,13 +25,13 @@ Sources were applied in the prompt's required order:
 3. `docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md`, version 2.2.1;
 4. DB-01 version 1.2.1, DB-02 version 1.2, DB-03 version 1.1, and DB-04 version 1.1;
 5. the implemented DB-05 through DB-07 migrations, reports, verification evidence, and approval records;
-6. `database/POSTGRESQL_CONTRACT_FOR_FLASK.md`, approved and frozen version 1.0;
-7. `docs/approved-design-artifacts/Cafe_Fausse_API01_Backend_Operation_Inventory.md`, approved version 1.0.1;
+6. `database/POSTGRESQL_CONTRACT_FOR_FLASK.md`, approved baseline version 1.0 and reconciled version 1.1;
+7. `docs/approved-design-artifacts/Cafe_Fausse_API01_Backend_Operation_Inventory.md`, approved baseline version 1.0.1 and reconciled version 1.0.3;
 8. the least-to-most roadmap version 1.1.1, Project Requirements Baseline version 1.0, and `AGENTS.md`.
 
 Accepted without reopening: PostgreSQL 18.3 and `pgcrypto`; six approved business tables; four authorized foundation reads; three production routines; `READ COMMITTED` booking; database-owned concurrency, allocation, and retry fingerprinting; no more than three complete attempts for SQLSTATE `55P03`, `40P01`, and `40001`; exact retry by ordinary booking facts; no direct application reads of reservations or assignments; and the documented general-allocation and coarse-lock performance limitations.
 
-API-01 defines exactly OP-01 through OP-07. OP-05 obtains confirmation display spelling only through the approved post-success `customers` read by canonical email, projecting stored first name, optional middle initial, and last name. Request casing is never the confirmation authority.
+API-01 defines exactly OP-01 through OP-07. OP-05 obtains confirmation display spelling and local-time serialization facts only through its approved post-success read-only confirmation transaction, projecting stored first name, optional middle initial, and last name by canonical email plus current `reservation_configuration.restaurant_timezone`. Request casing and the submitted numeric offset are never confirmation authorities.
 
 ## 3. Scope and API-03 boundary
 
@@ -46,9 +47,9 @@ API-03 will select architecture, configuration, connection ownership, driver beh
 | Instructions | Repository-root `AGENTS.md` was read; no more-specific applicable instruction was found. |
 | Required artifacts | All authoritative paths listed in Section 2 exist with the stated versions. |
 | API-01 approval | API-01 v1.0.1 records approval by Abdul on 2026-08-21 and authorizes only API-02. |
-| API-01 integrity | It still defines OP-01 through OP-07 and the deterministic OP-05 post-success stored-name source. |
+| API-01 integrity | It still defines OP-01 through OP-07 and the deterministic OP-05 post-success stored-name/current-timezone sources. |
 | DB-07 gate | `database/DB07_VERIFICATION_REPORT.md` records Hard Gate 1 approval by Abdul on 2026-08-20. |
-| Frozen contract | `database/POSTGRESQL_CONTRACT_FOR_FLASK.md` is version 1.0, approved on 2026-08-20, and frozen. |
+| Frozen contract | `database/POSTGRESQL_CONTRACT_FOR_FLASK.md` baseline version 1.0 was approved on 2026-08-20; version 1.1 applies API08-RC-01. |
 | Implementation match | Migrations 007-009 implement the three frozen signatures, outputs, outcomes, and grants; migrations 004 and 009 preserve the documented read/execute boundary. |
 | Runtime privilege | `cafe_fausse_app` may read `customers`, `reservation_configuration`, `restaurant_operating_hours`, and `restaurant_tables`, and execute only the three production routines. Reservation/assignment reads, direct writes, sequences, DDL, helpers, writers, and test seams are denied. |
 | Backend/frontend state | `backend/` and `frontend/` exist and contain no implementation. |
@@ -288,7 +289,7 @@ Success body:
 
 Database `booked` and `booked_phone_notice` map to `201` and `booking_result:"created"`; the latter includes `phone_notice`. Database `exact_retry` maps to `200` and `booking_result:"exact_retry"`. Exact retry is success, uses the original reservation/assignments and current newsletter state, performs no contact/newsletter mutation, and never includes a phone notice replay.
 
-After the booking transaction has committed successfully, or after an exact retry has established that the reservation already exists, Flask performs the separate authorized customer-name read needed to assemble `confirmation.customer_name`. If that read fails or cannot return the required stored name, the API returns `503 reservation_confirmation_unavailable` with `retryable:true` and `outcome_unknown:false`. The reservation is known to exist; only the complete confirmation is unavailable. The caller resubmits the same ordinary booking request, which safely reaches exact retry and reconstructs the confirmation when the read succeeds. This result is distinct from `reservation_outcome_unknown`, where the booking commit itself is uncertain.
+After the booking transaction has committed successfully, or after an exact retry has established that the reservation already exists, Flask performs the separate authorized read-only confirmation transaction needed to obtain stored name components and current `reservation_configuration.restaurant_timezone`. The stored name assembles `confirmation.customer_name`; the IANA timezone serializes each committed start/end instant into its restaurant-local value. If that read fails or cannot return the required name/timezone facts, the API returns `503 reservation_confirmation_unavailable` with `retryable:true` and `outcome_unknown:false`. The reservation is known to exist; only the complete confirmation is unavailable. The caller resubmits the same ordinary booking request, which safely reaches exact retry and reconstructs the confirmation when the read succeeds. This result is distinct from `reservation_outcome_unknown`, where the booking commit itself is uncertain.
 
 The response contains no email, confirmation email, phone value, customer ID, fingerprint/version, database outcome/detail, free/candidate/capacity facts, or delivery field. Its presence is the display confirmation; it does not claim email or SMS was sent.
 
@@ -331,7 +332,7 @@ When the approved PostgreSQL target, extension/object privileges, or foundation 
 | `newsletter_status_indeterminate` | 503 | Yes | true / false | Retry lookup, or book with `no_change` | OP-03 database/timeout failure; operational error, PII-redacted |
 | `temporary_failure` | 503 | Yes | true / false | Retry the complete request later | Known rollback/no commit: database unavailable, known timeout, or exhausted bounded `55P03`/`40P01`/`40001`; redacted technical log |
 | `newsletter_preference_outcome_unknown` | 503 | Yes | true / true | Resubmit the identical POST body | Connection/result loss where OP-04 may have committed; ambiguity log, PII-redacted |
-| `reservation_confirmation_unavailable` | 503 | Yes | true / false | Resubmit the identical ordinary booking request to reconstruct the known reservation confirmation | Booking commit or exact retry is known; separate post-commit stored-name read failed; operational error, PII-redacted |
+| `reservation_confirmation_unavailable` | 503 | Yes | true / false | Resubmit the identical ordinary booking request to reconstruct the known reservation confirmation | Booking commit or exact retry is known; separate post-commit stored-name/current-timezone read failed; operational error, PII-redacted |
 | `reservation_outcome_unknown` | 503 | Yes | true / true | Resubmit the identical ordinary POST body; it may create or exact-retry | Connection/result loss where OP-05 may have committed; ambiguity log, PII-redacted |
 | `service_unavailable` | 503 | Yes | true / false | Retry later; caller cannot repair service configuration | OP-01/02/05 invalid database configuration or unusable foundation; internal detail withheld |
 | `service_not_ready` | 503 | Yes | true / false | Infrastructure retries readiness later | OP-07 dependency/foundation check; only coarse internal failed-check logging |
@@ -352,7 +353,7 @@ When the approved PostgreSQL target, extension/object privileges, or foundation 
 | Booking `booked` | `201 booking_result:"created"` |
 | Booking `booked_phone_notice` | `201 booking_result:"created"` plus PhoneNotice |
 | Booking `exact_retry` | `200 booking_result:"exact_retry"` |
-| Successful booking/exact retry followed by failed stored-name read | `503 reservation_confirmation_unavailable`; reservation existence is known |
+| Successful booking/exact retry followed by failed stored-name/current-timezone confirmation read | `503 reservation_confirmation_unavailable`; reservation existence is known |
 | Booking `same_customer_overlap` | `409 reservation_overlap` |
 | Booking `customer_identity_mismatch` | `409 customer_identity_conflict` |
 | Booking `middle_initial_conflict` | `409 middle_initial_conflict` |
@@ -365,7 +366,9 @@ Database validation details map only to safe public field codes:
 | Internal booking/availability detail | Public result |
 |---|---|
 | `date_or_party_size_out_of_range` | `422 validation_failed` on `local_date` and/or `party_size` |
-| `invalid_normalized_input`, `duration_or_party_size_out_of_range` | `422 validation_failed` on the applicable caller field; server-controlled duration failure becomes `service_unavailable` |
+| `invalid_normalized_input` | `422 validation_failed` on the applicable caller field |
+| `duration_or_party_size_out_of_range` with booking outcome `invalid_request` | `422 validation_failed` on `party_size`; this outcome identifies the caller-controlled range failure |
+| `duration_or_party_size_out_of_range` with booking outcome `invalid_database_configuration` | `503 service_unavailable`; this outcome identifies the server-controlled duration failure |
 | `nonexistent_local_start` | `422`, `starts_at_local/nonexistent_local_time` |
 | `ambiguous_local_start` | `422`, `starts_at_local/ambiguous_local_time` |
 | `utc_offset_mismatch` | `422`, `utc_offset_minutes/utc_offset_mismatch` |
@@ -383,7 +386,7 @@ Every stable database outcome/detail therefore maps to one public result. Public
 - OP-04 sets a final Boolean and is safely repeatable. A repeated success may not reveal whether the prior call committed, because the frozen routine exposes only final state.
 - OP-05 accepts no idempotency key, confirmation reference, fingerprint, or retry endpoint. A client repeats the same normalized ordinary booking facts after `reservation_outcome_unknown`.
 - If the prior OP-05 call committed, PostgreSQL returns `exact_retry`; if it rolled back, the repeated call is freshly evaluated and may create, conflict, or be unavailable. Exact retry does not replay phone, middle-initial, or newsletter mutation.
-- After `reservation_confirmation_unavailable`, the reservation is known to exist and `outcome_unknown` is false. Repeating the identical OP-05 request is appropriate because exact retry reconstructs the reservation and permits another stored-name read.
+- After `reservation_confirmation_unavailable`, the reservation is known to exist and `outcome_unknown` is false. Repeating the identical OP-05 request is appropriate because exact retry reconstructs the reservation and permits another stored-name/current-timezone confirmation read.
 - `reservation_unavailable` has `retryable:false`: repeating the identical booking request is not the recovery action. The client refreshes OP-02 and submits a different booking request only after selecting another available slot.
 - The later Flask implementation may automatically retry only complete transactions that fail with the three frozen retryable SQLSTATE classes, no more than three total attempts within one overall deadline. It rolls back before each retry and re-reads current facts.
 - A timeout or error with a known rollback uses `temporary_failure` and `outcome_unknown:false`. Any loss during a mutation where commit cannot be proven uses the operation-specific outcome-unknown code. An unknown outcome is never described as a definitive failure.
@@ -405,7 +408,7 @@ Unauthenticated Version 1 access does not prove identity or ownership and grants
 | OP-02 availability | `cafe_fausse.provisional_availability(date, integer)` from validated `local_date`, `party_size` | `outcome`, `detail_code`, local/canonical start/end, provisional flag | Section 9.2 or mapped error | Outcome/detail, reservations, assignments, candidates, capacity withheld. One read-only statement; repeat after connection loss. |
 | OP-03 lookup | Authorized `cafe_fausse.customers` read by canonical email, projecting first/middle/last and Boolean | Existence, safe name/middle comparison, current Boolean | `matched`/`not_found` or conflict/indeterminate | No stored values, email, phone, ID, reservations. One read-only snapshot. |
 | OP-04 preference | `cafe_fausse.set_newsletter_preference(text,text,text,text,boolean)` from normalized first, nullable middle, normalized last, canonical email, and `subscribed` | `outcome`, `newsletter_subscribed` | `set` or `no_customer_no_change`; mapped conflicts/errors | Confirmation email and database outcome withheld. One controlled transaction; bounded full-attempt retry; connection loss can be unknown. |
-| OP-05 booking | `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` at `READ COMMITTED`; after its commit is known, and only for `booked`, `booked_phone_notice`, or `exact_retry`, read `cafe_fausse.customers` by canonical email for stored first/middle/last | Stable outcome/detail; reservation ID; canonical interval; party; sorted tables; newsletter; phone notice; internal fingerprint fields; then stored display-name parts | `201 created`, `200 exact_retry`, notice, mapped booking error, or `503 reservation_confirmation_unavailable` if the separate name read fails | Fingerprint, outcome/detail, customer ID/contact, free/candidate/capacity facts withheld. Routine call is one transaction; name read is separate and read-only after known success. A failed name read leaves reservation existence known and supports identical resubmission; unknown booking commit remains `reservation_outcome_unknown`. No reservation/assignment query. |
+| OP-05 booking | `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)` at `READ COMMITTED`; after its commit is known, and only for `booked`, `booked_phone_notice`, or `exact_retry`, use a separate read-only confirmation transaction to project stored `customers.first_name`/`middle_initial`/`last_name` by canonical email and current `reservation_configuration.restaurant_timezone` | Stable outcome/detail; reservation ID; canonical interval; party; sorted tables; newsletter; phone notice; internal fingerprint fields; then stored display-name parts and current IANA timezone | `201 created`, `200 exact_retry`, notice, mapped booking error, or `503 reservation_confirmation_unavailable` if the separate confirmation read fails | Fingerprint, outcome/detail, customer ID/contact, other configuration, free/candidate/capacity facts withheld. Routine call is one transaction; confirmation read is separate and read-only after known success. A failed confirmation read leaves reservation existence known and supports identical resubmission; unknown booking commit remains `reservation_outcome_unknown`. No reservation/assignment query. |
 | OP-06 liveness | No PostgreSQL | Process can answer | `200 {status:"live"}` | No diagnostics or dependency claim. |
 | OP-07 readiness | Approved read-only connection/catalog/privilege and four-foundation checks | Ready/not-ready internal Boolean | `200 ready` or generic `503 service_not_ready` | No server/schema/extension/role/version/check detail. No mutation or full verifier. |
 
@@ -683,7 +686,7 @@ Temporary known failure:
 {"error":{"code":"temporary_failure","message":"The reservation could not be processed right now. Please retry shortly.","retryable":true,"outcome_unknown":false}}
 ```
 
-Known reservation but unavailable confirmation after the post-commit name read:
+Known reservation but unavailable confirmation after the post-commit stored-name/current-timezone read:
 
 ```json
 {"error":{"code":"reservation_confirmation_unavailable","message":"The reservation exists, but its complete confirmation could not be prepared. Resubmit the same reservation details to recover it.","retryable":true,"outcome_unknown":false}}
@@ -850,7 +853,7 @@ No test is created in API-02. Later API increments automate these cases.
 | OP-04 | POST true/false set, new selected, existing transition, same-state repetition, new false/no-customer, generic/middle conflict, temporary failure, and ambiguity; the same body safely repeats at application level despite POST not being HTTP-idempotent; no created/updated/history discriminator. |
 | OP-05 success | 201 single/multi-table created, 201 phone notice, 200 exact retry; one confirmation schema; ascending unique tables; stored display name; current newsletter; no delivery claim/contact/fingerprint; reference `9007199254740993` remains a string. |
 | OP-05 time | Seconds required, fractions/Z rejected for local input; suffix-offset integer agreement; DST standard/daylight offsets; nonexistent/ambiguous starts; canonical Z response; end/duration never accepted; back-to-back endpoints allowed. |
-| OP-05 failures | Validation 422, identity/middle/overlap/unavailable 409 with distinct codes, service/temporary 503, failed post-commit name read as `503 reservation_confirmation_unavailable` with known outcome, booking commit ambiguity as distinct `reservation_outcome_unknown`, and unexpected 500 only when noncommit known. Assert unavailable is not retryable, confirmation-unavailable supports identical resubmission/exact reconstruction, every database stable outcome/detail maps exactly once, and detail never leaks. |
+| OP-05 failures | Validation 422, identity/middle/overlap/unavailable 409 with distinct codes, service/temporary 503, failed post-commit stored-name/current-timezone confirmation read as `503 reservation_confirmation_unavailable` with known outcome, booking commit ambiguity as distinct `reservation_outcome_unknown`, and unexpected 500 only when noncommit known. Assert invalid caller party size maps from `invalid_request` to 422, invalid server duration maps from `invalid_database_configuration` to 503, unavailable is not retryable, confirmation-unavailable supports identical resubmission/exact reconstruction, every database stable outcome/detail maps exactly once, and detail never leaks. |
 | OP-06/07 | Liveness succeeds without database; readiness depends on approved checks; ready 200 and generic not-ready 503; neither returns versions, components, diagnostics, or customer facts. |
 | Cache/privacy | Every endpoint has no-store semantics; no PII in paths/query/cache keys; PII-bearing bodies and confirmation are protected; error/log examples contain no raw identity, confirmation email, phone, SQL, SQLSTATE, or credentials. |
 
@@ -872,11 +875,11 @@ No test is created in API-02. Later API increments automate these cases.
 | Existing true/false transition or same-state | OP-04 `subscribed`/`unsubscribed` | 200 set/final Boolean | One row, final Boolean | Prior state/history hidden; API-06/09 |
 | Unknown identity set false | OP-04 `no_customer_no_change` | 200 no_customer_no_change/false | No row | No customer ID; API-06/09 |
 | Concurrent same-email preference/create | OP-04 controlled routine | One defined result per request, each 200 or safe mapped conflict | One canonical customer; last valid commit wins | Locks/attempts hidden; API-06/09 |
-| New party 4 with one winning table | OP-05 `booked` + name read | 201 created, one table | One reservation + one assignment | Candidate/fingerprint hidden; API-08/09 |
-| New party requiring several tables | OP-05 `booked` + name read | 201 created, ascending array | One reservation + complete assignments | Capacity/rank hidden; API-08/09 |
+| New party 4 with one winning table | OP-05 `booked` + confirmation read | 201 created, one table | One reservation + one assignment | Candidate/fingerprint hidden; API-08/09 |
+| New party requiring several tables | OP-05 `booked` + confirmation read | 201 created, ascending array | One reservation + complete assignments | Capacity/rank hidden; API-08/09 |
 | Existing differing phone | OP-05 `booked_phone_notice` | 201 created + safe notice | Booking commits; stored phone unchanged | Both phone values hidden; API-08/09 |
-| Same ordinary retry with different accepted casing | OP-05 `exact_retry` + stored-name read | 200 exact_retry, same reference/name/interval/tables | No new/mutated booking/contact/newsletter | Fingerprint hidden; API-08/09 |
-| New booking commit or exact retry succeeds, then separate stored-name read fails | OP-05 known successful routine/commit followed by failed authorized customer projection | 503 reservation_confirmation_unavailable, retryable true, outcome unknown false; identical resubmission later returns exact-retry confirmation | Known reservation and assignments remain committed; no replayed contact/newsletter mutation | Stored identity/read failure hidden; API-08/09 |
+| Same ordinary retry with different accepted casing | OP-05 `exact_retry` + stored-name/current-timezone confirmation read | 200 exact_retry, same reference/name/canonical interval/tables and current-timezone local interval | No new/mutated booking/contact/newsletter | Fingerprint hidden; API-08/09 |
+| New booking commit or exact retry succeeds, then separate confirmation read fails | OP-05 known successful routine/commit followed by failed authorized stored-name/current-timezone projection | 503 reservation_confirmation_unavailable, retryable true, outcome unknown false; identical resubmission later returns exact-retry confirmation | Known reservation and assignments remain committed; no replayed contact/newsletter mutation | Stored identity/configuration/read failure hidden; API-08/09 |
 | Same customer different overlapping request | OP-05 `same_customer_overlap` | 409 reservation_overlap | No attempted mutation | Existing reservation hidden; API-08/09 |
 | Different customer overlap with sufficient disjoint capacity | OP-05 `booked` | 201 created | Both complete, no shared table overlap | Allocation internals hidden; API-08/09 |
 | OP-02 available, intervening booking fills capacity, then OP-05 | OP-05 `unavailable` | 409 reservation_unavailable | Intervening booking only | Stale/free facts hidden; API-08/09 |
@@ -901,7 +904,7 @@ Each automated integration case must record initial fixture state, exact request
 - [ ] Confirmation shows stored name spelling, restaurant contact facts, and no email/SMS delivery claim.
 - [ ] Mismatch errors never reveal which stored value differed.
 - [ ] Unknown booking outcome never claims failure and explicitly supports ordinary resubmission.
-- [ ] A failed post-commit name read reports a known existing reservation with `reservation_confirmation_unavailable`, not `reservation_outcome_unknown`, and identical resubmission reconstructs it.
+- [ ] A failed post-commit stored-name/current-timezone confirmation read reports a known existing reservation with `reservation_confirmation_unavailable`, not `reservation_outcome_unknown`, and identical resubmission reconstructs it.
 - [ ] `retryable` means the same request is appropriate; unavailable capacity is false because recovery requires refresh and another slot.
 - [ ] No PII or booking body value appears in a URL.
 - [ ] No response exposes free tables, candidates, capacities, fingerprints, SQL, SQLSTATE, schema, routines, roles, or detail codes.
@@ -914,7 +917,7 @@ Context is bounded to seven weekdays and a small fixed set of scalars. Lookup/pr
 
 Pagination, streaming, queues, jobs, holds, polling, or asynchronous booking are unjustified. One-day slots, seven weekday rules, and at most 30 assignments are small. Candidate combinations and capacity internals are omitted because they are potentially much larger, have no client use, and belong to PostgreSQL.
 
-Later API-09 and integration work must measure normalization, validation, connection acquisition, retry/backoff, transaction execution, name read, serialization, Flask scheduling, network, and browser handling in addition to DB-07 evidence. General database allocation p95 around 1.14-1.27 seconds and coarse-lock contention beyond two seconds remain accepted limitations, not public latency guarantees. Contention appears as correct success/business outcome or safe temporary failure, never weakened integrity. The SRS two-second form expectation remains for later full-stack validation.
+Later API-09 and integration work must measure normalization, validation, connection acquisition, retry/backoff, transaction execution, confirmation read, serialization, Flask scheduling, network, and browser handling in addition to DB-07 evidence. General database allocation p95 around 1.14-1.27 seconds and coarse-lock contention beyond two seconds remain accepted limitations, not public latency guarantees. Contention appears as correct success/business outcome or safe temporary failure, never weakened integrity. The SRS two-second form expectation remains for later full-stack validation.
 
 ## 20. Operation, endpoint, and field-source traceability
 
@@ -943,7 +946,7 @@ Every endpoint maps to exactly the operation in its row; there is no split, grou
 | `provisional`, slots, available | OP-02 frozen output plus necessary non-guarantee signal | Full daily schedule |
 | Lookup matched/not-found/subscribed | OP-03 minimum workflow state | Checkbox synchronization |
 | Preference final state/result | OP-04 routine output | Dedicated form confirmation |
-| Booking result/reference/name/interval/party/tables/newsletter | OP-05 routine + approved post-commit name read + PRA-024 | Confirmation/recovery; name-read failure uses known-reservation recovery |
+| Booking result/reference/name/interval/party/tables/newsletter | OP-05 routine + approved post-commit stored-name/current-timezone confirmation read + PRA-024 | Confirmation/recovery; confirmation-read failure uses known-reservation recovery |
 | Fixed restaurant address/phone | SRS FR-02/PRA-024 | Context and confirmation |
 | Phone notice | Frozen `phone_notice` + PRA-019 | Successful non-overwrite notice |
 | Error code/message/fields/retry/unknown | NFR-06/PRA-024 and protocol branching/recovery necessity | All clients |
@@ -989,7 +992,7 @@ Static FR-01, FR-03 through FR-05, and FR-10 through FR-14 require no backend op
 | PRA-021 | Body-based POST with application-level final-state idempotency, booking action enum, and concurrency-safe retry/ambiguity representation. |
 | PRA-022 | No cancellation/modification/rescheduling endpoint or field. |
 | PRA-023 | Strict server validation/normalization and current PostgreSQL revalidation; no coercion. |
-| PRA-024 | Complete confirmation, no delivery claim, safe messages, redaction, stale/full/ambiguity handling, and explicit recovery when the separate post-commit stored-name read cannot assemble confirmation. |
+| PRA-024 | Complete confirmation, no delivery claim, safe messages, redaction, stale/full/ambiguity handling, and explicit recovery when the separate post-commit stored-name/current-timezone read cannot assemble confirmation. |
 | PRA-025 | Availability-first flow, every legitimate slot, unavailable flags, provisional signal, no arbitrary times/table choice, refresh recovery. |
 | PRA-026 to PRA-028 | Current values remain prospective; exact retry newsletter separation and normal retention remain internal; no history/reset customer API. |
 | PRA-029 | Seven current hours come from PostgreSQL; no Flask/React authoritative schedule constants or exception model. |
@@ -1059,7 +1062,7 @@ No deferred implementation choice may change a field, path, method, status, code
 |---|---|
 | Seven API-01 operations | Exactly seven endpoints, bijectively mapped; no new operation. |
 | Four foundation reads/three routines | Used exactly as inventoried; no new query, routine, view, grant, or write path. |
-| OP-05 stored-name source | Preserved after each successful committed database result; request casing never drives confirmation. A failed separate read maps to known-outcome `reservation_confirmation_unavailable` and identical exact-retry reconstruction. |
+| OP-05 confirmation sources | Preserved after each successful committed database result: stored name components drive display spelling and current restaurant IANA timezone drives local-time serialization. A failed separate read maps to known-outcome `reservation_confirmation_unavailable` and identical exact-retry reconstruction. |
 | PostgreSQL 18.3/`pgcrypto` | Preserved as readiness/internal deployment facts, not diagnostic response fields. |
 | `READ COMMITTED`, locks, allocation | Kept entirely inside the approved database/caller transaction boundary. |
 | Fingerprint/exact retry | No client key; 200 exact-retry success from ordinary facts; fingerprint withheld. |
@@ -1088,7 +1091,7 @@ There is no deviation from Prompt 11. API-02 changes only this design artifact. 
 | PostgreSQL `BIGINT` reference JavaScript-safe | Complete: decimal string |
 | New booking versus exact retry | Complete: 201 `created` versus 200 `exact_retry` |
 | Unknown mutation outcome and safe resubmission | Complete |
-| Known booking with failed post-commit confirmation-name read | Complete: 503 `reservation_confirmation_unavailable`, retryable true, outcome unknown false |
+| Known booking with failed post-commit stored-name/current-timezone confirmation read | Complete: 503 `reservation_confirmation_unavailable`, retryable true, outcome unknown false |
 | `retryable` identical-request semantics | Complete; authoritative unavailable is false and requires refreshed/different input |
 | Every stable database outcome/detail safely mapped | Complete |
 | Common error envelope/status catalogue complete | Complete |
@@ -1104,7 +1107,7 @@ There is no deviation from Prompt 11. API-02 changes only this design artifact. 
 | Flask/React/SQL implementation avoided | Complete |
 | Unresolved blockers | None |
 
-API-02 version 1.0.1 is approved by Abdul as of 2026-08-21. No implementation increment has begun.
+API-02 baseline version 1.0.1 is approved by Abdul as of 2026-08-21. Version 1.0.2 applies the explicitly approved API08-RC-01/02 reconciliation and is ready for review before API-08 correction.
 
 ### 26.1 Version record
 
@@ -1112,6 +1115,7 @@ API-02 version 1.0.1 is approved by Abdul as of 2026-08-21. No implementation in
 |---|---|---|
 | 1.0 | 2026-08-21 | Established the complete proposed API-02 HTTP/JSON contract. |
 | 1.0.1 | 2026-08-21 | Corrected OP-04 to body-based `POST /api/v1/newsletter-preferences`; added known-reservation recovery for failed post-commit confirmation-name reads; defined `retryable` as identical-request recovery and made `reservation_unavailable` non-retryable. No API-01, PostgreSQL, Flask implementation, or Version 1 business rule changed. |
+| 1.0.2 | 2026-08-24 | Applied API08-RC-01/02 without changing the wire shape: booking outcome now deterministically distinguishes caller party-size validation from invalid server duration, and OP-05's post-commit confirmation source includes only stored name components plus current restaurant IANA timezone. |
 
 ## 27. Approval checkpoint
 

@@ -179,12 +179,25 @@ DECLARE
     conflict_result record;
     population_result record;
     notice_result record;
+    range_result record;
     before_reservation_count bigint;
     assigned_table smallint;
 BEGIN
     SELECT * INTO STRICT slot_one FROM chosen_slots WHERE slot_number = 1;
     SELECT * INTO STRICT slot_two FROM chosen_slots WHERE slot_number = 4;
     SELECT * INTO STRICT slot_three FROM chosen_slots WHERE slot_number = 7;
+
+    SELECT * INTO STRICT range_result
+    FROM cafe_fausse.book_reservation_test(
+        'Range', NULL, 'Caller', 'range-caller.db06@example.com', NULL,
+        slot_one.local_start, slot_one.utc_offset_minutes, 121, 'no_change', 1, NULL
+    );
+    PERFORM pg_temp.assert_true(
+        range_result.outcome = 'invalid_request'
+        AND range_result.detail_code = 'duration_or_party_size_out_of_range'
+        AND range_result.reservation_id IS NULL,
+        'caller-controlled party size retains invalid-request classification'
+    );
 
     SELECT * INTO STRICT first_result
     FROM cafe_fausse.book_reservation_test(
@@ -390,6 +403,42 @@ BEGIN
     );
 END
 $booking_tests$;
+
+-- The normal schema constraint prevents an invalid duration. Temporarily remove it
+-- inside this rollback-only test transaction to exercise the routine's defensive
+-- server-configuration classification, then restore the exact approved constraint.
+RESET ROLE;
+ALTER TABLE cafe_fausse.reservation_configuration
+    DROP CONSTRAINT reservation_configuration_duration_ck;
+UPDATE cafe_fausse.reservation_configuration
+SET reservation_duration_minutes = 75
+WHERE configuration_id = 1;
+SET LOCAL ROLE cafe_fausse_test;
+
+SELECT pg_temp.assert_true(
+    (
+        SELECT outcome = 'invalid_database_configuration'
+           AND detail_code = 'duration_or_party_size_out_of_range'
+           AND reservation_id IS NULL
+        FROM chosen_slots AS slot
+        CROSS JOIN LATERAL cafe_fausse.book_reservation_test(
+            'Range', NULL, 'Server', 'range-server.db06@example.com', NULL,
+            slot.local_start, slot.utc_offset_minutes, 4, 'no_change', 1, NULL
+        )
+        WHERE slot.slot_number = 12
+    ),
+    'server-controlled invalid duration uses invalid-database-configuration classification'
+);
+
+RESET ROLE;
+UPDATE cafe_fausse.reservation_configuration
+SET reservation_duration_minutes = 90
+WHERE configuration_id = 1;
+ALTER TABLE cafe_fausse.reservation_configuration
+    ADD CONSTRAINT reservation_configuration_duration_ck CHECK (
+        reservation_duration_minutes IN (60, 90, 120)
+    );
+SET LOCAL ROLE cafe_fausse_test;
 
 DO $fingerprint_collision_test$
 DECLARE

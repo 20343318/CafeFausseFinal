@@ -1,6 +1,6 @@
-# PostgreSQL Contract for Flask v1.0
+# PostgreSQL Contract for Flask v1.1
 
-Status: Version 1.0 approved by Abdul at DB-07 Hard Gate 1 on 2026-08-20 and frozen as the database-facing contract for later Flask design. This is not a REST contract.
+Status: Version 1.1 reconciles the approved API08-RC-01 classification decision on 2026-08-24; version 1.0 was approved by Abdul at DB-07 Hard Gate 1 on 2026-08-20. This is not a REST contract.
 
 ## Platform, namespace, and caller rules
 
@@ -52,6 +52,8 @@ Result columns are:
 
 Stable outcomes are `booked`, `booked_phone_notice`, `exact_retry`, `same_customer_overlap`, `customer_identity_mismatch`, `middle_initial_conflict`, `unavailable`, `invalid_request`, and `invalid_database_configuration`. Stable validation/readiness details are `requires_read_committed`, `invalid_normalized_input`, `configuration_row_count`, `operating_hours_population`, `restaurant_table_population`, `invalid_timezone`, `nonexistent_local_start`, `ambiguous_local_start`, `utc_offset_mismatch`, `date_outside_booking_window`, `insufficient_same_day_lead`, `start_before_opening`, `misaligned_start`, `end_after_closing`, `duration_or_party_size_out_of_range`, `no_capacity_sufficient_combination`, and `time_boundary_crossed_during_booking`.
 
+For `duration_or_party_size_out_of_range`, the outcome is the deterministic discriminator: a caller-controlled party size below one or above current total capacity returns `invalid_request`; an invalid server-controlled `reservation_duration_minutes` returns `invalid_database_configuration`. The result columns and detail vocabulary are unchanged.
+
 `exact_retry` is verified against `(customer_id, starts_at, party_size)` after the non-unique fingerprint lookup. It returns the original interval and assignments plus the current newsletter state, and performs no customer/contact/newsletter mutation. Thus response loss after commit is recovered by the same ordinary request without a client key. A differing populated phone returns `booked_phone_notice`; it does not overwrite the stored phone.
 
 ## Persistence and temporal contract
@@ -77,5 +79,7 @@ Changing an operation signature, result shape, stable outcome/detail, grant expe
 ## Approval record
 
 Abdul explicitly approved this PostgreSQL Contract for Flask v1.0 as part of DB-07 Hard Gate 1 on 2026-08-20. That approval includes the documented database performance envelope, the general exact-allocation p95 measurements, and the accepted coarse-lock contention limitation. Complete validation of the two-second form-submission expectation remains assigned to the later Flask and full-stack integration performance gates.
+
+Version 1.1 applies the explicitly approved API08-RC-01 reconciliation on 2026-08-24. It changes only the outcome paired with `duration_or_party_size_out_of_range` for an invalid server-controlled reservation duration, from `invalid_request` to `invalid_database_configuration`. Caller-controlled party-size failures remain `invalid_request`; no signature, result column, detail identifier, schema, role, grant, lock, allocation, retry, or other outcome semantic changes.
 
 The approval authorizes only API-01, a design-only backend operation inventory, after a separate instruction. It does not authorize Flask implementation, REST-contract design, API-02 or later increments, React work, or changes to this approved contract.

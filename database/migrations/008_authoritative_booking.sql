@@ -280,9 +280,13 @@ BEGIN
             NULL::bigint, NULL::timestamptz, NULL::timestamptz, NULL::integer,
             NULL::smallint[], NULL::boolean, FALSE, NULL::smallint, NULL::bytea;
         RETURN;
-    ELSIF configuration.reservation_duration_minutes NOT IN (60, 90, 120)
-          OR p_party_size < 1
-          OR p_party_size > total_capacity THEN
+    ELSIF configuration.reservation_duration_minutes NOT IN (60, 90, 120) THEN
+        RETURN QUERY SELECT
+            'invalid_database_configuration'::text, 'duration_or_party_size_out_of_range'::text,
+            NULL::bigint, NULL::timestamptz, NULL::timestamptz, NULL::integer,
+            NULL::smallint[], NULL::boolean, FALSE, NULL::smallint, NULL::bytea;
+        RETURN;
+    ELSIF p_party_size < 1 OR p_party_size > total_capacity THEN
         RETURN QUERY SELECT
             'invalid_request'::text, 'duration_or_party_size_out_of_range'::text,
             NULL::bigint, NULL::timestamptz, NULL::timestamptz, NULL::integer,
