@@ -15,6 +15,7 @@ from .db.health_gateway import PsycopgHealthGateway
 from .db.newsletter_gateway import NewsletterGateway
 from .db.availability_gateway import ReservationAvailabilityGateway
 from .db.context_gateway import ReservationContextGateway
+from .db.reservation_gateway import ReservationGateway
 from .db.pool import create_pool
 from .dependencies import Dependencies
 from .http.blueprint import create_api_blueprint
@@ -28,6 +29,7 @@ from .services.newsletter_preferences import NewsletterPreferenceService
 from .services.retry import RetryPolicy
 from .services.reservation_availability import ReservationAvailabilityService
 from .services.reservation_context import ReservationContextService
+from .services.reservations import ReservationService
 
 
 def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
@@ -102,6 +104,20 @@ def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
                 retry_class="mutation_cleanup_failure",
             ),
         )
+        reservation_service = ReservationService(
+            ReservationGateway(pool, acquire_timeout_ms=settings.pool_acquire_timeout_ms),
+            deadline_ms=settings.mutation_deadline_ms,
+            retry_policy=retry_policy,
+            monotonic=time.monotonic,
+            sleeper=time.sleep,
+            uniform=uniform,
+            retry_observer=lambda attempt: safe_logger.event(
+                "retry", operation="OP-05", attempt=attempt, retry_class="mutation_transient"
+            ),
+            cleanup_failure_observer=lambda: safe_logger.event(
+                "unexpected_error", severity="WARNING", operation="OP-05", retry_class="mutation_cleanup_failure"
+            ),
+        )
         return Dependencies(
             settings=settings,
             liveness_service=LivenessService(),
@@ -112,6 +128,7 @@ def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
             newsletter_preference_service=newsletter_preference_service,
             reservation_context_service=context_service,
             reservation_availability_service=availability_service,
+            reservation_service=reservation_service,
             resource=pool,
         )
     except Exception:
@@ -171,6 +188,8 @@ def create_app(settings: Settings | None = None, dependencies: Dependencies | No
                 operation = "OP-01"
             elif route == "/api/v1/reservation-availability":
                 operation = "OP-02"
+            elif route == "/api/v1/reservations":
+                operation = "OP-05"
             timer = getattr(g, "cafe_fausse_timer", None)
             logger.event(
                 "request_complete",

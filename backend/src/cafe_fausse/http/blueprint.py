@@ -9,6 +9,7 @@ from .routes.newsletter_preferences import newsletter_preferences
 from .routes.newsletter_status import newsletter_status
 from .routes.reservation_availability import reservation_availability
 from .routes.reservation_context import reservation_context
+from .routes.reservations import reservations
 
 
 def create_api_blueprint() -> Blueprint:
@@ -52,6 +53,13 @@ def create_api_blueprint() -> Blueprint:
         "/newsletter-status-queries",
         endpoint="newsletter_status_queries",
         view_func=newsletter_status,
+        methods=["POST"],
+        provide_automatic_options=False,
+    )
+    blueprint.add_url_rule(
+        "/reservations",
+        endpoint="reservations",
+        view_func=reservations,
         methods=["POST"],
         provide_automatic_options=False,
     )

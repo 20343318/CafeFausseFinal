@@ -9,7 +9,7 @@ from .config import Settings
 from .services.health import LivenessService, ReadinessService
 from .services.results import AvailabilityRequest, CustomerIdentity, NewsletterStatusResult
 from .services.results import NewsletterPreferenceCommand, NewsletterPreferenceResult
-from .services.results import ReservationAvailabilityResult, ReservationContextResult
+from .services.results import ReservationAvailabilityResult, ReservationBookingResult, ReservationCommand, ReservationContextResult
 
 
 class Closeable(Protocol):
@@ -34,6 +34,10 @@ class ReservationAvailabilityOperation(Protocol):
     def get(self, request: AvailabilityRequest) -> ReservationAvailabilityResult: ...
 
 
+class ReservationOperation(Protocol):
+    def book(self, command: ReservationCommand) -> ReservationBookingResult: ...
+
+
 @dataclass(frozen=True, slots=True)
 class Dependencies:
     settings: Settings
@@ -45,4 +49,5 @@ class Dependencies:
     newsletter_preference_service: NewsletterPreferenceOperation | None = None
     reservation_context_service: ReservationContextOperation | None = None
     reservation_availability_service: ReservationAvailabilityOperation | None = None
+    reservation_service: ReservationOperation | None = None
     resource: Closeable | None = None

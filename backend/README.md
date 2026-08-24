@@ -1,15 +1,15 @@
-# Cafe Fausse Flask backend through API-07
+# Cafe Fausse Flask backend through API-08
 
 This directory contains the API-04 Flask/PostgreSQL foundation, API-05's
 read-only OP-03 customer identity/newsletter-status query, API-06's OP-04
-independent newsletter-preference mutation, and API-07's read-only OP-01
-reservation context and OP-02 provisional availability discovery. PostgreSQL
-remains the business authority. There is no reservation creation API, ORM,
-CORS, session/cookie feature, startup migration, React code, or
-production-server selection here.
+independent newsletter-preference mutation, API-07's read-only reservation
+discovery, and API-08's OP-05 transactional reservation creation. PostgreSQL
+remains the business authority for allocation, overlap protection, customer
+reuse, availability revalidation, and exact retries. There is no ORM, CORS,
+session/cookie feature, startup migration, React code, or production-server
+selection here.
 
-API-01 through API-06 are approved. API-07 is the current unapproved review
-increment. API-08 and later increments are not authorized and have not been
+API-01 through API-08 are approved and frozen. API-09 and React work have not
 started.
 
 ## Supported and initially verified platform
@@ -203,6 +203,31 @@ established, the exact response is:
 For that outcome-unknown response, resubmit the identical request. Do not
 infer the prior outcome or change the requested Boolean before resubmission.
 
+## Reservation creation (OP-05)
+
+`POST /api/v1/reservations` accepts the approved structured identity fields,
+optional `phone`, `starts_at_local`, `utc_offset_minutes`, `party_size`, and
+`newsletter_action`. Flask strictly normalizes and validates the body, then
+calls only the frozen `cafe_fausse.book_reservation(...)` routine in an
+explicit `READ COMMITTED` transaction. PostgreSQL atomically creates/reuses
+the customer, revalidates the slot, selects a random winning table combination,
+prevents overlap/double booking, applies the linked newsletter action, and
+persists the reservation.
+
+New bookings return `201` with `booking_result:"created"`; an identical safe
+retry returns the original confirmation with `200` and
+`booking_result:"exact_retry"`. After the booking result is known committed, a
+separate read-only confirmation transaction retrieves only stored name parts
+and the current restaurant IANA timezone. Confirmation includes the
+decimal-string reference, stored customer-name spelling with an optional
+`X.` middle initial, canonical instants, restaurant-local start/end calculated
+independently through that timezone, party size, all assigned tables, final
+newsletter state, and restaurant contact facts. It never returns email, phone,
+customer ID, fingerprint, unrelated configuration, or allocation internals.
+Capacity loss and same-customer overlap return distinct nontechnical `409`
+responses. Known rollback, unknown commit, and a failed post-commit
+confirmation read remain distinct `503` recovery cases.
+
 ## Tests
 
 API-07 adds `GET /api/v1/reservation-context` and
@@ -231,9 +256,18 @@ Set-Location C:\Users\Administrator\source\CafeFausse
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 ```
 
+For the API-08 checkpoint, invoke the API-08 wrapper, which runs this complete
+guarded workflow and includes the new reservation unit/API/PostgreSQL and
+concurrency tests:
+
+```powershell
+& .\backend\tests\run_api08.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
 See [TestInstructions.md](TestInstructions.md) for controlled failure,
 cleanup-failure recovery, interruption recovery, and ownership-mismatch
-refusal. API-07 remains unapproved pending independent review.
+refusal. API-08 passed independent final review and is approved.
 
 The recommended complete API-06 workflow is self-contained and removes its
 marked disposable PostgreSQL cluster, roles, database, and shallow venv,

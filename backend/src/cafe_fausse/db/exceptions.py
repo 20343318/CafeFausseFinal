@@ -64,6 +64,16 @@ class DatabaseMutationFailure(Exception):
         self.cleanup_failed = cleanup_failed
 
 
+class ReservationConfirmationFailure(Exception):
+    """Booking is known, but its separate authoritative name read failed."""
+
+    def __init__(self, *, pool_wait_ms: float, database_ms: float, cleanup_failed: bool = False) -> None:
+        super().__init__("reservation confirmation unavailable")
+        self.pool_wait_ms = pool_wait_ms
+        self.database_ms = database_ms
+        self.cleanup_failed = cleanup_failed
+
+
 def mutation_sqlstate(error: Exception) -> str | None:
     value = getattr(error, "sqlstate", None)
     return value if isinstance(value, str) else None

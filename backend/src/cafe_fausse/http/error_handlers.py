@@ -11,8 +11,14 @@ from ..services.newsletter_preferences import (
     NewsletterPreferenceTemporaryFailure,
 )
 from ..services.reservation_context import ReservationServiceUnavailable
+from ..services.reservations import (
+    ReservationConfirmationUnavailable,
+    ReservationOutcomeUnknown,
+    ReservationServiceUnavailable as BookingServiceUnavailable,
+    ReservationTemporaryFailure,
+)
 from .parsing import InvalidRequest, ProtocolError
-from .responses import error_response
+from .responses import error_response, json_response
 
 
 def register_error_handlers(app: Flask) -> None:
@@ -60,6 +66,36 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(NewsletterPreferenceOutcomeUnknown)
     def newsletter_preference_unknown(error: NewsletterPreferenceOutcomeUnknown):
         return _preference_failure(error, "newsletter_preference_outcome_unknown")
+
+    def _reservation_failure(error, code: str):
+        g.cafe_fausse_pool_wait_ms = error.pool_wait_ms
+        g.cafe_fausse_database_ms = error.database_ms
+        safe_logger = app.extensions.get("cafe_fausse_logger")
+        if safe_logger is not None:
+            fields = {"operation": "OP-05", "error_code": code, "attempt": error.attempts}
+            if error.cleanup_failed:
+                fields["retry_class"] = "mutation_cleanup_failure"
+            safe_logger.event("unexpected_error", severity="WARNING", **fields)
+        return error_response(code, 503)
+
+    @app.errorhandler(ReservationTemporaryFailure)
+    def reservation_temporary(error: ReservationTemporaryFailure):
+        response = _reservation_failure(error, "temporary_failure")
+        payload = response.get_json()
+        payload["error"]["message"] = "The reservation could not be processed right now. Please retry shortly."
+        return json_response(payload, 503)
+
+    @app.errorhandler(ReservationOutcomeUnknown)
+    def reservation_unknown(error: ReservationOutcomeUnknown):
+        return _reservation_failure(error, "reservation_outcome_unknown")
+
+    @app.errorhandler(ReservationConfirmationUnavailable)
+    def reservation_confirmation_unavailable(error: ReservationConfirmationUnavailable):
+        return _reservation_failure(error, "reservation_confirmation_unavailable")
+
+    @app.errorhandler(BookingServiceUnavailable)
+    def booking_service_unavailable(error: BookingServiceUnavailable):
+        return _reservation_failure(error, "service_unavailable")
 
     @app.errorhandler(ReservationServiceUnavailable)
     def reservation_service_unavailable(error: ReservationServiceUnavailable):

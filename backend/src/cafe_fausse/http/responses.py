@@ -35,6 +35,18 @@ ERRORS: dict[str, tuple[int, str, bool, bool]] = {
         False,
         False,
     ),
+    "reservation_overlap": (
+        409,
+        "This customer already has a reservation that overlaps the selected time.",
+        False,
+        False,
+    ),
+    "reservation_unavailable": (
+        409,
+        "The selected time is no longer available. Refresh availability and choose another time.",
+        False,
+        False,
+    ),
     "newsletter_status_indeterminate": (
         503,
         "Newsletter status could not be checked right now. You may retry, or continue a booking without changing it.",
@@ -50,6 +62,18 @@ ERRORS: dict[str, tuple[int, str, bool, bool]] = {
     "newsletter_preference_outcome_unknown": (
         503,
         "The newsletter preference result could not be confirmed. Resubmit the same preference.",
+        True,
+        True,
+    ),
+    "reservation_confirmation_unavailable": (
+        503,
+        "The reservation exists, but its complete confirmation could not be prepared. Resubmit the same reservation details to recover it.",
+        True,
+        False,
+    ),
+    "reservation_outcome_unknown": (
+        503,
+        "The reservation result could not be confirmed. Resubmit the same reservation details to recover safely.",
         True,
         True,
     ),

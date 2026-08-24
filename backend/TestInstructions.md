@@ -7,7 +7,37 @@ root in Windows PowerShell unless a step says otherwise.
 This is a user-requested programmer-convenience runbook. It is not required by
 the SRS or rubric and is not an approved requirements or design authority.
 
-## API-07 recommended complete workflow
+## API-08 recommended complete workflow
+
+API-01 through API-08 are approved and frozen. API-09, React, deployment, and
+database changes are not authorized by this workflow.
+
+Run the complete API-08 gate from the repository root in Windows PowerShell
+5.1. It requires CPython 3.14.6, PostgreSQL 18.3, and explicit nonproduction
+authorization:
+
+```powershell
+& .\backend\tests\run_api08.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+`run_api08.ps1` is a thin checkpoint wrapper over the already hardened,
+marker-owned API-07/API-06 disposable-cluster runner. Pytest automatically
+collects the API-08 unit, HTTP-contract, PostgreSQL persistence/rollback, exact
+retry, full-capacity, and concurrency tests added under `backend/tests`.
+Successful completion proves zero surviving customer/reservation/assignment
+rows and removes both exact marker-owned temporary roots. The wrapper accepts
+the same `-InjectFailure`, `-InjectCleanupFailure`, `-CleanupOwnedRoot`, and
+`-PrepareInterruptionState` switches for the documented recovery exercises.
+
+For a fast no-PostgreSQL developer check after installing `backend[test]`:
+
+```powershell
+Set-Location backend
+& .\.venv\Scripts\python.exe -m pytest -m 'unit or api'
+```
+
+## API-07 historical complete workflow
 
 API-01 through API-06 are approved. API-07 is the current unapproved review
 increment. API-08, reservation creation, React, integration, and database

@@ -35,6 +35,18 @@ class AvailabilityOutcome(StrEnum):
     INVALID_REQUEST = "invalid_request"
 
 
+class BookingOutcome(StrEnum):
+    BOOKED = "booked"
+    BOOKED_PHONE_NOTICE = "booked_phone_notice"
+    EXACT_RETRY = "exact_retry"
+    SAME_CUSTOMER_OVERLAP = "same_customer_overlap"
+    CUSTOMER_IDENTITY_CONFLICT = "customer_identity_conflict"
+    MIDDLE_INITIAL_CONFLICT = "middle_initial_conflict"
+    UNAVAILABLE = "unavailable"
+    INVALID_REQUEST = "invalid_request"
+    INVALID_DATABASE_CONFIGURATION = "invalid_database_configuration"
+
+
 @dataclass(frozen=True, slots=True)
 class CustomerIdentity:
     first_name: str = field(repr=False)
@@ -127,6 +139,56 @@ class ReservationContextResult:
 class AvailabilityRequest:
     local_date: date
     party_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReservationCommand:
+    first_name: str = field(repr=False)
+    middle_initial: str | None = field(repr=False)
+    last_name: str = field(repr=False)
+    email: str = field(repr=False)
+    phone: str | None = field(repr=False)
+    local_start: datetime
+    utc_offset_minutes: int
+    party_size: int
+    newsletter_action: str
+
+    def __post_init__(self) -> None:
+        if self.local_start.tzinfo is not None or self.local_start.microsecond != 0:
+            raise ValueError("reservation local start must be a second-precision wall time")
+        if not -840 <= self.utc_offset_minutes <= 840:
+            raise ValueError("reservation offset is outside the protocol range")
+        if type(self.party_size) is not int or not 1 <= self.party_size <= 2_147_483_647:
+            raise ValueError("reservation party size is outside the protocol range")
+        if self.newsletter_action not in {"subscribe", "unsubscribe", "no_change"}:
+            raise ValueError("reservation newsletter action is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class ReservationBookingResult:
+    outcome: BookingOutcome
+    detail_code: str | None = None
+    reservation_id: int | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    party_size: int | None = None
+    assigned_table_numbers: tuple[int, ...] = ()
+    newsletter_subscribed: bool | None = None
+    phone_notice: bool = False
+    customer_name: str | None = field(default=None, repr=False)
+    restaurant_timezone: str | None = None
+    pool_wait_ms: float = 0.0
+    database_ms: float = 0.0
+    attempts: int = 1
+    cleanup_failed: bool = False
+
+    def __post_init__(self) -> None:
+        if self.pool_wait_ms < 0 or self.database_ms < 0:
+            raise ValueError("reservation timings cannot be negative")
+        if not 1 <= self.attempts <= 3:
+            raise ValueError("reservation attempts must be between one and three")
+        if type(self.phone_notice) is not bool or type(self.cleanup_failed) is not bool:
+            raise ValueError("reservation flags must be Boolean")
 
 
 @dataclass(frozen=True, slots=True)
