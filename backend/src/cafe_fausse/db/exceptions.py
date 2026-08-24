@@ -27,10 +27,46 @@ class DatabaseUnavailable(Exception):
 class DatabaseContractError(Exception):
     """The frozen PostgreSQL contract is not usable."""
 
-    def __init__(self, *, pool_wait_ms: float = 0.0, database_ms: float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        pool_wait_ms: float = 0.0,
+        database_ms: float = 0.0,
+        cleanup_failed: bool = False,
+    ) -> None:
         super().__init__("database contract failure")
         self.pool_wait_ms = pool_wait_ms
         self.database_ms = database_ms
+        self.cleanup_failed = cleanup_failed
+
+
+class DatabaseMutationFailure(Exception):
+    """One mutation attempt failed with explicit commit certainty."""
+
+    def __init__(
+        self,
+        *,
+        sqlstate: str | None,
+        safe_to_retry: bool,
+        mutation_dispatched: bool,
+        outcome_unknown: bool,
+        pool_wait_ms: float = 0.0,
+        database_ms: float = 0.0,
+        cleanup_failed: bool = False,
+    ) -> None:
+        super().__init__("database mutation failed")
+        self.sqlstate = sqlstate
+        self.safe_to_retry = safe_to_retry
+        self.mutation_dispatched = mutation_dispatched
+        self.outcome_unknown = outcome_unknown
+        self.pool_wait_ms = pool_wait_ms
+        self.database_ms = database_ms
+        self.cleanup_failed = cleanup_failed
+
+
+def mutation_sqlstate(error: Exception) -> str | None:
+    value = getattr(error, "sqlstate", None)
+    return value if isinstance(value, str) else None
 
 
 _READ_RETRY_SQLSTATES = frozenset({"55P03", "40P01", "40001"})

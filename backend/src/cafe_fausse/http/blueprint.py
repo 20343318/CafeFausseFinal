@@ -5,6 +5,7 @@ from __future__ import annotations
 from flask import Blueprint
 
 from .routes.health import liveness, readiness
+from .routes.newsletter_preferences import newsletter_preferences
 from .routes.newsletter_status import newsletter_status
 
 
@@ -22,6 +23,13 @@ def create_api_blueprint() -> Blueprint:
         endpoint="health_readiness",
         view_func=readiness,
         methods=["GET"],
+        provide_automatic_options=False,
+    )
+    blueprint.add_url_rule(
+        "/newsletter-preferences",
+        endpoint="newsletter_preferences",
+        view_func=newsletter_preferences,
+        methods=["POST"],
         provide_automatic_options=False,
     )
     blueprint.add_url_rule(

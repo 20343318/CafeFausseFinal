@@ -12,6 +12,7 @@ from werkzeug.exceptions import MethodNotAllowed
 from .config import Settings
 from .db.customer_gateway import CustomerGateway
 from .db.health_gateway import PsycopgHealthGateway
+from .db.newsletter_gateway import NewsletterGateway
 from .db.pool import create_pool
 from .dependencies import Dependencies
 from .http.blueprint import create_api_blueprint
@@ -21,6 +22,7 @@ from .observability.logging import configure_safe_logging
 from .observability.timing import RequestTimer
 from .services.health import LivenessService, ReadinessService
 from .services.newsletter_status import NewsletterStatusService
+from .services.newsletter_preferences import NewsletterPreferenceService
 from .services.retry import RetryPolicy
 
 
@@ -30,6 +32,10 @@ def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
         pool.open(wait=False)
         gateway = PsycopgHealthGateway(pool)
         customer_gateway = CustomerGateway(
+            pool,
+            acquire_timeout_ms=settings.pool_acquire_timeout_ms,
+        )
+        newsletter_gateway = NewsletterGateway(
             pool,
             acquire_timeout_ms=settings.pool_acquire_timeout_ms,
         )
@@ -54,6 +60,26 @@ def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
                 retry_class="read_transient",
             ),
         )
+        newsletter_preference_service = NewsletterPreferenceService(
+            newsletter_gateway,
+            deadline_ms=settings.mutation_deadline_ms,
+            retry_policy=retry_policy,
+            monotonic=time.monotonic,
+            sleeper=time.sleep,
+            uniform=uniform,
+            retry_observer=lambda attempt: safe_logger.event(
+                "retry",
+                operation="OP-04",
+                attempt=attempt,
+                retry_class="mutation_transient",
+            ),
+            cleanup_failure_observer=lambda: safe_logger.event(
+                "unexpected_error",
+                severity="WARNING",
+                operation="OP-04",
+                retry_class="mutation_cleanup_failure",
+            ),
+        )
         return Dependencies(
             settings=settings,
             liveness_service=LivenessService(),
@@ -61,6 +87,7 @@ def _production_dependencies(settings: Settings, safe_logger) -> Dependencies:
             monotonic=time.monotonic,
             correlation_id_factory=lambda: str(uuid4()),
             newsletter_status_service=newsletter_status_service,
+            newsletter_preference_service=newsletter_preference_service,
             resource=pool,
         )
     except Exception:
@@ -114,6 +141,8 @@ def create_app(settings: Settings | None = None, dependencies: Dependencies | No
                 operation = "OP-07"
             elif route == "/api/v1/newsletter-status-queries":
                 operation = "OP-03"
+            elif route == "/api/v1/newsletter-preferences":
+                operation = "OP-04"
             timer = getattr(g, "cafe_fausse_timer", None)
             logger.event(
                 "request_complete",

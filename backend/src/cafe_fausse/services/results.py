@@ -20,12 +20,62 @@ class NewsletterStatusOutcome(StrEnum):
     MIDDLE_INITIAL_CONFLICT = "middle_initial_conflict"
 
 
+class NewsletterPreferenceOutcome(StrEnum):
+    SUBSCRIBED = "subscribed"
+    UNSUBSCRIBED = "unsubscribed"
+    NO_CUSTOMER_NO_CHANGE = "no_customer_no_change"
+    INVALID_REQUEST = "invalid_request"
+    CUSTOMER_IDENTITY_CONFLICT = "customer_identity_conflict"
+    MIDDLE_INITIAL_CONFLICT = "middle_initial_conflict"
+
+
 @dataclass(frozen=True, slots=True)
 class CustomerIdentity:
     first_name: str = field(repr=False)
     middle_initial: str | None = field(repr=False)
     last_name: str = field(repr=False)
     email: str = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class NewsletterPreferenceCommand:
+    first_name: str = field(repr=False)
+    middle_initial: str | None = field(repr=False)
+    last_name: str = field(repr=False)
+    email: str = field(repr=False)
+    subscribed: bool = field(repr=False)
+
+    def __post_init__(self) -> None:
+        if type(self.subscribed) is not bool:
+            raise ValueError("newsletter preference requires a Boolean state")
+
+
+@dataclass(frozen=True, slots=True)
+class NewsletterPreferenceResult:
+    outcome: NewsletterPreferenceOutcome
+    subscribed: bool | None = None
+    pool_wait_ms: float = 0.0
+    database_ms: float = 0.0
+    attempts: int = 1
+    cleanup_failed: bool = False
+
+    def __post_init__(self) -> None:
+        expected_state = {
+            NewsletterPreferenceOutcome.SUBSCRIBED: True,
+            NewsletterPreferenceOutcome.UNSUBSCRIBED: False,
+            NewsletterPreferenceOutcome.NO_CUSTOMER_NO_CHANGE: False,
+        }.get(self.outcome)
+        if expected_state is None:
+            if self.subscribed is not None:
+                raise ValueError("a non-success preference result cannot contain state")
+        elif self.subscribed is not expected_state:
+            raise ValueError("preference outcome and state contradict each other")
+        if self.pool_wait_ms < 0 or self.database_ms < 0:
+            raise ValueError("newsletter-preference timings cannot be negative")
+        if not 1 <= self.attempts <= 3:
+            raise ValueError("newsletter preference attempts must be between one and three")
+        if type(self.cleanup_failed) is not bool:
+            raise ValueError("newsletter preference cleanup status must be Boolean")
 
 
 @dataclass(frozen=True, slots=True)

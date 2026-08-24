@@ -6,6 +6,10 @@ from flask import Flask, g
 from werkzeug.exceptions import MethodNotAllowed, NotFound, RequestEntityTooLarge
 
 from ..services.newsletter_status import NewsletterStatusIndeterminate
+from ..services.newsletter_preferences import (
+    NewsletterPreferenceOutcomeUnknown,
+    NewsletterPreferenceTemporaryFailure,
+)
 from .parsing import InvalidRequest, ProtocolError
 from .responses import error_response
 
@@ -32,6 +36,29 @@ def register_error_handlers(app: Flask) -> None:
                 error_code="newsletter_status_indeterminate",
             )
         return error_response("newsletter_status_indeterminate", 503)
+
+    def _preference_failure(error, code: str):
+        g.cafe_fausse_pool_wait_ms = error.pool_wait_ms
+        g.cafe_fausse_database_ms = error.database_ms
+        safe_logger = app.extensions.get("cafe_fausse_logger")
+        if safe_logger is not None:
+            fields = {
+                "operation": "OP-04",
+                "error_code": code,
+                "attempt": error.attempts,
+            }
+            if error.cleanup_failed:
+                fields["retry_class"] = "mutation_cleanup_failure"
+            safe_logger.event("unexpected_error", severity="WARNING", **fields)
+        return error_response(code, 503)
+
+    @app.errorhandler(NewsletterPreferenceTemporaryFailure)
+    def newsletter_preference_temporary(error: NewsletterPreferenceTemporaryFailure):
+        return _preference_failure(error, "temporary_failure")
+
+    @app.errorhandler(NewsletterPreferenceOutcomeUnknown)
+    def newsletter_preference_unknown(error: NewsletterPreferenceOutcomeUnknown):
+        return _preference_failure(error, "newsletter_preference_outcome_unknown")
 
     @app.errorhandler(NotFound)
     def route_not_found(_error: NotFound):

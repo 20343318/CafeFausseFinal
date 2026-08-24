@@ -7,6 +7,174 @@ root in Windows PowerShell unless a step says otherwise.
 This is a user-requested programmer-convenience runbook. It is not required by
 the SRS or rubric and is not an approved requirements or design authority.
 
+## API-06 recommended complete workflow
+
+API-01 through API-05 were approved before this work. API-06 is the current
+unapproved review increment until explicit acceptance. API-07 and later work
+is not authorized. This runbook is programmer-convenience documentation; the
+SRS, rubric, and approved design artifacts remain authoritative.
+
+The single recommended API-06 command requires:
+
+- working directory `C:\Users\Administrator\source\CafeFausse`;
+- Windows PowerShell 5.1;
+- standard GIL-enabled CPython 3.14.6 at `C:\Python314\python.exe`;
+- PostgreSQL 18.3 at `C:\Program Files\PostgreSQL\18\bin`;
+- an unoccupied loopback port 55446;
+- explicit confirmation that the target is disposable, isolated, and
+  nonproduction.
+
+It needs no caller-supplied database credential. The local cluster uses trust
+authentication only on loopback, and the test-only manager placeholder is not
+a reusable secret. Never point this workflow at production, production-like,
+shared, or developer-owned data.
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api06.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The exact authorization value is mandatory and case-sensitive. The runner
+refuses an unexpected Python/PostgreSQL version, occupied port, unexpected
+root, missing marker, or mismatched marker before deleting anything.
+
+The runner creates only `%TEMP%\CafeFausse-api06-tests`, whose exact marker is
+bound to port 55446 and database `cafe_fausse_test_api06`. Beneath its
+`artifacts` directory it confines the virtual environment, pip cache, pytest
+cache, coverage data, and Python bytecode. It creates a loopback PostgreSQL
+cluster, the one test database, app/test-manager logins, and uniquely owned
+fixtures. It preserves unrelated databases, roles, memberships, rows,
+processes, listeners, files, directories, passfiles, and environment values.
+
+Independent `finally` phases restore the original working directory, stop the
+owned PostgreSQL child, remove generated artifacts, remove the exact
+marker-owned cluster root, restore all 19 changed environment variables to
+their prior value or absence without displaying values, and verify no owned
+root or listener remains. An earlier cleanup failure does not skip later
+phases. An ordinary test failure remains primary; cleanup failures are
+reported separately and force a nonzero exit.
+
+Expected clean markers are `API06 FOCUSED PASS`, `API06 TEST PASS`,
+`API06 CLEANUP EVIDENCE`, and `API06 CLEANUP PASS`. The current complete suite
+collects 345 tests: 301 unit/API tests and 44 PostgreSQL integration tests.
+Counts can increase in
+later approved work, so the process exit and markers remain authoritative.
+
+### Focused API-06 commands
+
+For unit and Flask-API diagnosis, use a developer-owned environment installed
+as documented in `README.md`. These commands do not replace the complete
+runner:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse\backend
+& .\.venv\Scripts\python.exe -m pytest tests\unit\test_validation_newsletter.py
+& .\.venv\Scripts\python.exe -m pytest tests\unit\test_newsletter_preference_service.py tests\unit\test_retry.py
+& .\.venv\Scripts\python.exe -m pytest tests\unit\test_newsletter_gateway.py
+& .\.venv\Scripts\python.exe -m pytest tests\api\test_newsletter_preferences.py tests\unit\test_logging_and_lifecycle.py
+```
+
+The PostgreSQL commands below require an already provisioned, isolated
+PostgreSQL 18.3 test environment with the same app/test-manager separation and
+environment contract established by the complete runner. They are focused
+diagnostics, not standalone setup instructions:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse\backend
+& .\.venv\Scripts\python.exe -m pytest tests\integration\test_newsletter_preferences_postgresql.py -m "integration and postgres"
+& .\.venv\Scripts\python.exe -m pytest tests\integration\test_newsletter_preferences_postgresql.py -m "integration and postgres" -k "concurrent or opposing"
+```
+
+### Failure, restart, and cleanup demonstrations
+
+The ordinary-failure switch is explicit, isolated, and test-only. Expect the
+first command to return nonzero, report the controlled integration failure,
+and still print cleanup evidence. Then run the complete command immediately:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api06.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -InjectFailure
+if ($LASTEXITCODE -eq 0) { throw 'The controlled API-06 failure did not fail.' }
+& .\backend\tests\run_api06.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The cleanup-failure switch lets the test suite pass, injects one
+generated-artifact cleanup failure, requires a nonzero exit, and proves that
+cluster removal and exact environment restoration are still attempted:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api06.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -InjectCleanupFailure
+if ($LASTEXITCODE -eq 0) { throw 'The controlled API-06 cleanup failure did not fail.' }
+```
+
+The complete command is immediately repeatable in the same session. To prove
+the new-session model, open a fresh PowerShell or invoke PowerShell 5.1 and run
+the same command:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\backend\tests\run_api06.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+After an interruption, rerun the complete command. A partial exact task root
+with the exact marker is stopped and removed before a clean rebuild. A
+separate cleanup-only switch is intentionally unnecessary: the normal command
+performs guarded recovery before setup and always performs final cleanup. If
+the marker is absent, malformed, or mismatched, the runner refuses the root
+without deletion. Stop and inspect it; do not rename, adopt, or delete an
+ambiguous resource.
+
+The runner never scans the repository for generic `.venv`, `.pytest_cache`,
+`.coverage`, `__pycache__`, or `*.egg-info` names. To demonstrate preservation,
+record file lengths and SHA-256 hashes before a run, execute the complete
+workflow, and compare the same explicit paths afterward. Apply the same rule
+to a preexisting task-like database: create and verify it only in a separately
+owned isolated cluster, then prove its database and contents remain after the
+runner. Never create a collision proof in a shared or production cluster.
+
+Codex explicitly confirmed that it generated
+`backend\.api06-correction-compile` during API-06 compilation. That statement
+established provenance for this exact resource; after canonical-path and
+root/descendant reparse-point verification, only that directory was removed
+and absence was verified. This does not authorize deletion of any other
+unmarked or ambiguously owned resource.
+
+After success or controlled failure, the following must show an absent runner
+root, no listener, and no runner-generated repository artifact. Preexisting or
+ambiguously owned artifacts may legitimately remain and must retain their
+exact bytes:
+
+```powershell
+Test-Path -LiteralPath "$env:TEMP\CafeFausse-api06-tests"
+Get-NetTCPConnection -State Listen -LocalPort 55446 -ErrorAction SilentlyContinue
+git status --short
+```
+
+The integration suite verifies that successful public results equal committed
+PostgreSQL state, same-state requests are idempotent, opposing concurrent
+writes follow last-committed-write semantics, a preexisting same-email
+customer retains identity, phone, reservation, and table-assignment data, and
+every uniquely owned fixture is removed. Final runner evidence requires zero
+customers, reservations, and assignments before the owned database and roles
+are removed with their cluster.
+
+API-06 certainty tests use three explicitly distinguished evidence levels.
+The existing table-lock test produces an organic PostgreSQL `55P03`. The
+`40P01` and `40001` classifications—and an additional deterministic `55P03`
+retry case—use a test-only cursor adapter because the frozen single-key
+READ COMMITTED routine cannot organically create those states. That adapter
+still uses the production gateway and service, real PostgreSQL pool leases,
+real BEGIN/statement-timeout work, and Psycopg connection-context rollback on
+every failed attempt. Other test-only adapters lose a result after the real
+routine executes, close a real connection before rollback can be confirmed,
+or raise only after a real context commit to model lost acknowledgement.
+These are controlled adapter results, not claims of organically generated
+PostgreSQL failures.
+
 ## API-05 recommended complete workflow
 
 For API-05, the single recommended command is the guarded runner below. It

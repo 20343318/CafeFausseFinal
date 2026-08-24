@@ -1,5 +1,13 @@
-"""Pure API-05 response projections."""
+"""Pure common response projections."""
 
-from .common import ResponseProjection, serialize_newsletter_status
+from .common import (
+    ResponseProjection,
+    serialize_newsletter_preference,
+    serialize_newsletter_status,
+)
 
-__all__ = ["ResponseProjection", "serialize_newsletter_status"]
+__all__ = [
+    "ResponseProjection",
+    "serialize_newsletter_preference",
+    "serialize_newsletter_status",
+]

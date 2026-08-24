@@ -41,6 +41,18 @@ ERRORS: dict[str, tuple[int, str, bool, bool]] = {
         True,
         False,
     ),
+    "temporary_failure": (
+        503,
+        "The newsletter preference could not be processed right now. Please retry shortly.",
+        True,
+        False,
+    ),
+    "newsletter_preference_outcome_unknown": (
+        503,
+        "The newsletter preference result could not be confirmed. Resubmit the same preference.",
+        True,
+        True,
+    ),
     "service_not_ready": (503, "The service is not ready.", True, False),
     "internal_error": (500, "An unexpected error occurred.", False, False),
 }
@@ -91,7 +103,11 @@ def validation_error_response(fields: Iterable[Mapping[str, str]]) -> Response:
 
 def projection_response(projection: Any) -> Response:
     if projection.error_code is not None:
-        return error_response(projection.error_code, projection.status)
+        return error_response(
+            projection.error_code,
+            projection.status,
+            fields=projection.fields,
+        )
     if projection.payload is None:
         raise ValueError("successful response projection requires a payload")
     return json_response(projection.payload, projection.status)

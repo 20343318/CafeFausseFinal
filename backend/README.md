@@ -1,10 +1,14 @@
-# Cafe Fausse Flask backend through API-05
+# Cafe Fausse Flask backend through API-06
 
-This directory contains the API-04 Flask/PostgreSQL foundation and API-05's
-read-only OP-03 customer identity/newsletter-status query. PostgreSQL remains
-the business authority. There is no newsletter mutation, customer mutation,
-reservation operation, ORM, CORS, session/cookie feature, startup migration,
-React code, or production-server selection here.
+This directory contains the API-04 Flask/PostgreSQL foundation, API-05's
+read-only OP-03 customer identity/newsletter-status query, and API-06's OP-04
+independent newsletter-preference mutation. PostgreSQL remains the business
+authority. There is no reservation API, ORM, CORS, session/cookie feature,
+startup migration, React code, or production-server selection here.
+
+API-01 through API-05 were approved before API-06 work began. API-06 is the
+current unapproved review increment until it receives explicit acceptance.
+API-07 and later increments are not authorized and have not been started.
 
 ## Supported and initially verified platform
 
@@ -141,28 +145,91 @@ read outcome cannot be established, the endpoint returns
 `outcome_unknown:false`. None of these responses exposes stored identity,
 contact, customer-ID, SQL, or database details.
 
+## Independent newsletter-preference management (OP-04)
+
+`POST /api/v1/newsletter-preferences` accepts only `first_name`, optional
+`middle_initial`, `last_name`, `email`, `confirmation_email`, and a JSON
+Boolean `subscribed`. Names and email use the same normalization and
+confirmation rules as OP-03. The endpoint calls the approved controlled
+PostgreSQL routine through the application role; it never performs direct
+customer DML.
+
+Fictitious new subscribe request and exact response:
+
+```json
+{"first_name":"Ada","middle_initial":"m.","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com","subscribed":true}
+```
+
+```json
+{"result":"set","subscribed":true}
+```
+
+A new unsubscribe request does not create a customer:
+
+```json
+{"first_name":"Noah","last_name":"Chen","email":"noah.chen@example.com","confirmation_email":"noah.chen@example.com","subscribed":false}
+```
+
+```json
+{"result":"no_customer_no_change","subscribed":false}
+```
+
+For an existing matched identity, subscribe, unsubscribe, and repeated
+same-state requests return `{"result":"set","subscribed":true}` or
+`{"result":"set","subscribed":false}`. Repeating the identical request is
+idempotent. An identity mismatch returns the generic exact conflict envelope:
+
+```json
+{"error":{"code":"customer_identity_conflict","message":"The submitted identity details do not match.","retryable":false,"outcome_unknown":false}}
+```
+
+A field error returns `422 validation_failed` with ordered safe field entries;
+for example, a non-Boolean `subscribed` value produces:
+
+```json
+{"error":{"code":"validation_failed","message":"One or more fields need attention.","retryable":false,"outcome_unknown":false,"fields":[{"field":"subscribed","code":"invalid_type","message":"This field must be a Boolean."}]}}
+```
+
+A conclusively known non-commit returns `503 temporary_failure` with
+`retryable:true` and `outcome_unknown:false`. If commit status cannot be
+established, the exact response is:
+
+```json
+{"error":{"code":"newsletter_preference_outcome_unknown","message":"The newsletter preference result could not be confirmed. Resubmit the same preference.","retryable":true,"outcome_unknown":true}}
+```
+
+For that outcome-unknown response, resubmit the identical request. Do not
+infer the prior outcome or change the requested Boolean before resubmission.
+
 ## Tests
 
-The recommended complete API-05 workflow is self-contained and removes its
+The recommended complete API-06 workflow is self-contained and removes its
 marked disposable PostgreSQL cluster, roles, database, and every generated
-Python artifact in `%TEMP%\CafeFausse-api05-tests\artifacts`. Its virtual
+Python artifact in `%TEMP%\CafeFausse-api06-tests\artifacts`. Its virtual
 environment, pytest cache, coverage file, bytecode, and pip cache never use
 repository paths. A developer's existing `backend\.venv`, caches, coverage,
 bytecode, and package metadata are preserved exactly. Ownership requires both
-the exact task-root path and its exact API-05 port/database marker; a missing or
+the exact task-root path and its exact API-06 port/database marker; a missing or
 mismatched marker causes refusal without deletion. Independent finalization
 phases attempt PostgreSQL/process cleanup, artifact cleanup, cluster-root
 cleanup, and exact environment restoration even when an earlier phase fails:
 
 ```powershell
 Set-Location C:\Users\Administrator\source\CafeFausse
-& .\backend\tests\run_api05.ps1
+& .\backend\tests\run_api06.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 ```
+
+Codex confirmed that it generated `backend\.api06-correction-compile` during
+API-06 compilation. After exact canonical-path and reparse-point verification,
+only that Codex-owned directory was removed and its absence was verified.
+API-06 nevertheless remains at the unapproved independent-review checkpoint.
 
 See [TestInstructions.md](TestInstructions.md) for prerequisites, focused
 commands, ordinary and cleanup failure injection, interruption recovery,
 ownership-marker refusal rules, sentinel-preservation evidence, and cleanup
-verification.
+verification. That runbook is programmer-convenience documentation, not an
+SRS, rubric, contract, or approved-design authority.
 
 Required starting directory: the repository root. Run unit and Flask API tests
 (the default local selection) with:
