@@ -38,9 +38,9 @@ Read and apply, in this order:
 4. Approved DB-01 through DB-04 design artifacts.
 5. Approved DB-05 through DB-07 implementation and verification evidence.
 6. `database/POSTGRESQL_CONTRACT_FOR_FLASK.md`, frozen version 1.0.
-7. Approved API-01 Backend Operation Inventory version 1.0.1.
+7. Approved API-01 Backend Operation Inventory version 1.0.2.
 8. Approved API-02 Flask REST Contract version 1.0.1.
-9. Approved API-03 Flask Architecture, Configuration, and Test Strategy.
+9. Approved API-03 Flask Architecture, Configuration, and Test Strategy version 1.0.3.
 10. Approved API-04 through API-06 implementation reports and current committed backend implementation.
 11. Current `backend/README.md`, `backend/TestInstructions.md`, and database testing documentation.
 12. The approved least-to-most implementation roadmap version 1.1.1.
@@ -80,8 +80,8 @@ Before modifying anything:
 9. Confirm exact API-02 success/error schemas and examples for OP-01 and OP-02.
 10. Confirm API-03's approved database-access design:
     - OP-01 uses one coherent `REPEATABLE READ READ ONLY` transaction;
-    - OP-02 uses one `READ COMMITTED READ ONLY` transaction;
-    - OP-02 calls only `cafe_fausse.provisional_availability(date, integer)`;
+    - OP-02 uses one `REPEATABLE READ READ ONLY` transaction;
+    - within that transaction, OP-02 reads only `reservation_configuration.restaurant_timezone` and calls the unchanged `cafe_fausse.provisional_availability(date, integer)` routine;
     - read-only retries follow the approved shared retry policy.
 11. Identify the minimum production files required.
 12. Identify every test-created resource and how durable ownership will be established at creation time.
@@ -188,7 +188,11 @@ Do not perform DML.
 
 ## OP-02 PostgreSQL access
 
-The availability gateway must call only:
+Within one transaction, the availability gateway must:
+
+- read only `cafe_fausse.reservation_configuration.restaurant_timezone`;
+- use that timezone identifier only to serialize the exact API-02 response; and
+- call the unchanged availability routine:
 
 `cafe_fausse.provisional_availability(%s::date, %s::integer)`
 
@@ -196,9 +200,9 @@ using bound validated values.
 
 Use one explicit:
 
-`READ COMMITTED READ ONLY`
+`REPEATABLE READ READ ONLY`
 
-transaction per attempt.
+transaction per attempt so the timezone identifier and availability rows come from one coherent snapshot. No other foundation-table read is permitted.
 
 Consume and validate the complete returned row set exactly according to the frozen PostgreSQL contract.
 

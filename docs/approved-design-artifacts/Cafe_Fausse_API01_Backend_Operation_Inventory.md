@@ -1,11 +1,12 @@
 # Cafe Fausse API-01 Backend Operation Inventory
 
-**Document version:** 1.0.1
+**Document version:** 1.0.2
 **Date:** 2026-08-21  
 **Roadmap increment:** API-01 - Backend Operation Inventory  
 **Status:** Approved  
 **Author:** Codex, prepared for Abdul  
 **Approval record:** Approved by Abdul on 2026-08-21. This approval authorizes only API-02 REST Contract Design. It does not authorize Flask implementation, React work, integration work, or PostgreSQL changes.
+**Reconciliation record:** Version 1.0.2 applies the approved `API-07 OP-02 timezone/snapshot reconciliation` from 2026-08-23. It changes no public REST contract or frozen PostgreSQL contract.
 
 ## 1. Executive summary
 
@@ -161,11 +162,11 @@ OP-06 answers only whether the Flask process can respond. OP-07 separately check
 | Traceability | SRS FR-06 to FR-08/FR-18; NFR-02/NFR-05/NFR-06; RUB-05 to RUB-07; baseline API-03/API-05 to API-07; PRA-006 to PRA-018, PRA-023, PRA-025, PRA-029; DB-04 Section 7; frozen contract availability operation. |
 | Initiator/consumer | Unauthenticated public client after party/date selection. |
 | Conceptual inputs | Requested restaurant-local calendar date and party size only. |
-| Provenance | Caller supplies date/party; Flask validates their basic types; PostgreSQL supplies local/canonical interval facts and provisional state from current data. |
+| Provenance | Caller supplies date/party; Flask validates their basic types; PostgreSQL supplies the current timezone identifier plus local/canonical interval facts and provisional state from one coherent snapshot. |
 | Flask normalization | Parse an unambiguous calendar date without applying browser timezone. Party size must be an integer, not a numeric string with loss or fractional value. |
 | Flask validation | Reject malformed date/party before SQL. A current maximum may assist early validation, but PostgreSQL remains authoritative for current range/window/lead/configuration. |
-| PostgreSQL interaction | Execute exactly `cafe_fausse.provisional_availability(date, integer)`. Stable outcomes: `slots`, `invalid_request`, `invalid_database_configuration`; details: `date_or_party_size_out_of_range`, `incomplete_foundation_population`, `invalid_timezone`. |
-| Transaction character | Read-only statement snapshot; no booking lock and no persistence. |
+| PostgreSQL interaction | Within one `REPEATABLE READ READ ONLY` transaction, read only `cafe_fausse.reservation_configuration.restaurant_timezone` and execute exactly `cafe_fausse.provisional_availability(date, integer)`. The timezone identifier is used only to serialize the API-02 response. Stable outcomes: `slots`, `invalid_request`, `invalid_database_configuration`; details: `date_or_party_size_out_of_range`, `incomplete_foundation_population`, `invalid_timezone`. No other foundation-table read is permitted. |
+| Transaction character | One `REPEATABLE READ READ ONLY` snapshot; no booking lock and no persistence. |
 | Successful result | For each legitimate start: restaurant-local wall time, canonical start/end instants, and provisional available/unavailable state. Preserve all rows, including false states. |
 | Outcomes | Successful snapshot; validation failure; invalid/unusable configuration; database unavailable/timeout; unexpected failure. No-capacity is represented by legitimate rows marked unavailable, not by persisting a full state. |
 | Retry/idempotency | Side-effect free; bounded retry/caller repetition is safe, but a new result may differ. |
@@ -286,7 +287,7 @@ Conceptual check timing is intentionally narrow: each OP-06 probe performs only 
 | Operation | Exact authorized source/path | PostgreSQL authority retained | Prohibited bypass |
 |---|---|---|---|
 | OP-01 | Read `reservation_configuration`, `restaurant_operating_hours`, and aggregate `restaurant_tables` under migration-004 `SELECT` grants | Current settings/hours/capacity and database clock | Flask constants, direct writes, table-level exposure |
-| OP-02 | `cafe_fausse.provisional_availability(date, integer)` | Current rule/clock/inventory/reservation calculation and canonical interval facts | Flask-generated authoritative slots; reads of reservations/assignments |
+| OP-02 | In one `REPEATABLE READ READ ONLY` snapshot, read only `reservation_configuration.restaurant_timezone` and execute `cafe_fausse.provisional_availability(date, integer)` | Current timezone for serialization plus current rule/clock/inventory/reservation calculation and canonical interval facts | Any other foundation read; Flask-generated authoritative slots; reads of reservations/assignments |
 | OP-03 | Read `customers` by canonical `email` under migration-004 `SELECT`; project only name/middle/current Boolean needed for matching | Persisted identity spelling and current newsletter Boolean | Profile lookup, customer identifier, mutation |
 | OP-04 | `cafe_fausse.set_newsletter_preference(text,text,text,text,boolean)` | Customer create/reuse, email serialization, identity/middle rule, current Boolean, atomicity | Direct customer DML or second subscriber store |
 | OP-05 | `cafe_fausse.book_reservation(text,text,text,text,text,timestamp without time zone,smallint,integer,text)`, followed only after `booked`, `booked_phone_notice`, or `exact_retry` by the migration-004 authorized `customers` read using canonical email and projecting stored first/middle/last name | Routine retains every final business validation, customer concurrency, fingerprint, retry identity, overlap, exact allocation, assignments, optional update, newsletter atomicity, and commit/rollback; `customers` remains authoritative for display spelling | Direct reservation/assignment access, Flask allocation/retry identity, or reading customer ID/email/phone/profile data for confirmation |
@@ -640,11 +641,11 @@ The inventory contains no operation for authentication/login/logout/registration
 | Performance envelope | Accurately carried forward; no stronger guarantee. |
 | Coarse-lock contention limitation | Accepted and assigned to later full-stack validation; no redesign. |
 
-The contract and implementation are compatible with every mandatory operation. No approved artifact or PostgreSQL object requires revision.
+The contract and implementation are compatible with every mandatory operation. The approved API-07 OP-02 timezone/snapshot reconciliation is recorded in this version; no PostgreSQL object or frozen contract requires revision.
 
 ## 25. Unresolved issues
 
-No API-01 blocker, frozen-contract contradiction, missing authoritative source, privilege gap, or required database change was found.
+No API-01 blocker, frozen-contract contradiction, missing authoritative source, privilege gap, or required database change remains after the approved API-07 OP-02 timezone/snapshot reconciliation.
 
 The wire/architecture/timing/presentation choices in Section 23 are deliberate roadmap deferrals, not unresolved API-01 business rules. They require their own later approval and do not block this inventory.
 
@@ -662,10 +663,17 @@ The wire/architecture/timing/presentation choices in Section 23 are deliberate r
 | React/mobile/third-party ordinary clients need no integrity trust | Complete |
 | PostgreSQL 18.3 baseline/performance limitations preserved | Complete |
 | No endpoint/Flask/React/excluded implementation introduced | Complete |
-| Contradictions escalated | Not applicable; none found |
+| Contradictions escalated | Complete: the API-07 OP-02 timezone/snapshot conflict was escalated and resolved by the approved version 1.0.2 reconciliation. |
 | Approval pause before API-02 | Required and recorded below |
 
-API-01 version 1.0.1 was approved by Abdul on 2026-08-21. The approval authorizes only API-02 REST Contract Design.
+API-01 version 1.0.1 was approved by Abdul on 2026-08-21. Version 1.0.2 applies only the approved API-07 OP-02 timezone/snapshot reconciliation and does not alter the original approval boundary.
+
+### Version record
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0.1 | 2026-08-21 | Approved API-01 backend operation inventory. |
+| 1.0.2 | 2026-08-23 | Applied the approved `API-07 OP-02 timezone/snapshot reconciliation`: within one `REPEATABLE READ READ ONLY` snapshot, OP-02 may read only `reservation_configuration.restaurant_timezone` and call the unchanged frozen provisional-availability routine. |
 
 ## 27. Approval checkpoint
 

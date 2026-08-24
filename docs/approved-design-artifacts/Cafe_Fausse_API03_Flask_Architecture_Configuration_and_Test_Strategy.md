@@ -1,6 +1,6 @@
 # Cafe Fausse API-03 Flask Architecture, Configuration, and Test Strategy
 
-**Document version:** 1.0.2
+**Document version:** 1.0.3
 
 **Date:** 2026-08-21
 
@@ -11,6 +11,8 @@
 **Author:** Codex, prepared for Abdul
 
 **Approval record:** Approved by Abdul on 2026-08-21. Approval of this document authorizes only API-04 - Flask Foundation and PostgreSQL Connectivity. It does not authorize API-05 or later Flask capabilities, React work, integration work, deployment work, or PostgreSQL changes.
+
+**Reconciliation record:** Version 1.0.3 applies the approved `API-07 OP-02 timezone/snapshot reconciliation` from 2026-08-23. It changes no API-02 public contract or frozen PostgreSQL contract.
 
 ## 1. Executive summary
 
@@ -34,7 +36,7 @@ The following repository sources are authoritative for this design:
 | DB-01 through DB-04 approved artifacts | Approved versions in their headers | Persistent model, schema, transaction, concurrency, validation, and allocation decisions |
 | `database/` migrations and evidence | Implemented DB-05 through DB-07 | Exact implemented schema, privileges, operations, verification, performance envelope, and manual demonstration |
 | `database/POSTGRESQL_CONTRACT_FOR_FLASK.md` | 1.0, frozen | Exclusive Flask-to-PostgreSQL contract |
-| `Cafe_Fausse_API01_Backend_Operation_Inventory.md` | 1.0.1, approved | Seven operations and database-access responsibilities |
+| `Cafe_Fausse_API01_Backend_Operation_Inventory.md` | 1.0.2, approved reconciliation | Seven operations and database-access responsibilities |
 | `Cafe_Fausse_API02_Flask_REST_Contract.md` | 1.0.1, approved | Exact routes, methods, media types, fields, statuses, errors, flags, and 36 examples |
 | `Cafe_Fausse_Least_to_Most_Implementation_Roadmap.md` | 1.1.1 | API-03 objective and API-04 through API-09 boundaries |
 | User-authorized implementation-platform correction | 2026-08-21 | Windows Server 2025; standard GIL-enabled CPython 3.14.x with installed 3.14.6 as the initial implementation/tested patch; PostgreSQL 18.3; Node.js 24.15.0 for the later React phase only |
@@ -507,7 +509,7 @@ A check callback rejects closed, transaction-dirty, wrong-role, or otherwise unu
 
 Routes and validators never own connections. The operation service owns the orchestration deadline and asks its gateway to perform a precisely defined attempt. The gateway owns the lease and explicit transaction context.
 
-- Read operations use explicit read-only transactions. OP-01 uses one `REPEATABLE READ READ ONLY` transaction for its coherent multi-query snapshot. OP-02 and OP-03 use one `READ COMMITTED READ ONLY` transaction each.
+- Read operations use explicit read-only transactions. OP-01 and OP-02 each use one `REPEATABLE READ READ ONLY` transaction for a coherent multi-query snapshot. OP-03 uses one `READ COMMITTED READ ONLY` transaction.
 - OP-04 and the booking stage of OP-05 use explicit `READ COMMITTED` transactions. The approved routine call is the only statement inside the mutation transaction, apart from fixed transaction/session control performed by the adapter. The returned row is fully consumed before commit.
 - A successful transaction context exit is the commit-certainty boundary. A raised exception triggers rollback before classification. If rollback itself cannot be confirmed after a mutation was dispatched, outcome is unknown.
 - Application code never nests business transactions, holds a lease across an HTTP response, performs routine calls in autocommit mode, or retries on the same transaction.
@@ -524,7 +526,7 @@ The context gateway performs fixed SELECT projections from `reservation_configur
 
 ### 15.2 OP-02 provisional availability
 
-The availability gateway calls only `cafe_fausse.provisional_availability(%s::date, %s::integer)` with bound validated values and consumes all rows in one read-only transaction. It preserves database order after verifying unique legitimate local starts and maps database outcome/detail through the frozen catalogue. Flask serializes every returned slot, including unavailable slots, and never computes capacity, allocates tables, removes full slots, or treats provisional availability as a guarantee.
+Within one `REPEATABLE READ READ ONLY` transaction, the availability gateway reads only `cafe_fausse.reservation_configuration.restaurant_timezone`, calls the unchanged `cafe_fausse.provisional_availability(%s::date, %s::integer)` routine with bound validated values, and consumes all rows. The timezone identifier is used only to serialize the exact API-02 response. No other foundation-table read is permitted. The gateway preserves database order after verifying unique legitimate local starts and maps database outcome/detail through the frozen catalogue. Flask serializes every returned slot, including unavailable slots, and never computes capacity, allocates tables, removes full slots, or treats provisional availability as a guarantee.
 
 ### 15.3 OP-03 newsletter-status query
 
@@ -559,7 +561,7 @@ Internally the result categories are `pool`, `platform`, `contract`, and `founda
 | Op | Adapted input | Authorized access and internal facts | Transaction / owner / retry | Safe result and prohibited access | Test double |
 |---|---|---|---|---|---|
 | OP-01 | None | Fixed projections of configuration, seven weekday hours, 30 positive capacities, aggregates, and database-local date bounds | Gateway owns one `REPEATABLE READ READ ONLY` lease/transaction; service may safely retry a read | `ContextResult` or invalid-foundation/technical category; no customers, reservations, assignments, fabricated defaults, or cache | `ContextGateway.get_context()` |
-| OP-02 | Validated `date` and exact integer party size | `provisional_availability(date,integer)`; consumes `outcome`, nullable `detail_code`, `local_start`, `starts_at`, `ends_at`, `available` for every row | Gateway owns one read-only transaction; safe read retry | `AvailabilityResult` containing every legitimate start or frozen invalid/config category; no holds, candidates, assignments, capacity query, or persistence | `AvailabilityGateway.get_day(date, party_size)` |
+| OP-02 | Validated `date` and exact integer party size | In one snapshot, reads only `reservation_configuration.restaurant_timezone`, then calls `provisional_availability(date,integer)` and consumes `outcome`, nullable `detail_code`, `local_start`, `starts_at`, `ends_at`, `available` for every row | Gateway owns one `REPEATABLE READ READ ONLY` transaction; safe read retry uses a fresh lease/transaction | `AvailabilityResult` containing the serialization timezone and every legitimate start or frozen invalid/config category; no other foundation read, holds, candidates, assignments, capacity query, or persistence | `AvailabilityGateway.get_day(date, party_size)` |
 | OP-03 | Normalized names/middle and canonical email | Minimal `customers` projection of first/middle/last and `newsletter_subscribed` by canonical email | Gateway owns one short read-only transaction; safe read retry | `NewsletterStatusResult` for no customer/exact match/generic mismatch/current Boolean; no phone, ID, profile, reservation, assignment, or write | `CustomerGateway.get_newsletter_status(identity)` |
 | OP-04 | Normalized names/middle/email and exact Boolean | `set_newsletter_preference(...)`; consumes `outcome`, `newsletter_subscribed` | Gateway owns explicit `READ COMMITTED`; commit on returned result, rollback before eligible retry; discard uncertain connection | `PreferenceResult` or frozen conflict/known/unknown technical category; no direct customer DML/read-after-write or second subscriber state | `NewsletterGateway.set_preference(command)` |
 | OP-05 | Normalized names/middle/email, optional phone, local start, `smallint` offset, integer party, newsletter action | `book_reservation(...)`; consumes `outcome`, `detail_code`, `reservation_id`, `starts_at`, `ends_at`, `party_size`, sorted `assigned_table_numbers`, `newsletter_subscribed`, `phone_notice`, internal fingerprint version/bytes; after known commit, minimal stored-name SELECT | Gateway owns explicit booking `READ COMMITTED`, commit/rollback/certainty, then separate read-only name transaction; only approved retry classes | `BookingResult`, known confirmation-unavailable, or unknown-booking result; fingerprint stays internal and is not logged; no direct reservations/assignments read, DML, allocator, or test helper | `ReservationGateway.book(command)` returning a certainty-aware attempt result |
@@ -858,7 +860,7 @@ Correctness gates first: no duplication, overbooking, partial mutation, privacy 
 | Op | Exact endpoint | Route module | Validator | Service | Gateway / DB access | Serializer |
 |---|---|---|---|---|---|---|
 | OP-01 | `GET /api/v1/reservation-context` | `reservation_context.py` | GET/query rules | `reservation_context.py` | `context_gateway.py`: three foundation projections | common/context projection in route + common serializer |
-| OP-02 | `GET /api/v1/reservation-availability` | `reservation_availability.py` | `reservation.py` date/party | `reservation_availability.py` | `availability_gateway.py`: `provisional_availability(date,integer)` | `serialization/reservation.py` slots |
+| OP-02 | `GET /api/v1/reservation-availability` | `reservation_availability.py` | `reservation.py` date/party | `reservation_availability.py` | `availability_gateway.py`: same-snapshot timezone projection plus `provisional_availability(date,integer)` | `serialization/reservation.py` slots |
 | OP-03 | `POST /api/v1/newsletter-status-queries` | `newsletter_status.py` | `identity.py` | `newsletter_status.py` | `customer_gateway.py`: narrow customer SELECT | common newsletter projection |
 | OP-04 | `POST /api/v1/newsletter-preferences` | `newsletter_preferences.py` | `identity.py`, `newsletter.py` | `newsletter_preferences.py` | `newsletter_gateway.py`: `set_newsletter_preference(...)` | common newsletter projection |
 | OP-05 | `POST /api/v1/reservations` | `reservations.py` | `identity.py`, `reservation.py`, `newsletter.py` | `reservations.py`, `retry.py` | `reservation_gateway.py`: `book_reservation(...)`, then stored-name SELECT after known commit | `serialization/reservation.py` confirmation |
@@ -973,7 +975,7 @@ No derived/transient business data is persisted or cached by Flask. In-memory va
 
 1. OP-01 through OP-07 map one-to-one to the seven exact endpoints in section 27.
 2. API-03 changes no API-02 route, method, request/response field, status, public code, retry/unknown flag, or JSON example.
-3. It changes no PostgreSQL table, column, constraint, index, role, grant, routine, signature, outcome/detail, migration, isolation level, lock, or retry rule.
+3. It changes no PostgreSQL table, column, constraint, index, role, grant, routine, signature, outcome/detail, migration, lock, or retry rule. The approved API-07 reconciliation changes only OP-02's caller-managed read-only isolation from `READ COMMITTED` to `REPEATABLE READ` so its timezone projection and routine result share one snapshot.
 4. All database paths activate `cafe_fausse_app` and use only four granted foundation reads or three granted production routines.
 5. Current configuration, hours, capacities, availability, booking, allocation, overlap, exact retry, and persisted newsletter state stay PostgreSQL-authoritative.
 6. OP-05 returns stored customer-name spelling after a known booking/exact retry and never treats submitted spelling as confirmation authority.
@@ -983,7 +985,7 @@ No derived/transient business data is persisted or cached by Flask. In-memory va
 10. The selected Flask/Psycopg/pytest families have authoritative Python 3.14 and Windows compatibility evidence; Psycopg is constrained to 3.2.10 or newer within 3.2 because that is where official Python 3.14 support begins.
 11. The initial Flask implementation and verification platform is Windows Server 2025 with standard GIL-enabled CPython 3.14.6 and PostgreSQL 18.3. The OS and exact patch are formal evidence facts rather than Flask configuration/startup gates; project metadata remains `>=3.14,<3.15`. Node.js 24.15.0 is only a recorded future-React platform fact and is absent from the Flask dependency/runtime/test/performance graph.
 
-Therefore API-03 is compatible with API-01 1.0.1, API-02 1.0.1, DB-07 Hard Gate 1, and PostgreSQL Contract for Flask 1.0 without revision.
+Therefore API-03 is compatible with API-01 1.0.2, API-02 1.0.1, DB-07 Hard Gate 1, and PostgreSQL Contract for Flask 1.0 without revising the public or database contract.
 
 ## 34. Unresolved issues and deviations
 
@@ -1013,7 +1015,7 @@ The accepted database performance limitations remain explicit evidence items for
 | Upstream database/API contracts preserved | Complete |
 | API-04 implementation absent | Complete |
 
-API-03 version 1.0.2 is complete as a corrected design artifact and is ready for human review. Completion does not equal approval and does not authorize implementation by itself. No platform correction is required before API-04; after API-03 approval, API-04 may use the installed standard GIL-enabled CPython 3.14.6 environment.
+API-03 version 1.0.3 is complete as a reconciled design artifact and is ready for independent review. This documentation reconciliation does not authorize API-07 implementation by itself.
 
 ## 36. Version record
 
@@ -1022,9 +1024,10 @@ API-03 version 1.0.2 is complete as a corrected design artifact and is ready for
 | 1.0 | 2026-08-21 | Initial API-03 Flask architecture, configuration, and test strategy prepared for review. |
 | 1.0.1 | 2026-08-21 | Added the implementation-platform and dependency-compatibility correction using the then-supplied Python patch value; tightened Psycopg 3.2 to 3.2.10+, preserved PostgreSQL 18.3, and recorded Node.js 24.15.0 only for future React work. Superseded by 1.0.2 for the corrected Python patch and evidence/startup distinction. |
 | 1.0.2 | 2026-08-21 | Corrected the authoritative installed/initial Python patch to standard GIL-enabled CPython 3.14.6; changed the read-only result from mismatch to match; removed the OS/exact-patch Flask configuration/startup gate; retained formal API-04/API-09 evidence checks, `requires-python = ">=3.14,<3.15"`, Psycopg 3.2.10+, PostgreSQL 18.3, and Node.js's future-React-only status. No API/database/transaction/architecture behavior changed. |
+| 1.0.3 | 2026-08-23 | Applied the approved `API-07 OP-02 timezone/snapshot reconciliation`: OP-02 now reads only `reservation_configuration.restaurant_timezone` and calls the unchanged provisional-availability routine within one `REPEATABLE READ READ ONLY` snapshot. API-02 and the frozen PostgreSQL contract remain unchanged. |
 
 ## 37. Approval checkpoint
 
-**Current checkpoint:** Awaiting Abdul's explicit review and approval of API-03 version 1.0.2. Status remains ready for review / pending approval.
+**Current checkpoint:** API-03 version 1.0.3 contains the approved API-07 OP-02 timezone/snapshot reconciliation and awaits independent review before revised Prompt 16 is executed.
 
-If approved, this checkpoint authorizes exactly **API-04 - Flask Foundation and PostgreSQL Connectivity**: application creation, configuration, database connectivity, health/readiness, transaction scaffolding, safe errors, common response policy, and backend logging with their foundational tests. It does not authorize API-05 customer identity/newsletter-status work, API-06 through API-09, React, integration, deployment, or PostgreSQL changes.
+The original API-03 approval boundary is preserved. Prompt 16A authorizes only this documentation reconciliation; it does not authorize API-07 implementation, API-08/API-09, React, integration, deployment, or PostgreSQL changes.
