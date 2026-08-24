@@ -1,14 +1,16 @@
-# Cafe Fausse Flask backend through API-06
+# Cafe Fausse Flask backend through API-07
 
 This directory contains the API-04 Flask/PostgreSQL foundation, API-05's
-read-only OP-03 customer identity/newsletter-status query, and API-06's OP-04
-independent newsletter-preference mutation. PostgreSQL remains the business
-authority. There is no reservation API, ORM, CORS, session/cookie feature,
-startup migration, React code, or production-server selection here.
+read-only OP-03 customer identity/newsletter-status query, API-06's OP-04
+independent newsletter-preference mutation, and API-07's read-only OP-01
+reservation context and OP-02 provisional availability discovery. PostgreSQL
+remains the business authority. There is no reservation creation API, ORM,
+CORS, session/cookie feature, startup migration, React code, or
+production-server selection here.
 
-API-01 through API-05 were approved before API-06 work began. API-06 is the
-current unapproved review increment until it receives explicit acceptance.
-API-07 and later increments are not authorized and have not been started.
+API-01 through API-06 are approved. API-07 is the current unapproved review
+increment. API-08 and later increments are not authorized and have not been
+started.
 
 ## Supported and initially verified platform
 
@@ -203,14 +205,44 @@ infer the prior outcome or change the requested Boolean before resubmission.
 
 ## Tests
 
+API-07 adds `GET /api/v1/reservation-context` and
+`GET /api/v1/reservation-availability?local_date=YYYY-MM-DD&party_size=N`.
+Both use one fresh `REPEATABLE READ READ ONLY` transaction per attempt. OP-01
+returns the coherent configuration, seven ordered weekday-hour rows,
+database-clock date range, and aggregate maximum party size. OP-02 reads only
+the restaurant timezone and invokes the unchanged
+`cafe_fausse.provisional_availability(date, integer)` routine in the same
+snapshot. Availability is explicitly provisional and never creates a hold or
+performs DML.
+
+The complete API-07 gate uses two independent shallow sibling roots:
+`%TEMP%\CafeFausse-api07-tests` and
+`%TEMP%\CafeFausse-api07-contained-api06-tests`. Each writes and validates its
+own repository-bound ownership evidence before creating resources. The
+contained root keeps PostgreSQL data, venv, pip cache, coverage, and process
+temporary paths as shallow siblings; ordinary tests disable Python bytecode
+and pytest caching. API-07 never redirects `TEMP/TMP` so API-06 cannot derive
+its root beneath API-07. Cleanup validates and removes each root independently
+and rejects reparse points, ownership mismatches, or unproved processes:
+
+```powershell
+Set-Location C:\Users\Administrator\source\CafeFausse
+& .\backend\tests\run_api07.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+See [TestInstructions.md](TestInstructions.md) for controlled failure,
+cleanup-failure recovery, interruption recovery, and ownership-mismatch
+refusal. API-07 remains unapproved pending independent review.
+
 The recommended complete API-06 workflow is self-contained and removes its
-marked disposable PostgreSQL cluster, roles, database, and every generated
-Python artifact in `%TEMP%\CafeFausse-api06-tests\artifacts`. Its virtual
-environment, pytest cache, coverage file, bytecode, and pip cache never use
-repository paths. A developer's existing `backend\.venv`, caches, coverage,
-bytecode, and package metadata are preserved exactly. Ownership requires both
-the exact task-root path and its exact API-06 port/database marker; a missing or
-mismatched marker causes refusal without deletion. Independent finalization
+marked disposable PostgreSQL cluster, roles, database, and shallow venv,
+pip-cache, coverage, and process-temp resources beneath
+`%TEMP%\CafeFausse-api06-tests`. Routine runs use no bytecode or pytest cache.
+A developer's existing `backend\.venv`, caches, coverage, bytecode, and package
+metadata are preserved exactly. Ownership requires the exact task-root path
+and its JSON repository/task/phase/purpose/owner/root/port/database identity; a
+missing or mismatched marker causes refusal without deletion. Independent finalization
 phases attempt PostgreSQL/process cleanup, artifact cleanup, cluster-root
 cleanup, and exact environment restoration even when an earlier phase fails:
 
@@ -223,7 +255,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Codex confirmed that it generated `backend\.api06-correction-compile` during
 API-06 compilation. After exact canonical-path and reparse-point verification,
 only that Codex-owned directory was removed and its absence was verified.
-API-06 nevertheless remains at the unapproved independent-review checkpoint.
+API-06 was subsequently approved and remains closed.
 
 See [TestInstructions.md](TestInstructions.md) for prerequisites, focused
 commands, ordinary and cleanup failure injection, interruption recovery,

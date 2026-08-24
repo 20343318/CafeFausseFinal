@@ -7,6 +7,358 @@ root in Windows PowerShell unless a step says otherwise.
 This is a user-requested programmer-convenience runbook. It is not required by
 the SRS or rubric and is not an approved requirements or design authority.
 
+## API-07 recommended complete workflow
+
+API-01 through API-06 are approved. API-07 is the current unapproved review
+increment. API-08, reservation creation, React, integration, and database
+changes are not authorized by this workflow.
+
+Run the complete API-07 gate from the repository root in Windows PowerShell
+5.1. It requires CPython 3.14.6, PostgreSQL 18.3, and explicit nonproduction
+authorization:
+
+```powershell
+& .\backend\tests\run_api07.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The runner refuses a preexisting `%TEMP%\CafeFausse-api07-tests` root. On a
+new run it writes and validates `ownership.json` before starting the contained
+runner. API-07 passes API-06 the explicit independent sibling root
+`%TEMP%\CafeFausse-api07-contained-api06-tests`; it never redirects `TEMP` or
+`TMP` into the API-07 root. The contained runner records its own ownership and
+keeps PostgreSQL data, venv, pip cache, coverage, and process-temporary paths
+as shallow siblings beneath its root. Ordinary tests set
+`PYTHONDONTWRITEBYTECODE=1`, remove inherited `PYTHONPYCACHEPREFIX`, disable
+pytest's cache provider, and use pip `--no-compile`. Cleanup validates and
+removes the two roots independently, rejecting missing markers, mismatches,
+reparse points, containment failures, unproved processes, or listeners.
+
+### Artifact-safe focused API-07 verification
+
+The focused workflow below is restartable and refuses a preexisting root. It
+uses shallow venv, pip-cache, coverage, and process-temp paths beneath the
+marker-owned `%TEMP%\CafeFausse-api07-focused` root. Each resource's marker is
+written before that resource is created. Routine bytecode and pytest caching
+are disabled. The final `finally` phase restores every changed environment value,
+validates the exact canonical root, repository identity, owner ID, marker,
+containment, and absence of reparse-point descendants, removes only that
+root, and verifies absence.
+
+Set `$CafeRunApi07FocusedPostgres` to `$true` only when the current environment
+already identifies a separately ownership-proven disposable PostgreSQL 18.3
+cluster through `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
+`CAFE_FAUSSE_TEST_MANAGER_USER`, and `CAFE_FAUSSE_API07_ADMIN_USER`. The
+focused workflow creates no cluster and neither adopts nor deletes that
+external resource. Its API-07 fixture changes use the approved test seams and
+restore themselves. A missing explicit authorization causes refusal.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$CafeRepo = [IO.Path]::GetFullPath((Get-Location).Path).TrimEnd('\')
+$CafeOriginalTemp = [Environment]::GetEnvironmentVariable('TEMP', 'Process')
+$CafeFocusedRoot = [IO.Path]::GetFullPath(
+    (Join-Path $CafeOriginalTemp 'CafeFausse-api07-focused')
+).TrimEnd('\')
+$CafeFocusedMarker = Join-Path $CafeFocusedRoot 'ownership.json'
+$CafeFocusedOwner = 'cafe-fausse-api07-focused-prompt16'
+$CafeFocusedVenv = Join-Path $CafeFocusedRoot 'venv'
+$CafeFocusedPipCache = Join-Path $CafeFocusedRoot 'pip-cache'
+$CafeFocusedCoverageRoot = Join-Path $CafeFocusedRoot 'coverage'
+$CafeFocusedProcessTemp = Join-Path $CafeFocusedRoot 'process-temp'
+$CafeFocusedResources = @(
+    @{ Name = 'venv'; Root = $CafeFocusedVenv; Purpose = 'focused disposable venv' },
+    @{ Name = 'pip-cache'; Root = $CafeFocusedPipCache; Purpose = 'focused pip cache' },
+    @{ Name = 'coverage'; Root = $CafeFocusedCoverageRoot; Purpose = 'focused coverage data' },
+    @{ Name = 'process-temp'; Root = $CafeFocusedProcessTemp; Purpose = 'focused process temporary files' }
+)
+$CafeRunApi07FocusedPostgres = $false
+$CafeApi07FocusedPostgresAuthorization = $null
+$CafeFocusedNames = @(
+    'TEMP', 'TMP', 'PYTHONPATH', 'PYTHONDONTWRITEBYTECODE', 'PYTHONPYCACHEPREFIX',
+    'COVERAGE_FILE', 'PIP_CACHE_DIR', 'PYTEST_ADDOPTS'
+)
+$CafeFocusedPrior = @{}
+foreach ($CafeFocusedName in $CafeFocusedNames) {
+    $CafeFocusedPrior[$CafeFocusedName] =
+        [Environment]::GetEnvironmentVariable($CafeFocusedName, 'Process')
+}
+$CafeFocusedCreated = $false
+$CafeFocusedFailure = $null
+
+function Assert-CafeApi07FocusedOwnership {
+    $CafeExpectedFocusedRoot = [IO.Path]::GetFullPath(
+        (Join-Path $CafeOriginalTemp 'CafeFausse-api07-focused')
+    ).TrimEnd('\')
+    if ($CafeFocusedRoot -cne $CafeExpectedFocusedRoot) {
+        throw 'The focused API-07 root canonical path changed.'
+    }
+    if (-not (Test-Path -LiteralPath $CafeFocusedRoot -PathType Container)) {
+        throw 'The focused API-07 root is absent.'
+    }
+    $CafeFocusedRootItem = Get-Item -LiteralPath $CafeFocusedRoot -Force
+    if (($CafeFocusedRootItem.Attributes -band
+            [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'The focused API-07 root is a reparse point.'
+    }
+    if (-not (Test-Path -LiteralPath $CafeFocusedMarker -PathType Leaf)) {
+        throw 'The focused API-07 ownership marker is absent.'
+    }
+    $CafeFocusedMarkerItem = Get-Item -LiteralPath $CafeFocusedMarker -Force
+    if (($CafeFocusedMarkerItem.Attributes -band
+            [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'The focused API-07 marker is a reparse point.'
+    }
+    $CafeFocusedValue =
+        Get-Content -LiteralPath $CafeFocusedMarker -Raw | ConvertFrom-Json
+    if ($CafeFocusedValue.task -cne 'API-07' -or
+        $CafeFocusedValue.phase -cne 'Prompt-16-focused-verification' -or
+        $CafeFocusedValue.repository -cne $CafeRepo -or
+        $CafeFocusedValue.owner_id -cne $CafeFocusedOwner -or
+        $CafeFocusedValue.root -cne $CafeFocusedRoot) {
+        throw 'The focused API-07 ownership marker does not match.'
+    }
+}
+
+function Remove-CafeApi07FocusedRoot {
+    Assert-CafeApi07FocusedOwnership
+    foreach ($CafeFocusedResource in $CafeFocusedResources) {
+        $CafeFocusedResourceMarker = Join-Path $CafeFocusedRoot (
+            '.' + $CafeFocusedResource.Name + '.ownership.json'
+        )
+        if (-not (Test-Path -LiteralPath $CafeFocusedResourceMarker -PathType Leaf)) {
+            throw 'A focused resource ownership marker is absent.'
+        }
+        $CafeFocusedResourceValue = Get-Content -LiteralPath `
+            $CafeFocusedResourceMarker -Raw | ConvertFrom-Json
+        if ($CafeFocusedResourceValue.repository -cne $CafeRepo -or
+            $CafeFocusedResourceValue.task -cne 'API-07' -or
+            $CafeFocusedResourceValue.phase -cne 'Prompt-16-focused-verification' -or
+            $CafeFocusedResourceValue.purpose -cne $CafeFocusedResource.Purpose -or
+            $CafeFocusedResourceValue.owner_id -cne (
+                $CafeFocusedOwner + '-' + $CafeFocusedResource.Name
+            ) -or
+            $CafeFocusedResourceValue.root -cne $CafeFocusedResource.Root) {
+            throw 'A focused resource ownership marker does not match.'
+        }
+    }
+    $CafeFocusedPrefix = $CafeFocusedRoot + '\'
+    foreach ($CafeFocusedItem in
+        Get-ChildItem -LiteralPath $CafeFocusedRoot -Force -Recurse) {
+        $CafeFocusedFullPath =
+            [IO.Path]::GetFullPath($CafeFocusedItem.FullName)
+        if (-not $CafeFocusedFullPath.StartsWith(
+            $CafeFocusedPrefix,
+            [StringComparison]::OrdinalIgnoreCase
+        )) {
+            throw 'A focused API-07 descendant escaped the owned root.'
+        }
+        if (($CafeFocusedItem.Attributes -band
+                [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'A focused API-07 descendant is a reparse point.'
+        }
+    }
+    Remove-Item -LiteralPath $CafeFocusedRoot -Recurse -Force
+    if (Test-Path -LiteralPath $CafeFocusedRoot) {
+        throw 'The focused API-07 root survived cleanup.'
+    }
+}
+
+try {
+    if (Test-Path -LiteralPath $CafeFocusedRoot) {
+        throw 'Refusing a preexisting or ambiguous focused API-07 root.'
+    }
+    New-Item -ItemType Directory -Path $CafeFocusedRoot | Out-Null
+    $CafeFocusedCreated = $true
+    $CafeFocusedMarkerValue = [ordered]@{
+        task = 'API-07'
+        phase = 'Prompt-16-focused-verification'
+        purpose = 'artifact-confined focused API-07 verification'
+        repository = $CafeRepo
+        owner_id = $CafeFocusedOwner
+        root = $CafeFocusedRoot
+    } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText(
+        $CafeFocusedMarker,
+        $CafeFocusedMarkerValue + "`n",
+        (New-Object Text.UTF8Encoding($false))
+    )
+    Assert-CafeApi07FocusedOwnership
+    foreach ($CafeFocusedResource in $CafeFocusedResources) {
+        $CafeFocusedResourceMarker = Join-Path $CafeFocusedRoot (
+            '.' + $CafeFocusedResource.Name + '.ownership.json'
+        )
+        $CafeFocusedResourceValue = [ordered]@{
+            repository = $CafeRepo
+            task = 'API-07'
+            phase = 'Prompt-16-focused-verification'
+            purpose = $CafeFocusedResource.Purpose
+            owner_id = $CafeFocusedOwner + '-' + $CafeFocusedResource.Name
+            root = $CafeFocusedResource.Root
+        } | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText(
+            $CafeFocusedResourceMarker,
+            $CafeFocusedResourceValue + "`n",
+            (New-Object Text.UTF8Encoding($false))
+        )
+    }
+    New-Item -ItemType Directory -Path $CafeFocusedCoverageRoot | Out-Null
+    New-Item -ItemType Directory -Path $CafeFocusedProcessTemp | Out-Null
+    $env:TEMP = $CafeFocusedProcessTemp
+    $env:TMP = $CafeFocusedProcessTemp
+    $env:PYTHONPATH = Join-Path $CafeRepo 'backend\src'
+    $env:PYTHONDONTWRITEBYTECODE = '1'
+    Remove-Item Env:PYTHONPYCACHEPREFIX -ErrorAction SilentlyContinue
+    $env:COVERAGE_FILE = Join-Path $CafeFocusedCoverageRoot '.coverage'
+    $env:PIP_CACHE_DIR = $CafeFocusedPipCache
+    $env:PYTEST_ADDOPTS = '-p no:cacheprovider'
+    & 'C:\Python314\python.exe' -m venv --without-pip $CafeFocusedVenv
+    if ($LASTEXITCODE -ne 0) { throw 'Focused API-07 venv creation failed.' }
+    $CafeFocusedPython = Join-Path $CafeFocusedVenv 'Scripts\python.exe'
+    & 'C:\Python314\python.exe' -m pip --python $CafeFocusedPython install `
+        --disable-pip-version-check --quiet --no-compile `
+        --cache-dir $env:PIP_CACHE_DIR `
+        'Flask==3.1.3' 'psycopg[binary]==3.2.13' `
+        'psycopg-pool==3.2.8' 'pytest==9.1.1' 'pytest-cov==7.1.0'
+    if ($LASTEXITCODE -ne 0) { throw 'Focused dependency setup failed.' }
+    Assert-CafeApi07FocusedOwnership
+
+    Push-Location (Join-Path $CafeRepo 'backend')
+    try {
+        & $CafeFocusedPython -m pytest `
+            tests\unit\test_validation_reservation.py `
+            tests\unit\test_reservation_gateways.py `
+            tests\unit\test_reservation_services.py
+        if ($LASTEXITCODE -ne 0) { throw 'Focused OP-01/OP-02 tests failed.' }
+        & $CafeFocusedPython -m pytest `
+            tests\api\test_reservation_discovery.py
+        if ($LASTEXITCODE -ne 0) { throw 'Focused Flask API tests failed.' }
+        if ($CafeRunApi07FocusedPostgres) {
+            if ($CafeApi07FocusedPostgresAuthorization -cne
+                'AUTHORIZED_NONPRODUCTION') {
+                throw 'Focused PostgreSQL authorization is missing.'
+            }
+            & $CafeFocusedPython -m pytest `
+                tests\integration\test_reservation_discovery_postgresql.py `
+                -m 'integration and postgres'
+            if ($LASTEXITCODE -ne 0) {
+                throw 'Focused PostgreSQL API-07 tests failed.'
+            }
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+catch {
+    $CafeFocusedFailure = $_
+}
+finally {
+    foreach ($CafeFocusedName in $CafeFocusedNames) {
+        if ($null -eq $CafeFocusedPrior[$CafeFocusedName]) {
+            [Environment]::SetEnvironmentVariable(
+                $CafeFocusedName, $null, 'Process'
+            )
+        }
+        else {
+            [Environment]::SetEnvironmentVariable(
+                $CafeFocusedName,
+                [string]$CafeFocusedPrior[$CafeFocusedName],
+                'Process'
+            )
+        }
+    }
+    if ($CafeFocusedCreated -and
+        (Test-Path -LiteralPath $CafeFocusedRoot)) {
+        try {
+            Remove-CafeApi07FocusedRoot
+        }
+        catch {
+            if ($null -eq $CafeFocusedFailure) { $CafeFocusedFailure = $_ }
+            else {
+                Write-Warning (
+                    'Focused cleanup failed; the owned root was preserved: ' +
+                    $_.Exception.Message
+                )
+            }
+        }
+    }
+}
+if ($null -ne $CafeFocusedFailure) { throw $CafeFocusedFailure }
+if (Test-Path -LiteralPath $CafeFocusedRoot) {
+    throw 'Final focused API-07 root-absence verification failed.'
+}
+Write-Host 'API07 FOCUSED CLEANUP PASS: exact owned root is absent.'
+```
+
+To demonstrate ordinary failure cleanup and immediate restart:
+
+```powershell
+try {
+    & .\backend\tests\run_api07.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -InjectFailure
+    throw 'The controlled API-07 failure unexpectedly passed.'
+}
+catch {
+    $CafeOrdinaryRoots = @(
+        (Join-Path $env:TEMP 'CafeFausse-api07-tests'),
+        (Join-Path $env:TEMP 'CafeFausse-api07-contained-api06-tests')
+    )
+    if (@($CafeOrdinaryRoots | Where-Object { Test-Path -LiteralPath $_ }).Count -ne 0) {
+        throw 'The controlled ordinary failure left an owned runner root behind.'
+    }
+}
+& .\backend\tests\run_api07.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+To demonstrate a controlled cleanup failure and later exact recovery:
+
+```powershell
+try {
+    & .\backend\tests\run_api07.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -InjectCleanupFailure
+    throw 'The controlled API-07 cleanup failure unexpectedly passed.'
+}
+catch {
+    if (-not (Test-Path -LiteralPath (Join-Path $env:TEMP 'CafeFausse-api07-tests'))) {
+        throw 'The controlled cleanup failure did not preserve its owned root.'
+    }
+}
+& .\backend\tests\run_api07.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -CleanupOwnedRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The actual interruption/recovery test uses the real API-07 runner launching the
+real contained API-06 runner. The expected preparation exit is `86`:
+
+```powershell
+$CafePowerShell = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+& $CafePowerShell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass `
+    -File .\backend\tests\run_api07.ps1 `
+    -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' `
+    -PrepareInterruptionState
+if ($LASTEXITCODE -ne 86) {
+    throw "Interruption preparation returned unexpected exit $LASTEXITCODE."
+}
+& .\backend\tests\run_api07.ps1 `
+    -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' `
+    -CleanupOwnedRoot
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+Preparation keeps the outer process alive while the contained runner creates
+its independently marker-owned sibling root and holds its live PostgreSQL 18.3
+cluster. Empty, partial, or temporarily unparsable `postmaster.pid` content is
+retried until timeout. Before the outer runner exits, it proves the postmaster
+and sole port-55446 listener, writes the contained runner's PID, executable,
+parent, command hash, start time, purpose, relationship, and both root paths
+using write-through I/O, rereads the marker, and revalidates process/listener
+identity. Recovery validates both sibling roots, stops PostgreSQL, verifies
+zero listeners, validates and terminates the recorded held process, removes
+the contained root and outer root independently, and proves both absent. A
+missing/mismatched marker or ambiguous process causes refusal and preservation.
+Never create a replacement marker, adopt a root, use `git clean`, or delete by
+name alone.
+
 ## API-06 recommended complete workflow
 
 API-01 through API-05 were approved before this work. API-06 is the current
@@ -39,17 +391,20 @@ The exact authorization value is mandatory and case-sensitive. The runner
 refuses an unexpected Python/PostgreSQL version, occupied port, unexpected
 root, missing marker, or mismatched marker before deleting anything.
 
-The runner creates only `%TEMP%\CafeFausse-api06-tests`, whose exact marker is
-bound to port 55446 and database `cafe_fausse_test_api06`. Beneath its
-`artifacts` directory it confines the virtual environment, pip cache, pytest
-cache, coverage data, and Python bytecode. It creates a loopback PostgreSQL
+The standalone runner creates only `%TEMP%\CafeFausse-api06-tests`, whose JSON
+marker records repository, task, phase, purpose, owner ID, canonical root,
+port 55446, and database `cafe_fausse_test_api06`. PostgreSQL data, venv, pip
+cache, coverage, and process-temp paths are shallow siblings beneath that
+root, with resource ownership recorded before creation. Routine testing sets
+`PYTHONDONTWRITEBYTECODE=1`, removes inherited `PYTHONPYCACHEPREFIX`, disables
+pytest caching, and uses pip `--no-compile`. It creates a loopback PostgreSQL
 cluster, the one test database, app/test-manager logins, and uniquely owned
 fixtures. It preserves unrelated databases, roles, memberships, rows,
 processes, listeners, files, directories, passfiles, and environment values.
 
 Independent `finally` phases restore the original working directory, stop the
 owned PostgreSQL child, remove generated artifacts, remove the exact
-marker-owned cluster root, restore all 19 changed environment variables to
+marker-owned cluster root, restore all 24 changed environment variables to
 their prior value or absence without displaying values, and verify no owned
 root or listener remains. An earlier cleanup failure does not skip later
 phases. An ordinary test failure remains primary; cleanup failures are

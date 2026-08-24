@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime, time
 from enum import StrEnum
 
 
@@ -27,6 +28,11 @@ class NewsletterPreferenceOutcome(StrEnum):
     INVALID_REQUEST = "invalid_request"
     CUSTOMER_IDENTITY_CONFLICT = "customer_identity_conflict"
     MIDDLE_INITIAL_CONFLICT = "middle_initial_conflict"
+
+
+class AvailabilityOutcome(StrEnum):
+    SLOTS = "slots"
+    INVALID_REQUEST = "invalid_request"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +99,52 @@ class NewsletterStatusResult:
             raise ValueError("only a matched newsletter status may contain a Boolean state")
         if self.pool_wait_ms < 0 or self.database_ms < 0:
             raise ValueError("newsletter-status timings cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class WeekdayHours:
+    iso_weekday: int
+    opens_at_local: time
+    closes_at_local: time
+
+
+@dataclass(frozen=True, slots=True)
+class ReservationContextResult:
+    restaurant_timezone: str
+    weekday_hours: tuple[WeekdayHours, ...]
+    start_interval_minutes: int
+    reservation_duration_minutes: int
+    advance_window_days: int
+    same_day_lead_minutes: int
+    minimum_local_date: date
+    maximum_local_date: date
+    maximum_party_size: int
+    pool_wait_ms: float = 0.0
+    database_ms: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class AvailabilityRequest:
+    local_date: date
+    party_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class AvailabilitySlot:
+    local_start: datetime
+    starts_at: datetime
+    ends_at: datetime
+    available: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ReservationAvailabilityResult:
+    outcome: AvailabilityOutcome
+    request: AvailabilityRequest
+    restaurant_timezone: str | None = None
+    slots: tuple[AvailabilitySlot, ...] = ()
+    pool_wait_ms: float = 0.0
+    database_ms: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,8 +7,9 @@ from typing import Callable, Protocol
 
 from .config import Settings
 from .services.health import LivenessService, ReadinessService
-from .services.results import CustomerIdentity, NewsletterStatusResult
+from .services.results import AvailabilityRequest, CustomerIdentity, NewsletterStatusResult
 from .services.results import NewsletterPreferenceCommand, NewsletterPreferenceResult
+from .services.results import ReservationAvailabilityResult, ReservationContextResult
 
 
 class Closeable(Protocol):
@@ -25,6 +26,14 @@ class NewsletterPreferenceOperation(Protocol):
     ) -> NewsletterPreferenceResult: ...
 
 
+class ReservationContextOperation(Protocol):
+    def get(self) -> ReservationContextResult: ...
+
+
+class ReservationAvailabilityOperation(Protocol):
+    def get(self, request: AvailabilityRequest) -> ReservationAvailabilityResult: ...
+
+
 @dataclass(frozen=True, slots=True)
 class Dependencies:
     settings: Settings
@@ -34,4 +43,6 @@ class Dependencies:
     correlation_id_factory: Callable[[], str]
     newsletter_status_service: NewsletterStatusOperation | None = None
     newsletter_preference_service: NewsletterPreferenceOperation | None = None
+    reservation_context_service: ReservationContextOperation | None = None
+    reservation_availability_service: ReservationAvailabilityOperation | None = None
     resource: Closeable | None = None

@@ -92,7 +92,7 @@ def test_at_api_common_methods_routes_and_request_policy(settings, dependency_fa
 
 
 @pytest.mark.api
-def test_at_api_only_approved_through_api06_routes_registered(settings, dependency_factory):
+def test_at_api_only_approved_through_api07_routes_registered(settings, dependency_factory):
     dependencies, _gateway, _live = dependency_factory()
     app = create_app(settings, dependencies)
     api_rules = sorted(rule.rule for rule in app.url_map.iter_rules() if rule.rule.startswith("/api/"))
@@ -101,6 +101,8 @@ def test_at_api_only_approved_through_api06_routes_registered(settings, dependen
         "/api/v1/health/readiness",
         "/api/v1/newsletter-preferences",
         "/api/v1/newsletter-status-queries",
+        "/api/v1/reservation-availability",
+        "/api/v1/reservation-context",
     ]
 
 

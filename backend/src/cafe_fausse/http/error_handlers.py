@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Flask, g
+from flask import Flask, g, request
 from werkzeug.exceptions import MethodNotAllowed, NotFound, RequestEntityTooLarge
 
 from ..services.newsletter_status import NewsletterStatusIndeterminate
@@ -10,6 +10,7 @@ from ..services.newsletter_preferences import (
     NewsletterPreferenceOutcomeUnknown,
     NewsletterPreferenceTemporaryFailure,
 )
+from ..services.reservation_context import ReservationServiceUnavailable
 from .parsing import InvalidRequest, ProtocolError
 from .responses import error_response
 
@@ -59,6 +60,17 @@ def register_error_handlers(app: Flask) -> None:
     @app.errorhandler(NewsletterPreferenceOutcomeUnknown)
     def newsletter_preference_unknown(error: NewsletterPreferenceOutcomeUnknown):
         return _preference_failure(error, "newsletter_preference_outcome_unknown")
+
+    @app.errorhandler(ReservationServiceUnavailable)
+    def reservation_service_unavailable(error: ReservationServiceUnavailable):
+        g.cafe_fausse_pool_wait_ms = error.pool_wait_ms
+        g.cafe_fausse_database_ms = error.database_ms
+        safe_logger = app.extensions.get("cafe_fausse_logger")
+        route = getattr(request.url_rule, "rule", "")
+        operation = "OP-01" if route.endswith("reservation-context") else "OP-02"
+        if safe_logger is not None:
+            safe_logger.event("unexpected_error", severity="WARNING", operation=operation, error_code="service_unavailable")
+        return error_response("service_unavailable", 503)
 
     @app.errorhandler(NotFound)
     def route_not_found(_error: NotFound):

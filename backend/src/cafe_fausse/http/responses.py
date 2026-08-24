@@ -54,6 +54,12 @@ ERRORS: dict[str, tuple[int, str, bool, bool]] = {
         True,
     ),
     "service_not_ready": (503, "The service is not ready.", True, False),
+    "service_unavailable": (
+        503,
+        "The service cannot process this request right now.",
+        True,
+        False,
+    ),
     "internal_error": (500, "An unexpected error occurred.", False, False),
 }
 

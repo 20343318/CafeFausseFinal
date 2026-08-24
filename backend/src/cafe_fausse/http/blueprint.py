@@ -7,6 +7,8 @@ from flask import Blueprint
 from .routes.health import liveness, readiness
 from .routes.newsletter_preferences import newsletter_preferences
 from .routes.newsletter_status import newsletter_status
+from .routes.reservation_availability import reservation_availability
+from .routes.reservation_context import reservation_context
 
 
 def create_api_blueprint() -> Blueprint:
@@ -22,6 +24,20 @@ def create_api_blueprint() -> Blueprint:
         "/health/readiness",
         endpoint="health_readiness",
         view_func=readiness,
+        methods=["GET"],
+        provide_automatic_options=False,
+    )
+    blueprint.add_url_rule(
+        "/reservation-context",
+        endpoint="reservation_context",
+        view_func=reservation_context,
+        methods=["GET"],
+        provide_automatic_options=False,
+    )
+    blueprint.add_url_rule(
+        "/reservation-availability",
+        endpoint="reservation_availability",
+        view_func=reservation_availability,
         methods=["GET"],
         provide_automatic_options=False,
     )
