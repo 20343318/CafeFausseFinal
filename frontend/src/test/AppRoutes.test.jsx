@@ -52,7 +52,7 @@ describe('application routes and static content', () => {
     expect(screen.getByRole('banner')).toBe(header)
   })
 
-  it('renders exact Home identity, contact, hours, and a nonfunctional newsletter boundary', () => {
+  it('renders exact Home identity, contact, hours, and the canonical newsletter form', () => {
     const { container } = renderApp('/')
     expect(screen.getByRole('heading', { level: 1, name: restaurant.name })).toBeInTheDocument()
     expect(screen.getAllByText(restaurant.address).length).toBeGreaterThan(0)
@@ -63,8 +63,8 @@ describe('application routes and static content', () => {
     expect(screen.getByRole('link', { name: 'View the menu' })).toHaveAttribute('href', '/menu')
     expect(screen.getByRole('heading', { name: 'Newsletter preferences' })).toBeInTheDocument()
     expect(container.querySelector('[data-feature-boundary="newsletter"]')).toBeInTheDocument()
-    expect(screen.queryByRole('form')).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('form', { name: 'Newsletter preferences' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /First name Required/ })).toBeInTheDocument()
   })
 
   it('renders every exact Menu category, item, description, and price', () => {
@@ -79,14 +79,12 @@ describe('application routes and static content', () => {
     }
   })
 
-  it('keeps Reservations at the approved static boundary with no form controls', () => {
+  it('keeps the Reservations feature boundary while context loads', () => {
     const { container } = renderApp('/reservations')
     expect(screen.getByRole('heading', { level: 1, name: 'Reservations' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Dining information' })).toBeInTheDocument()
     expect(container.querySelector('[data-feature-boundary="reservation"]')).toBeInTheDocument()
-    expect(screen.queryByRole('form')).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Loading reservation options')
   })
 
   it('renders the approved About history, biographies, and commitments without added profile facts', () => {

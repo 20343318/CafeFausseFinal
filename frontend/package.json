@@ -14,6 +14,9 @@
     "test:watch": "vitest",
     "test:shell": "vitest run src/test/AppRoutes.test.jsx src/test/SiteHeader.test.jsx src/test/AppErrorBoundary.test.jsx",
     "test:gallery": "vitest run src/test/gallery-discovery.test.js src/test/GalleryPage.test.jsx src/test/GalleryLightbox.test.jsx",
+    "test:reservations": "vitest run src/test/validation.test.js src/test/ReservationFeature.test.jsx",
+    "test:newsletter": "vitest run src/test/NewsletterPreferences.test.jsx",
+    "test:mocked-flows": "vitest run src/test/ContractMockSemantics.test.js src/test/MockedPageFlows.test.jsx",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {

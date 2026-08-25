@@ -1,4 +1,5 @@
 import { restaurant } from '../content/restaurant.js'
+import { ReservationFeatureBoundary } from '../features/reservations/ReservationFeature.jsx'
 
 export function ReservationsPage() {
   return (
@@ -23,11 +24,9 @@ export function ReservationsPage() {
           ))}
         </div>
       </section>
-      <section
-        className="feature-boundary reservation-feature-boundary"
-        aria-label="Reservation controls"
-        data-feature-boundary="reservation"
-      />
+      <section className="reservation-feature-boundary" aria-label="Reservation controls" data-feature-boundary="reservation">
+        <ReservationFeatureBoundary />
+      </section>
     </div>
   )
 }

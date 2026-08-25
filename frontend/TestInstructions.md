@@ -1,6 +1,6 @@
 # Café Fausse Frontend Test Instructions
 
-These instructions cover the REACT-04 / Prompt-22 static React application and Gallery increment. They are repeatable after success, failure, or Ctrl+C. Run commands from `frontend/` in PowerShell unless a step says otherwise.
+These instructions cover the REACT-05 / Prompt-23 reservation and newsletter UI with mocked OP-01 through OP-05 behavior, while preserving the REACT-04 application and Gallery. They are repeatable after success, failure, or Ctrl+C. Run commands from `frontend/` in PowerShell unless a step says otherwise. No step starts Flask or PostgreSQL, and the production/native-fetch Flask adapter remains deferred to Prompt 24.
 
 ## 1. Prerequisites
 
@@ -62,7 +62,7 @@ Open `http://127.0.0.1:4173/`. Stop it with:
 
 Preview ownership is recorded independently in `.tmp-react22-verification\processes\preview.json` using the same proof requirements. Vite preview supports these application routes for local verification; a deployed static host must rewrite unknown non-asset SPA paths to `index.html` so direct browser requests work.
 
-## 5. Focused and full automated tests
+## 5. Focused, mocked-flow, and full automated tests
 
 Shell, routes, static content, and responsive navigation:
 
@@ -81,6 +81,26 @@ All Prompt-22 frontend tests:
 ```powershell
 npm test
 ```
+
+Reservation validation, context, availability, staleness, customer fields, immutable submission, public error mapping, recovery, and confirmation:
+
+```powershell
+npm run test:reservations
+```
+
+Standalone newsletter validation, 400 ms debounce, stale/dirty lookup guards, final Boolean mutations, conflicts, pending locks, and unknown-outcome recovery:
+
+```powershell
+npm run test:newsletter
+```
+
+Full-route OP-01 through OP-05 flows through MSW's exact frozen paths and response shapes:
+
+```powershell
+npm run test:mocked-flows
+```
+
+The debounce test alone uses Vitest fake timers; stale-response correctness uses sequence and exact-snapshot assertions. All other form tests use real timers and user-visible role/name/label/status/focus assertions. No test requires a live Flask or PostgreSQL process.
 
 Coverage for statements, branches, functions, and lines:
 
@@ -161,16 +181,60 @@ In browser developer tools:
 
 With reduced motion active, open/close the mobile menu and Gallery lightbox and confirm animation/transition duration is effectively immediate without removing functionality. At both 200% and 400% zoom, repeat navigation, Gallery, lightbox, and Home feature checks; record reflow and any horizontal overflow. These are targeted human checks, not a WCAG certification.
 
-## 11. Browser record
+## 11. Manual mocked reservation flow
+
+With the dev server running, open `http://127.0.0.1:5173/reservations`. The default project-owned mock offers the complete contract example schedule only for the exact key `local_date=2026-09-12` plus `party_size=4`; changing either member returns a deterministic empty schedule rather than reusing the example or calculating slots in React.
+
+1. Confirm the initial loading status is replaced by the authoritative mock context, native date `min`/`max`, party maximum, timezone, current policy, and seven hours rows.
+2. Enter `2026-09-12` and `4`, activate **Check availability**, and confirm ten slots appear in API order; unavailable entries remain visible and disabled.
+3. Select `5:00 PM–6:30 PM`; confirm native checked semantics and visible **Selected** text.
+4. Enter fictional values `Ada`, optional `M.`, `Rivera`, `ada.rivera@example.com`, matching confirmation email, and optional `+1 (202) 555-0198`. Wait at least 400 ms and confirm the matched mocked status.
+5. Review the returned date/time/party and newsletter action. Activate **Reserve table** once and confirm the pending lock appears before the distinct confirmation view.
+6. Confirm the view exposes only the public reference, stored display name, returned restaurant-local interval, returned canonical UTC `starts_at` and `ends_at` instants, party, assigned table numbers, authoritative newsletter state, restaurant contact, and optional safe phone notice. It must not derive/convert these interval values or expose email, phone value, internal IDs, capacity, fingerprint, or delivery claims.
+7. Activate **Make another reservation** and confirm a fresh active form. Change date or party after loading a schedule and confirm slots/selection are invalidated while customer details are preserved.
+
+The deterministic Ada fixture matches only case-insensitive full first/last identity for `ada.rivera@example.com`; omitted middle initial is permitted, `M`/`M.` matches, differing first/last returns `customer_identity_conflict`, and another supplied initial returns `middle_initial_conflict`. OP-04 existing-customer true/false always returns `result:"set"`; unknown true returns `set/true`; unknown false returns `no_customer_no_change/false`. OP-05 uses stored fixture spelling and server fixture interval/preference facts: Ada `no_change` preserves subscribed, while subscribe/unsubscribe return their authoritative final Boolean.
+
+For deterministic failure branches, run the focused/MSW tests above. Their injected handlers cover field/code validation invalidation, identity/middle conflicts, overlap, unavailable, explicitly retryable versus non-retryable reads, known temporary failure, confirmation reconstruction, ambiguous outcome, transport ambiguity, and exact-retry recovery. A non-retryable classified read/mutation exposes no identical retry action. Unclassified OP-04/OP-05 transport loss remains conservatively outcome unknown because Prompt 23 has no production dispatch-proof signal; Prompt 24 owns any later transport classification. The default browser mock intentionally provides ordinary fixture flows and does not add URL switches or hidden production behavior solely to force failures.
+
+Client name validation counts the normalized 100-character limit in Unicode code points, not UTF-16 code units; first/last/middle controls therefore omit native `maxLength` where it would reject supplementary-plane letters. Middle initial remains one Unicode letter with optional period. The frozen email profile permits a valid single-label domain such as `ada@localhost`; invalid dot-atom, empty/invalid domain labels, edge hyphens, whitespace, comments, quoted locals, and domain literals remain rejected. The focused validation suite is the deterministic evidence for these boundaries.
+
+## 12. Manual Home newsletter flow
+
+Open `http://127.0.0.1:5173/#newsletter` and confirm this is the only full standalone newsletter form. Use fictional values and matching emails. Confirm untouched fields show no initial errors, blur shows linked field errors, email mismatch reads **Email addresses must match.**, and corrected values revalidate. With `ada.rivera@example.com`, wait 400 ms for a matched subscribed status; with another valid address, confirm not found. Change the checkbox while lookup is pending and confirm the late status never overwrites the deliberate choice.
+
+Save checked and unchecked final states. Confirm pending fields/actions lock and OP-04 success replaces the older OP-03 status copy: matched unsubscribe must show only **Current preference: not subscribed**, not-found subscribe must show only **Current preference: subscribed**, and unchecked unknown identity must show successful **no new customer was created** plus current not-subscribed state. The focused and MSW suites provide restartable known-failure, stale-lookup, conflict, outcome-unknown, and identical-recovery evidence.
+
+## 13. Reservation/newsletter accessibility and responsive checks
+
+At `320×568`, `390×844`, `768×1024`, `1280×800`, and `1440×900`, check both forms for no horizontal page scrolling, date/party reflow, 1/2/3/4 slot columns, identity reflow, readable review/alerts/confirmation, source order, and 44 px controls. At 200% and 400% zoom in a 1280 px browser, repeat the forms and confirm narrow-layout reflow without horizontal page scrolling.
+
+Using keyboard only, complete each form; verify persistent labels and Required/Optional text, native date/number/radio/checkbox semantics, unavailable disabled states, visible focus, error-summary focus and links, selected-slot invalidation focus, polite pending/status announcements, prominent outcome-unknown alert/recovery, and confirmation heading focus. Inspect `aria-invalid`, descriptions, `aria-busy`, alert/status distinctions, and non-color-only state text in browser accessibility tools. This is targeted evidence, not a WCAG certification claim.
+
+## 14. Browser record
 
 Record the actual browser version, OS, tested routes/viewports, result, and defects for Chrome, Edge, and Firefox when installed. Do not claim Safari on Windows. Prompt 22 locally verified Chrome `151.0.7922.170` and Edge `151.0.4129.101`; Firefox was not installed; Safari remains deferred.
 
-## 12. Guarded interruption recovery and ownership refusal
+The supported Windows headless/CDP procedure does not require a ChatGPT browser connection or an automation dependency. Use the guarded helper so every run owns an exact profile below `.tmp-react23-verification\browsers\profiles`, verifies its requested CDP port is free, and durably records owner `CafeFausse-REACT05-browser-verification`, schema, browser type, PID, UTC creation time, exact installed executable, exact canonical profile, CDP port, URL, and creation time below `.tmp-react23-verification\browsers\markers` before testing:
+
+```powershell
+.\scripts\owned-browser-process.ps1 -Action Start -Browser chrome -CdpPort 9331 -StartUrl 'http://127.0.0.1:5173/reservations' -WindowSize '1280,900'
+.\scripts\owned-browser-process.ps1 -Action Status -Browser chrome -CdpPort 9331
+# Run CDP/browser-executed JavaScript and close normally through CDP Browser.close.
+.\scripts\owned-browser-process.ps1 -Action Stop -Browser chrome -CdpPort 9331
+```
+
+Use `-Browser edge` and a different verified-free port for Edge. `Status`, `Stop`, and `Cleanup` consume the durable marker rather than guessing ownership. A live recorded PID is accepted only when creation time, executable, exact profile command-line association, and CDP port association all match. Cleanup also refuses to remove evidence while any process still uses the profile or the recorded CDP port is open. A stale marker for an already-exited owned browser is safe only when no process uses its profile and its port is closed. Malformed, mismatched, missing-field, misplaced-profile, or unclaimed-profile evidence is preserved and fails cleanup for investigation. Never terminate Chrome/Edge from process name, PID alone, or port alone; never remove a generic/user profile.
+
+The independent-review correction pass locally reverified Chrome `151.0.7922.170` at reservation layouts `390×844` and `1280×800`, confirmation widths `320×568`, `390×844`, `768×1024`, `1280×800`, and `1440×900`, Home newsletter at `1280×800`, and a 400%-equivalent 320 CSS px reflow. It exercised exact date+party fixture isolation, matched/no-change booking preference, authoritative standalone unsubscribe, unknown false/no-customer behavior, and local plus canonical confirmation intervals. Edge `151.0.4129.101` repeated the same fixture/confirmation/newsletter smoke at narrow and desktop sizes with no horizontal overflow. Repeat these checks after form/layout changes rather than treating the recorded versions as permanent.
+
+## 15. Guarded interruption recovery and ownership refusal
 
 - After a terminal, browser, or machine interruption, do not stop a PID based only on its number or port. From `frontend/`, run `Status` for the recorded kind, inspect the reported ownership evidence, and then run `Stop`. A valid stale marker is removed without terminating anything. A missing, malformed, mismatched, or incomplete marker is ambiguous and causes the helper to refuse cleanup.
+- For an interrupted Prompt-23 browser run, read the browser type/port from the marker filename under `.tmp-react23-verification\browsers\markers`, then run `.\scripts\owned-browser-process.ps1 -Action Status -Browser <chrome|edge> -CdpPort <recorded-port>` followed by guarded `Stop`. If validation fails, preserve the marker/profile and investigate; never delete evidence to make cleanup proceed.
 - If a port is occupied with no proven marker, leave that process untouched. Resolve ownership outside this procedure or choose not to run the server; never use `Stop-Process`/`taskkill` by process name, a blanket PID search, or any command that kills all Node, npm, Chrome, or Edge processes.
 - If interrupted during a synthetic-asset check, remove only the named `test-auto-discovery.WEBP` fixture.
-- Rerun `npm ci`, the relevant focused test, and `npm run build`; every command is safe to repeat.
+- Rerun `npm ci`, the relevant focused reservation/newsletter/MSW test, the full suite, and `npm run build`; every command is safe to repeat.
 - Do not use `npm update` or edit the lockfile to recover a failed run.
 
 To demonstrate refusal without risking another process, create an intentionally non-owned preview marker that points at the current PowerShell process, verify `Stop` fails, and prove the current shell remains alive:
@@ -191,7 +255,7 @@ Remove-Item -LiteralPath $fixturePath -Force
 
 The final `Remove-Item` is allowed only because this exact procedure created that exact fixture in the current run. Never delete an ambiguous marker of unknown origin merely to make cleanup proceed.
 
-## 13. Final cleanup — always run last
+## 16. Final cleanup — always run last
 
 From `frontend/`, run the following as one PowerShell procedure. It stops only processes whose ownership the helper proves, refuses ambiguous ownership, validates a discovery fixture before deleting it, fails on removal errors, verifies generated resources and ports are absent, and protects package/source/Gallery inputs. The final `git status` is deliberately the last repository-state check.
 
@@ -206,6 +270,10 @@ foreach ($path in $protectedPaths) {
 }
 
 .\scripts\owned-vite-process.ps1 -Action Cleanup
+.\scripts\owned-browser-process.ps1 -Action Cleanup
+
+$browserOwnershipRoot = [IO.Path]::GetFullPath('.tmp-react23-verification/browsers')
+if (Test-Path -LiteralPath $browserOwnershipRoot) { throw 'Verified browser ownership cleanup did not complete; preserving Prompt-23 evidence.' }
 
 $fixtureRelative = 'assets/gallery/test-auto-discovery.WEBP'
 $fixturePath = [IO.Path]::GetFullPath($fixtureRelative)
@@ -231,6 +299,13 @@ foreach ($relative in @('coverage', 'dist', '.vite')) {
   if (Test-Path -LiteralPath $target) { throw "Generated directory remains after cleanup: $target" }
 }
 
+foreach ($relative in @('.tmp-react23-verification', 'mock-reports', 'test-results')) {
+  $target = [IO.Path]::GetFullPath($relative)
+  if (-not $target.StartsWith($frontendRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe Prompt-23 cleanup target: $target" }
+  if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop }
+  if (Test-Path -LiteralPath $target) { throw "Prompt-23 generated resource remains after cleanup: $target" }
+}
+
 function Test-LocalPortOpen([int]$Port) {
   $client = [Net.Sockets.TcpClient]::new()
   try { $attempt = $client.ConnectAsync('127.0.0.1', $Port); return $attempt.Wait(300) -and $client.Connected }
@@ -243,7 +318,7 @@ foreach ($port in @(5173, 4173)) {
 
 $tempRoot = [IO.Path]::GetFullPath('.tmp-react22-verification')
 if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction Stop }
-foreach ($relative in @('coverage', 'dist', '.vite', '.tmp-react22-verification')) {
+foreach ($relative in @('coverage', 'dist', '.vite', '.tmp-react22-verification', '.tmp-react23-verification', 'mock-reports', 'test-results')) {
   if (Test-Path -LiteralPath $relative) { throw "Cleanup assertion failed; path remains: $relative" }
 }
 if (Test-Path -LiteralPath $fixtureRelative) { throw 'Cleanup assertion failed; discovery fixture remains.' }
@@ -253,4 +328,4 @@ foreach ($path in $protectedPaths) {
 git status --short
 ```
 
-The final recursive removal is permitted only after guarded process cleanup succeeds and only for the exact repository-local `.tmp-react22-verification` directory owned by this procedure. If ownership is ambiguous, stop and investigate instead of deleting metadata or terminating a process. Cleanup targets never include `src`, tests, configuration, `package.json`, `package-lock.json`, `node_modules`, committed Gallery assets, or user-owned files. A normal implementation checkout may still show the intentional Prompt-22 source/document changes; it must show no generated coverage, build, ownership marker/log, screenshot, profile, or temporary asset output.
+The final recursive removals are permitted only after guarded process cleanup succeeds and only for the exact repository-local test-owned directories named by this procedure. If ownership is ambiguous, stop and investigate instead of deleting metadata or terminating a process. Cleanup targets never include `src`, tests, configuration, `package.json`, `package-lock.json`, `node_modules`, committed Gallery assets, or user-owned files. A normal implementation checkout may still show intentional Prompt-23 source/test/document changes; it must show no generated coverage, build, ownership marker/log, screenshot, profile, mock report, or temporary asset output.

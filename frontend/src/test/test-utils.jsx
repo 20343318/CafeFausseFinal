@@ -2,10 +2,10 @@ import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { App } from '../App.jsx'
 
-export function renderApp(path = '/') {
+export function renderApp(path = '/', operations) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <App operations={operations} />
     </MemoryRouter>,
   )
 }

@@ -4,6 +4,7 @@ import interiorImage from '../../assets/gallery/gallery-cafe-interior.webp'
 import ribeyeImage from '../../assets/gallery/gallery-ribeye-steak.webp'
 import { AwardsSection, ReviewsSection } from '../components/AwardsAndReviews.jsx'
 import { restaurant } from '../content/restaurant.js'
+import { NewsletterPreferences } from '../features/newsletter/NewsletterPreferences.jsx'
 
 export function HomePage() {
   return (
@@ -103,7 +104,9 @@ export function HomePage() {
           <p className="large-copy">
             This is the dedicated place to manage your Café Fausse newsletter preference.
           </p>
-          <div className="feature-boundary" data-feature-boundary="newsletter" aria-label="Newsletter preference controls" />
+          <div data-feature-boundary="newsletter">
+            <NewsletterPreferences />
+          </div>
         </div>
       </section>
     </>

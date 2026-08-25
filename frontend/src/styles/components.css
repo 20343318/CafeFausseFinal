@@ -138,6 +138,120 @@
   background: var(--color-surface-accent);
 }
 
+.button:disabled,
+button:disabled {
+  background: var(--color-disabled-bg);
+  border-color: var(--color-disabled-text);
+  color: var(--color-disabled-text);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.form-card,
+.status-panel,
+.error-summary,
+.confirmation-view {
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+fieldset.form-card,
+.newsletter-form fieldset {
+  min-width: 0;
+  margin: 0;
+}
+
+fieldset {
+  border: 1px solid var(--color-border);
+}
+
+legend,
+label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+legend {
+  padding-inline: var(--space-2);
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+}
+
+.form-field {
+  min-width: 0;
+}
+
+.form-field label {
+  display: block;
+  margin-block-end: var(--space-1);
+}
+
+.form-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.form-field input[aria-invalid="true"] {
+  border: 2px solid var(--color-error);
+}
+
+.field-requirement,
+.field-help {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.field-help,
+.field-error {
+  margin-block: var(--space-1);
+}
+
+.field-error {
+  color: var(--color-error);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.checkbox-row {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.checkbox-row input {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+.status-panel {
+  border-inline-start: 4px solid var(--color-focus);
+}
+
+.status-panel--success { border-inline-start-color: var(--color-success); }
+.status-panel--warning { border-inline-start-color: var(--color-warning); }
+.status-panel--error,
+.error-summary { border-inline-start: 4px solid var(--color-error); }
+
+.status-panel > :last-child,
+.error-summary > :last-child {
+  margin-block-end: 0;
+}
+
+.error-summary a {
+  min-height: 44px;
+}
+
 .text-link {
   display: inline-flex;
   min-height: 44px;
