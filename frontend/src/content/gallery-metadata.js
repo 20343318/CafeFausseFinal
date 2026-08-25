@@ -1,0 +1,39 @@
+export const galleryMetadata = {
+  'home-cafe-fausse.webp': {
+    order: 1,
+    alt: 'Warmly lit formal dining room with chandeliers and set tables.',
+    objectPosition: 'center',
+    width: 1792,
+    height: 1024,
+  },
+  'gallery-cafe-interior.webp': {
+    order: 2,
+    alt: 'Formal dining room with chandeliers, floral arrangements, and round set tables.',
+    objectPosition: 'center',
+    width: 1792,
+    height: 1024,
+  },
+  'gallery-ribeye-steak.webp': {
+    order: 3,
+    alt: 'Grilled ribeye steak plated with vegetables and fresh herbs.',
+    caption: 'Ribeye steak',
+    objectPosition: 'center',
+    width: 1024,
+    height: 1024,
+  },
+  'gallery-special-event.webp': {
+    order: 4,
+    alt: 'Guests seated at a candlelit formal event in a flower-filled dining room.',
+    caption: 'Special event',
+    objectPosition: 'center',
+    width: 1024,
+    height: 1024,
+  },
+  'gallery-behind-the-scenes.webp': {
+    order: 5,
+    alt: 'Chefs plating dishes in a warmly lit professional kitchen.',
+    objectPosition: 'center',
+    width: 1536,
+    height: 1024,
+  },
+}

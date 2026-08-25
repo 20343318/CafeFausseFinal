@@ -1,0 +1,92 @@
+.site-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-main {
+  flex: 1;
+}
+
+.container {
+  width: min(100% - 2rem, 75rem);
+  margin-inline: auto;
+}
+
+.reading-width {
+  max-width: 46rem;
+}
+
+.page {
+  padding-block: var(--section-space);
+}
+
+.page-header {
+  margin-block-end: var(--space-7);
+}
+
+.page-header h1,
+.home-hero h1 {
+  margin-block-end: var(--space-5);
+}
+
+.page-header h1:focus,
+.home-hero h1:focus,
+.not-found-page h1:focus {
+  outline: none;
+}
+
+.content-section {
+  padding-block: var(--section-space);
+}
+
+.content-section--compact {
+  padding-block: var(--space-6);
+}
+
+.section-heading {
+  margin-block-end: var(--space-6);
+}
+
+.eyebrow {
+  margin-block-end: var(--space-2);
+  color: var(--color-action);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.large-copy {
+  max-width: 68ch;
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+@media (min-width: 30rem) {
+  .container {
+    width: min(100% - 3rem, 75rem);
+  }
+}
+
+@media (min-width: 48rem) {
+  .page-header {
+    margin-block-end: var(--space-8);
+  }
+}
+
+@media (min-width: 64rem) {
+  .container {
+    width: min(100% - 4rem, 75rem);
+  }
+}
+
+@media (min-width: 90rem) {
+  .content-section {
+    padding-block: var(--space-9);
+  }
+}
