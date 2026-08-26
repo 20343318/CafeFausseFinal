@@ -1,6 +1,6 @@
 # Café Fausse Frontend Test Instructions
 
-Sections 1-16 preserve the REACT-04/05 frontend-only and mocked-flow procedures. Sections 17-18 add the bounded REACT-06 / Prompt-24 live React-to-Flask integration workflow. The Prompt-24 workflow is repeatable after success, ordinary failure, or interruption and uses only a disposable nonproduction PostgreSQL 18.3 cluster. Run commands from `frontend/` unless a step says otherwise.
+Sections 1-16 preserve the REACT-04/05 frontend-only and mocked-flow procedures. Sections 17-18 preserve the bounded REACT-06 / Prompt-24 live React-to-Flask integration workflow. Sections 19-20 add the Prompt-25 full-integration gate without changing the frozen lifecycle. Both live workflows are repeatable after success, ordinary failure, or interruption and use only a disposable nonproduction PostgreSQL 18.3 cluster. Run commands from `frontend/` unless a step says otherwise.
 
 ## 1. Prerequisites
 
@@ -10,7 +10,7 @@ Sections 1-16 preserve the REACT-04/05 frontend-only and mocked-flow procedures.
 - A current browser for manual checks
 - No running process already using ports `5173` or `4173`; the owned-process helper refuses to claim or terminate an existing listener
 
-The selected package engines are satisfied by Node `v24.15.0`. Safari cannot be verified on Windows and remains deferred to the Safari-capable Prompt-25 checkpoint.
+The selected package engines are satisfied by Node `v24.15.0`. Safari cannot be verified on Windows and remains deferred to manual validation in a Safari-capable environment.
 
 ## 2. Install the locked dependencies
 
@@ -213,7 +213,7 @@ Using keyboard only, complete each form; verify persistent labels and Required/O
 
 ## 14. Browser record
 
-Record the actual browser version, OS, tested routes/viewports, result, and defects for Chrome, Edge, and Firefox when installed. Do not claim Safari on Windows. Prompt 22 locally verified Chrome `151.0.7922.170` and Edge `151.0.4129.101`; Firefox was not installed; Safari remains deferred.
+Record the actual browser version, OS, tested routes/viewports, result, and defects for Chrome, Edge, and Firefox when installed. Do not claim Safari on Windows. Prompt 22 locally verified Chrome `151.0.7922.170` and Edge `151.0.4129.101`; Firefox was not installed and remains deferred to manual validation in a Firefox-capable environment; Safari remains deferred to manual validation in a Safari-capable environment.
 
 The supported Windows headless/CDP procedure does not require a ChatGPT browser connection or an automation dependency. Use the guarded helper so every run owns an exact profile below `.tmp-react23-verification\browsers\profiles`, verifies its requested CDP port is free, and durably records owner `CafeFausse-REACT05-browser-verification`, schema, browser type, PID, UTC creation time, exact installed executable, exact canonical profile, CDP port, URL, and creation time below `.tmp-react23-verification\browsers\markers` before testing:
 
@@ -381,7 +381,7 @@ node .\frontend\scripts\verify-live-browser.mjs happy 9332 edge
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 ```
 
-The browser verifier exercises Home live current hours, Home newsletter subscribe and identity conflict, Reservations context/availability, browser-driven successful reservation and confirmation, PII withholding, and 390 px/desktop horizontal-overflow checks. It adds no browser automation dependency. Safari is not available on Windows and remains deferred to Prompt 25; do not claim Safari or final four-browser acceptance.
+The browser verifier exercises Home live current hours, Home newsletter subscribe and identity conflict, Reservations context/availability, browser-driven successful reservation and confirmation, PII withholding, and 390 px/desktop horizontal-overflow checks. It adds no browser automation dependency. Safari is not available on Windows and remains deferred to manual validation in a Safari-capable environment; do not claim Safari or final four-browser acceptance.
 
 Exercise a real read transport failure and a conservative mutation-ambiguity UI without claiming the attempted mutation actually reached Flask. `StopFlask` stops only the proven launcher/listener pair; PostgreSQL and Vite remain owned. In this controlled connection-refused case the browser cannot prove dispatch, so the UI conservatively retains and locks the exact snapshot. Restore Flask and explicitly recover:
 
@@ -479,3 +479,159 @@ git status --short
 ```
 
 The package lock must match `HEAD`, staged paths must be zero, and HEAD must remain the Phase-0 baseline. If any cleanup proof fails, report the exact remaining resource and do not delete or terminate it by guesswork.
+
+## 19. Prompt-25 full-integration verification
+
+Prompt 25 reuses the exact REACT-06 PostgreSQL, Flask, Vite, browser, verifier-role, ownership, readiness, guarded termination, and cleanup mechanisms from Sections 17-18. It adds no reset endpoint, second server framework, dependency, application privilege, production route, or browser profile convention. Run from the repository root.
+
+Start and validate the frozen owned environment, then run its existing cross-layer verifier:
+
+```powershell
+& .\frontend\scripts\owned-live-integration.ps1 -Action Start -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-live-integration.ps1 -Action Status -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\verify-live-integration.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+Start a task-owned Chrome profile and run the focused Prompt-25 verifier:
+
+```powershell
+& .\frontend\scripts\owned-browser-process.ps1 -Action Start -Browser chrome -CdpPort 9341 -StartUrl 'http://127.0.0.1:5173/' -WindowSize '1280,900'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\verify-full-integration.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' -Browser chrome -CdpPort 9341
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The focused verifier uses fictional `prompt25-*@example.test` identities and verifies:
+
+- browser newsletter creation, identical duplicate success, client-invalid non-dispatch, API `422 validation_failed`, identity and middle-initial conflicts, one PostgreSQL customer, and authoritative subscribed state;
+- React date/policy/party bounds and ordered enabled/disabled slots against the same live OP-01/OP-02 responses;
+- a controlled `start_interval_minutes` change through the approved PostgreSQL test writer, visible changed React/Flask behavior without source edits, and exact setting/behavior restoration in `finally`;
+- a browser-created reservation whose confirmation reference, customer, newsletter state, reservation, and sorted assigned-table-number set match direct PostgreSQL evidence;
+- a different-customer overlapping booking with disjoint assigned tables and a global zero shared-table-overlap invariant;
+- a one-minute manipulated slot rejected by Flask as `422 validation_failed` / `invalid_reservation_time` with no customer mutation;
+- complete 120-person slot exhaustion, OP-02 all-false behavior, disabled/all-unavailable React behavior, OP-05 `409 reservation_unavailable`, and no failed-attempt customer mutation;
+- deterministic post-commit response loss, React's locked unknown-outcome state, an intervening dedicated unsubscribe, exactly two OP-05 attempts with a byte-identical retry body, the authoritative second response's frozen HTTP `200` plus `booking_result: "exact_retry"`, one reservation, and no replay of booking-linked subscribe;
+- frozen `StopFlask`/`StartFlask` transport failure and explicit React read/mutation recovery using the existing browser verifier.
+
+Run an Edge live happy-path smoke without duplicating the direct PostgreSQL scenarios:
+
+```powershell
+& .\frontend\scripts\owned-browser-process.ps1 -Action Start -Browser edge -CdpPort 9342 -StartUrl 'http://127.0.0.1:5173/' -WindowSize '1280,900'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+node .\frontend\scripts\verify-live-browser.mjs happy 9342 edge-prompt25
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The SRS browser compatibility requirement remains unchanged. For Prompt-25 automation on the current Windows host, Chrome and Edge are verified. Firefox is not installed, so its automated execution is out of scope here and validation is deferred to manual testing in a Firefox-capable environment. Safari is unavailable on Windows, so validation is deferred to manual testing in a Safari-capable environment. Do not claim four-browser automated verification or describe Firefox or Safari as removed from the SRS requirement.
+
+Before running the lower-layer gates, stop the live environment in dependency order so its dedicated PostgreSQL port is free:
+
+```powershell
+& .\frontend\scripts\owned-browser-process.ps1 -Action Stop -Browser chrome -CdpPort 9341
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-browser-process.ps1 -Action Stop -Browser edge -CdpPort 9342
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-live-integration.ps1 -Action Stop -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+Run the full regression gates. The database programmer harness is the PostgreSQL gate; API-09 is the Flask/API plus application-role PostgreSQL gate; the frontend commands are the React gate:
+
+The database programmer harness must target a separately confirmed nonproduction PostgreSQL 18.3 cluster as required by [database/TestInstructions.md](../database/TestInstructions.md). No approved artifact establishes a required locale or locale provider: the DB-05 report records that its historical verification used ICU, while the Prompt-25 complete programmer gate passed unchanged with PostgreSQL's Windows-default libc provider and `English_United States.1252` collation/character classification. Do not substitute the REACT-06 lifecycle cluster: its frozen `--no-locale` setup selects the `C` locale, whose character classification rejects the frozen DB-05 `É` alphabetic boundary fixture. This evidence introduces no ICU, libc, hard-coded-locale, or locale/provider-preflight requirement; do not weaken the fixture. Supply the database harness's documented port, administrator, and credential source when they differ from its defaults.
+
+```powershell
+& .\database\scripts\programmer_test.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Set-Location frontend
+npm run test:integration
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm run test:reservations
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm run test:newsletter
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm run test:mocked-flows
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm test
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm run coverage
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm run build
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+npm audit --audit-level=low
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+Set-Location ..
+```
+
+If the unchanged API-09 PostgreSQL test `test_free_partial_full_and_back_to_back_occupancy_are_provisional_and_nonmutating_after_cleanup` alone fails with the already-recorded `StopIteration` while locating `full_start_text`, record it separately as the frozen baseline-pre-existing failure. Any other failure, changed test, changed failure mode, or leaked resource requires investigation.
+
+## 20. Prompt-25 final cleanup and absence proof - always the last test step
+
+Run this after recording test, coverage, build, audit, live timing, browser, API-09, and database results. Run it even when any earlier Prompt-25 command fails or is interrupted; after an interruption, open a fresh PowerShell session at the repository root and run the complete block. It first invokes only the frozen guarded ownership helpers: browser cleanup, then the owned PostgreSQL -> Flask -> Vite integration cleanup when its exact ownership root exists, then standalone Vite cleanup. Each helper refuses destructive action when ownership cannot be proven. The block then removes only exact repository-local generated outputs and proves the integration root, browser ownership root, dedicated listeners, generated outputs, package files, Gallery assets, Git index, and repository diff state.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$repository = [IO.Path]::GetFullPath((Get-Location)).TrimEnd('\')
+$frontend = Join-Path $repository 'frontend'
+$protected = @('frontend\package.json', 'frontend\package-lock.json') + @(git ls-files -- 'frontend/assets/gallery/*')
+$hashes = @{}
+foreach ($path in $protected) { $hashes[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash }
+
+function Test-Prompt25Port([int]$Port) {
+    $client = [Net.Sockets.TcpClient]::new()
+    try { $attempt = $client.ConnectAsync('127.0.0.1', $Port); return $attempt.Wait(300) -and $client.Connected }
+    catch { return $false }
+    finally { $client.Dispose() }
+}
+
+& .\frontend\scripts\owned-browser-process.ps1 -Action Cleanup
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$ownedRoot = Join-Path ([IO.Path]::GetTempPath()) 'CafeFausse-prompt24-integration'
+if (Test-Path -LiteralPath $ownedRoot) {
+    & .\frontend\scripts\owned-live-integration.ps1 -Action Cleanup -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+elseif ((Test-Prompt25Port 55435) -or (Test-Prompt25Port 55004) -or (Test-Prompt25Port 5173)) {
+    throw 'A frozen live-integration listener exists without its exact ownership root; refusing destructive cleanup.'
+}
+
+& .\frontend\scripts\owned-vite-process.ps1 -Action Cleanup
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+foreach ($relative in @('coverage', 'dist', '.vite')) {
+    $target = [IO.Path]::GetFullPath((Join-Path $frontend $relative))
+    if (-not $target.StartsWith($frontend + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe generated target: $target" }
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+}
+foreach ($relative in @('.tmp-react22-verification', '.tmp-react23-verification', 'mock-reports', 'test-results')) {
+    $target = [IO.Path]::GetFullPath((Join-Path $frontend $relative))
+    if (Test-Path -LiteralPath $target) {
+        if (@(Get-ChildItem -LiteralPath $target -Force).Count -ne 0) { throw "Nonempty helper/generated root remains: $target" }
+        Remove-Item -LiteralPath $target -Force
+    }
+}
+foreach ($port in @(55435, 55004, 5173, 4173, 9341, 9342)) {
+    if (Test-Prompt25Port $port) { throw "Prompt-25 listener remains: $port" }
+}
+if (Test-Path -LiteralPath $ownedRoot) { throw "Full-integration ownership root remains: $ownedRoot" }
+$browserRoot = Join-Path $frontend '.tmp-react23-verification\browsers'
+if (Test-Path -LiteralPath $browserRoot) { throw "Browser ownership/profile root remains: $browserRoot" }
+foreach ($relative in @('coverage', 'dist', '.vite', '.tmp-react22-verification', '.tmp-react23-verification', 'mock-reports', 'test-results')) {
+    if (Test-Path -LiteralPath (Join-Path $frontend $relative)) { throw "Generated path remains: $relative" }
+}
+foreach ($path in $protected) {
+    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -cne $hashes[$path]) { throw "Protected file changed during cleanup: $path" }
+}
+git diff --check
+git diff --cached --name-only
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+```
+
+The staged-path list must be empty. The only status entries should be the intentional Prompt-25 verification paths. If ownership is ambiguous, stop and preserve the evidence; do not terminate a PID, remove a profile/root, or drop a database by inference.
