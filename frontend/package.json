@@ -17,6 +17,7 @@
     "test:reservations": "vitest run src/test/validation.test.js src/test/ReservationFeature.test.jsx",
     "test:newsletter": "vitest run src/test/NewsletterPreferences.test.jsx",
     "test:mocked-flows": "vitest run src/test/ContractMockSemantics.test.js src/test/MockedPageFlows.test.jsx",
+    "test:integration": "vitest run src/test/LiveOperations.test.js src/test/CurrentHours.test.jsx src/test/LiveAppIntegration.test.jsx src/test/ViteProxy.test.js",
     "coverage": "vitest run --coverage"
   },
   "dependencies": {

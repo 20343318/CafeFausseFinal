@@ -7,9 +7,10 @@ import { HomePage } from './pages/HomePage.jsx'
 import { MenuPage } from './pages/MenuPage.jsx'
 import { NotFoundPage } from './pages/NotFoundPage.jsx'
 import { ReservationsPage } from './pages/ReservationsPage.jsx'
-import { OperationProvider, mockOperationClient } from './api/operations.js'
+import { OperationProvider } from './api/operations.js'
+import { liveOperationClient } from './api/liveOperations.js'
 
-export function App({ operations = mockOperationClient }) {
+export function App({ operations = liveOperationClient }) {
   return (
     <AppErrorBoundary>
       <OperationProvider client={operations}>

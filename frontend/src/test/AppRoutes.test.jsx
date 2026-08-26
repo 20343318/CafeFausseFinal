@@ -52,12 +52,12 @@ describe('application routes and static content', () => {
     expect(screen.getByRole('banner')).toBe(header)
   })
 
-  it('renders exact Home identity, contact, hours, and the canonical newsletter form', () => {
+  it('renders exact Home identity, contact, live hours, and the canonical newsletter form', async () => {
     const { container } = renderApp('/')
     expect(screen.getByRole('heading', { level: 1, name: restaurant.name })).toBeInTheDocument()
     expect(screen.getAllByText(restaurant.address).length).toBeGreaterThan(0)
     expect(screen.getAllByText(restaurant.phoneDisplay).length).toBeGreaterThan(0)
-    expect(screen.getByText('Monday–Saturday: 5:00 PM–11:00 PM')).toBeInTheDocument()
+    expect(await screen.findByText('Monday: 5:00 PM–11:00 PM')).toBeInTheDocument()
     expect(screen.getByText('Sunday: 5:00 PM–9:00 PM')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Reserve a table' })).toHaveAttribute('href', '/reservations')
     expect(screen.getByRole('link', { name: 'View the menu' })).toHaveAttribute('href', '/menu')

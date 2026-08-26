@@ -5,6 +5,7 @@ import ribeyeImage from '../../assets/gallery/gallery-ribeye-steak.webp'
 import { AwardsSection, ReviewsSection } from '../components/AwardsAndReviews.jsx'
 import { restaurant } from '../content/restaurant.js'
 import { NewsletterPreferences } from '../features/newsletter/NewsletterPreferences.jsx'
+import { CurrentHours } from '../features/hours/CurrentHours.jsx'
 
 export function HomePage() {
   return (
@@ -44,9 +45,7 @@ export function HomePage() {
           </address>
           <div>
             <strong>Hours</strong>
-            {restaurant.hours.map((entry) => (
-              <p key={entry.days}>{entry.days}: {entry.time}</p>
-            ))}
+            <CurrentHours />
           </div>
         </div>
       </section>

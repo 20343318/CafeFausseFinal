@@ -20,10 +20,9 @@ export function SiteFooter() {
           <Link to="/#newsletter">Newsletter preferences</Link>
         </nav>
         <div>
-          <p className="site-footer__heading">Dining hours</p>
-          {restaurant.hours.map((entry) => (
-            <p key={entry.days}>{entry.days}<br />{entry.time}</p>
-          ))}
+          <p className="site-footer__heading">Plan your visit</p>
+          <p><Link to="/">See current dining hours</Link></p>
+          <p><Link to="/reservations">Check live reservation times</Link></p>
         </div>
       </div>
       <div className="container site-footer__legal">

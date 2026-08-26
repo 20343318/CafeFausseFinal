@@ -1,6 +1,6 @@
 # Café Fausse Frontend Test Instructions
 
-These instructions cover the REACT-05 / Prompt-23 reservation and newsletter UI with mocked OP-01 through OP-05 behavior, while preserving the REACT-04 application and Gallery. They are repeatable after success, failure, or Ctrl+C. Run commands from `frontend/` in PowerShell unless a step says otherwise. No step starts Flask or PostgreSQL, and the production/native-fetch Flask adapter remains deferred to Prompt 24.
+Sections 1-16 preserve the REACT-04/05 frontend-only and mocked-flow procedures. Sections 17-18 add the bounded REACT-06 / Prompt-24 live React-to-Flask integration workflow. The Prompt-24 workflow is repeatable after success, ordinary failure, or interruption and uses only a disposable nonproduction PostgreSQL 18.3 cluster. Run commands from `frontend/` unless a step says otherwise.
 
 ## 1. Prerequisites
 
@@ -329,3 +329,153 @@ git status --short
 ```
 
 The final recursive removals are permitted only after guarded process cleanup succeeds and only for the exact repository-local test-owned directories named by this procedure. If ownership is ambiguous, stop and investigate instead of deleting metadata or terminating a process. Cleanup targets never include `src`, tests, configuration, `package.json`, `package-lock.json`, `node_modules`, committed Gallery assets, or user-owned files. A normal implementation checkout may still show intentional Prompt-23 source/test/document changes; it must show no generated coverage, build, ownership marker/log, screenshot, profile, mock report, or temporary asset output.
+
+## 17. REACT-06 / Prompt-24 live integration workflow
+
+This section is integration-only. It does not authorize production data, a reset endpoint, CORS, a backend/database behavior change, or Prompt 25. Prerequisites are the versions in the backend/database instructions: Windows PowerShell, PostgreSQL 18.3 at `C:\Program Files\PostgreSQL\18`, CPython 3.14.6, the existing `backend\.venv`, Node 24.15.0/npm 11.12.1, locked frontend dependencies, and locally installed Chrome/Edge. Review [backend/TestInstructions.md](../backend/TestInstructions.md) and [database/TestInstructions.md](../database/TestInstructions.md) before operating their privileged test boundaries.
+
+The lifecycle helper uses the already documented backend convention: disposable PostgreSQL `127.0.0.1:55435`, Flask `127.0.0.1:55004`, and Vite `127.0.0.1:5173`. It creates only `cafe_fausse_test_api04`, the application deployment login `cafe_fausse_api04_login`, and test verifier login `cafe_fausse_prompt24_verifier` inside its disposable cluster. Flask runs as the approved `cafe_fausse_app` group role; direct reservation/assignment reads remain denied. Vite receives `CAFE_FAUSSE_FLASK_PROXY_TARGET=http://127.0.0.1:55004` and a task-owned cache directory only in its launcher environment. Browser source still calls relative `/api/...` paths and never sees the Flask target.
+
+Every lifecycle action snapshots the caller process's presence and exact value for `CAFE_FAUSSE_ENVIRONMENT`, `CAFE_FAUSSE_ALLOW_RESET`, `CAFE_FAUSSE_PSQL`, `CAFE_FAUSSE_FLASK_PROXY_TARGET`, `CAFE_FAUSSE_VITE_CACHE_DIR`, `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGPASSFILE`, and `PGSSLMODE`; clears those inherited values before configuring child tools; and restores the snapshot in `finally`. This applies after success, ordinary failure, guarded startup cleanup, `Stop`/`Cleanup`, `StartFlask`, and `StopFlask`. A previously absent variable is absent again, and a present value is restored byte-for-byte. Prior values, including secrets, are never written to markers, logs, output, reports, or browser configuration.
+
+From the repository root, start in strict order and prove OP-07 through the proxy:
+
+```powershell
+& .\frontend\scripts\owned-live-integration.ps1 -Action Start -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-live-integration.ps1 -Action Status -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+`Start` refuses an existing root or occupied PostgreSQL/Flask/Vite port. Its durable temporary marker records the exact repository/root, ports, database, postmaster PID/start/executable, and Vite marker path. Immediately after `Start-Process` succeeds for Flask, it records state `launcher_recorded`, readiness false, and the exact launcher PID/start/executable/command fragment before listener discovery. Once ancestry proves the child listener, the marker advances to `listener_recorded` with listener PID/start/executable/parent and any intermediate launcher chain. Only an explicit direct OP-07 body with `status:"ready"` advances the marker to `ready`; then Vite starts, and only an explicit proxied OP-07 `status:"ready"` permits the final environment-ready message. Listener existence is never readiness.
+
+`Status`, `StopFlask`, `StartFlask`, `Stop`, and `Cleanup` consume that evidence. Launcher-only, later-associated listener, complete pair, and already-exited exact records are handled without PID-, port-, or process-name-only stopping. After PID/start/executable/command/ancestry proof, the helper retains that exact process object's safe handle and terminates only through the same proven object; it never reacquires a process by PID for termination. Exit is accepted through that object, while a missing/invalid handle or changed in-memory start/executable/handle identity refuses termination. Missing required fields, invalid state/readiness combinations, changed PID creation time/executable/command, disconnected ancestry, listener ownership mismatch, multiple listener owners, or a port/listener without the recorded process chain is ambiguous: cleanup refuses, preserves the marker/root, and terminates nothing. The ownership root is removed only after the recorded Flask launcher/listener chain is proven stopped or absent, Vite is proven stopped, PostgreSQL is reset/stopped, and final ports/rows are clear.
+
+Run the deterministic lifecycle guard from a fresh PowerShell process. It statically rejects any PID reacquisition inside `Stop-ProvenProcess` and requires same-object safe-handle termination, then exercises that path through real guarded stops. It also uses sentinel present values plus originally absent variables without printing their values; verifies restoration after every action; uses that existing PowerShell caller as the unrelated-process sentinel without creating or later terminating a disposable process; injects a test-only launcher interruption immediately after durable ownership; proves guarded recovery removes that launcher and root while preserving the caller through its retained process object/handle; rejects direct/proxied listeners whose OP-07 result is not accepted as `ready`; and proves malformed or mismatched evidence refuses all stopping before restoring the exact marker for safe cleanup:
+
+```powershell
+& .\frontend\scripts\verify-live-lifecycle-guards.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+Run the automated cross-layer verifier. It uses unique fictional `@example.test` identities, the actual Vite proxy, Flask, approved app role, PostgreSQL routines, and privileged verifier role. It covers live current hours plus a restored controlled schedule change; OP-03 not-found/matched/conflicts/read-only behavior; OP-04 create/toggle/same-state/unknown-false plus both identity conflicts with no mutation; ordered free/partial/full availability; OP-05 created/validation/both identity conflicts/overlap/unavailable behavior; assignment integrity; app-role denial; and five representative timing samples per operation (additional OP-03/04 samples arise from state transitions). Its exact-retry sequence creates an OP-05 `subscribe` reservation, changes the authoritative preference to false through ordinary OP-04, resubmits the byte-equivalent original OP-05 snapshot, and proves `200/exact_retry`, the same reference, one logical reservation, no duplicate assignments, and false in both PostgreSQL and the returned confirmation. It does not add an idempotency key or replay the booking-linked newsletter mutation:
+
+```powershell
+& .\frontend\scripts\verify-live-integration.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+An ordinary failed verifier is safe to rerun in the same shell or a fresh shell. At entry it deletes only the stable `prompt24-%@example.test` namespace, in foreign-key order, through `cafe_fausse_test`. The final environment cleanup still performs the approved full reset, proves `0|0|0` customers/reservations/assignments, and destroys the disposable cluster. Do not replace this with broad SQL or use the Flask application login for evidence.
+
+For live Chrome and Edge, start exact isolated profiles, run the CDP verifier, and retain both markers until the final browser cleanup:
+
+```powershell
+& .\frontend\scripts\owned-browser-process.ps1 -Action Start -Browser chrome -CdpPort 9331 -StartUrl 'http://127.0.0.1:5173/' -WindowSize '1280,900'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+node .\frontend\scripts\verify-live-browser.mjs happy 9331 chrome
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& .\frontend\scripts\owned-browser-process.ps1 -Action Start -Browser edge -CdpPort 9332 -StartUrl 'http://127.0.0.1:5173/' -WindowSize '1280,900'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+node .\frontend\scripts\verify-live-browser.mjs happy 9332 edge
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The browser verifier exercises Home live current hours, Home newsletter subscribe and identity conflict, Reservations context/availability, browser-driven successful reservation and confirmation, PII withholding, and 390 px/desktop horizontal-overflow checks. It adds no browser automation dependency. Safari is not available on Windows and remains deferred to Prompt 25; do not claim Safari or final four-browser acceptance.
+
+Exercise a real read transport failure and a conservative mutation-ambiguity UI without claiming the attempted mutation actually reached Flask. `StopFlask` stops only the proven launcher/listener pair; PostgreSQL and Vite remain owned. In this controlled connection-refused case the browser cannot prove dispatch, so the UI conservatively retains and locks the exact snapshot. Restore Flask and explicitly recover:
+
+```powershell
+& .\frontend\scripts\owned-live-integration.ps1 -Action StopFlask -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+node .\frontend\scripts\verify-live-browser.mjs failure 9331 chrome
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& .\frontend\scripts\owned-live-integration.ps1 -Action StartFlask -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+node .\frontend\scripts\verify-live-browser.mjs recovery 9331 chrome
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The recovery resends exactly the retained OP-04 body and explicitly retries OP-01. Depending on an actual future ambiguous network break, the mutation recovery may observe a new success or already-current success. This workflow intentionally does not claim a lost post-commit response was induced. Rare API-02 server failure seams not safely available through the frozen live backend remain covered by the exhaustive mocked frontend tests and backend integration tests.
+
+For interruption recovery, rerun `Status`. If the exact marker proves a stale/partial owned environment, use `Cleanup`; if validation fails, preserve the root and investigate. A launcher-only record is recoverable only after exact PID/start/executable/command proof; cleanup waits for a late listener, associates it only through proven ancestry, and stops only the exact chain. A malformed/mismatched launcher or listener record is never guessed around. The lifecycle guard above is the repeatable ownership-refusal, partial-start, already-exited, readiness, restoration, cleanup, and fresh-shell restartability evidence.
+
+Run focused and complete checks after live verification:
+
+```powershell
+Set-Location frontend
+npm run test:integration
+npm run test:reservations
+npm run test:newsletter
+npm run test:mocked-flows
+npm test
+npm run coverage
+npm run build
+npm audit --audit-level=low
+Set-Location ..
+& .\backend\tests\run_api09.ps1 -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+Record the actual test counts, coverage percentages, build modules, audit result, live timing JSON, browser versions/results, and any unavailable check. Prompt 24 timing is descriptive and does not claim final NFR-01/NFR-02 compliance.
+
+## 18. Prompt-24 final cleanup - always the last live step
+
+Stop browsers before Vite/Flask/PostgreSQL. Every helper refuses ambiguous ownership. The environment stop resets the database, proves zero business rows, stops only recorded processes/listeners, removes its temporary logs/cache/marker/data, and restores the exact caller presence/value for every managed environment variable even when cleanup fails. Ownership evidence is not deleted before ownership is proven, and the final procedure removes every Prompt-24-created database, login/role (with its disposable cluster), process, listener, profile, marker, log, cache, build/coverage output, and temporary root.
+
+```powershell
+& .\frontend\scripts\owned-browser-process.ps1 -Action Stop -Browser chrome -CdpPort 9331
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-browser-process.ps1 -Action Stop -Browser edge -CdpPort 9332
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-live-integration.ps1 -Action Stop -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION'
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-browser-process.ps1 -Action Cleanup
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& .\frontend\scripts\owned-vite-process.ps1 -Action Cleanup
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+After coverage/build evidence is recorded, remove only their exact generated directories and empty helper parents, then prove listeners, the integration root, packages, assets, HEAD, and index state:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$repository = [IO.Path]::GetFullPath((Get-Location)).TrimEnd('\')
+$frontend = Join-Path $repository 'frontend'
+$protected = @('frontend\package.json', 'frontend\package-lock.json') + @(git ls-files -- 'frontend/assets/gallery/*')
+$hashes = @{}
+foreach ($path in $protected) { $hashes[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash }
+foreach ($relative in @('coverage', 'dist')) {
+    $target = [IO.Path]::GetFullPath((Join-Path $frontend $relative))
+    if (-not $target.StartsWith($frontend + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Unsafe generated target: $target" }
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+}
+foreach ($relative in @('.tmp-react22-verification', '.tmp-react23-verification')) {
+    $target = [IO.Path]::GetFullPath((Join-Path $frontend $relative))
+    if (Test-Path -LiteralPath $target) {
+        if (@(Get-ChildItem -LiteralPath $target -Force).Count -ne 0) { throw "Nonempty helper root remains: $target" }
+        Remove-Item -LiteralPath $target -Force
+    }
+}
+function Test-Prompt24Port([int]$Port) {
+    $client = [Net.Sockets.TcpClient]::new()
+    try { $attempt = $client.ConnectAsync('127.0.0.1', $Port); return $attempt.Wait(300) -and $client.Connected }
+    catch { return $false }
+    finally { $client.Dispose() }
+}
+foreach ($port in @(55435, 55004, 5173, 4173, 9331, 9332)) {
+    if (Test-Prompt24Port $port) { throw "Prompt-24 listener remains: $port" }
+}
+$ownedRoot = Join-Path ([IO.Path]::GetTempPath()) 'CafeFausse-prompt24-integration'
+if (Test-Path -LiteralPath $ownedRoot) { throw "Prompt-24 integration root remains: $ownedRoot" }
+foreach ($path in $protected) {
+    if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -cne $hashes[$path]) { throw "Protected file changed during cleanup: $path" }
+}
+git diff --check
+git diff --cached --name-only
+git rev-parse HEAD
+git status --short
+```
+
+The package lock must match `HEAD`, staged paths must be zero, and HEAD must remain the Phase-0 baseline. If any cleanup proof fails, report the exact remaining resource and do not delete or terminate it by guesswork.

@@ -18,10 +18,8 @@ export function ReservationsPage() {
           <p><a href={restaurant.phoneHref}>{restaurant.phoneDisplay}</a></p>
         </div>
         <div>
-          <h3>Hours</h3>
-          {restaurant.hours.map((entry) => (
-            <p key={entry.days}>{entry.days}: {entry.time}</p>
-          ))}
+          <h3>Current hours and policies</h3>
+          <p>Live dining hours, date limits, and reservation policies load below.</p>
         </div>
       </section>
       <section className="reservation-feature-boundary" aria-label="Reservation controls" data-feature-boundary="reservation">
