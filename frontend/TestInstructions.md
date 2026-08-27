@@ -635,3 +635,58 @@ git status --short
 ```
 
 The staged-path list must be empty. The only status entries should be the intentional Prompt-25 verification paths. If ownership is ambiguous, stop and preserve the evidence; do not terminate a PID, remove a profile/root, or drop a database by inference.
+
+## 21. Prompt-26A NFR-1/NFR-2 performance verification
+
+Prompt-26A measures the current full stack with exactly one sequential user on the actual Codex/demo VM. It uses installed Chrome through CDP, the frozen owned PostgreSQL -> Flask -> Vite lifecycle, no artificial network throttling, no artificial CPU throttling, and no VM reconfiguration. Do not run unrelated test suites or CPU-intensive work concurrently. Firefox and Safari are outside this performance increment.
+
+The runner requires Windows, installed Chrome, PostgreSQL 18 tooling at the frozen path, the existing backend virtual environment, installed frontend dependencies, and a clean real Git index. Run from the repository root. It starts the already-approved owned test stack and browser, performs one unmeasured warm-up, then captures:
+
+- 25 direct-navigation NFR-1 samples: five each for `/`, `/menu`, `/reservations`, `/about`, and `/gallery`;
+- a warm server/application with Chrome HTTP cache cleared before every measured navigation;
+- elapsed time from CDP navigation dispatch until both document load completion and the route-specific visible React readiness condition;
+- 10 ordinary standalone newsletter mutations and 10 ordinary reservation creations through the browser/UI and complete Vite -> Flask -> PostgreSQL -> Flask -> React path;
+- form time from the actual CDP mouse dispatch until both the authoritative response body completes and final success/confirmation is rendered;
+- lightweight OS CPU tick and available-memory observations for every measured sample.
+
+Temporary JSON results are written as strict UTF-8 without BOM to `frontend/.tmp-prompt26a-performance/results.json`. Unique fictional `prompt26a-*@example.test` identities make mutations test-owned. The entire database is disposable and owned by the frozen lifecycle; normal runner shutdown removes its rows, roles, database, cluster, Flask/Vite processes, and data root. The result JSON is intentionally retained only long enough to update the proposed report.
+
+Run the measurement:
+
+```powershell
+& .\frontend\scripts\verify-nfr-performance.ps1 `
+  -Action Measure `
+  -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' `
+  -CdpPort 9351
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+```
+
+The command is restartable after ordinary failure because its `finally` path stops only processes proven by the frozen ownership markers. After interruption, or before a rerun, execute the cleanup block below from a fresh PowerShell session. If an ownership marker is absent, malformed, or mismatched, the frozen helper preserves the ambiguous resource and fails visibly; do not terminate a PID, remove a directory, or drop a database by inference.
+
+After recording the JSON results in `docs/performance-verification/Cafe_Fausse_NFR01_NFR02_Performance_Verification.md`, always make cleanup the final test step:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+& .\frontend\scripts\verify-nfr-performance.ps1 `
+  -Action Cleanup `
+  -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' `
+  -CdpPort 9351
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& .\frontend\scripts\verify-nfr-performance.ps1 `
+  -Action VerifyCleanup `
+  -NonProductionClusterAuthorization 'AUTHORIZED_NONPRODUCTION' `
+  -CdpPort 9351
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+git diff --check
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if (@(git diff --cached --name-only).Count -ne 0) { throw 'The real Git index is not empty.' }
+git rev-parse HEAD
+git rev-parse origin/main
+git status --short
+```
+
+The cleanup removes the Prompt-26A temporary result file/root, owned Chrome process/profile, disposable PostgreSQL cluster/database/roles/rows, owned Flask/Vite processes, temporary logs/cache, and lifecycle environment changes. It must leave source files, committed documentation, Gallery assets, unrelated processes/databases, and ambiguous resources untouched. `[PROMPT26A:CLEANUP:PASS]` proves the known Prompt-26A resources and ports are absent. A second `Cleanup` or `VerifyCleanup` run is safe and demonstrates idempotent restartability.
+
+If the frozen browser helper encounters its PowerShell strict-mode scalar edge only after it has stopped the recorded browser, the Prompt-26A wrapper permits a narrow profile-removal recovery. That recovery proceeds only when the exact frozen marker identity and expected paths match, the recorded process is absent, no process command line references the exact owned profile, and the exact CDP port is closed. It never substitutes PID-only termination and emits `[PROMPT26A:BROWSER-SCALAR-EDGE-RECOVERY:PASS]` when used.
