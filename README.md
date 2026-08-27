@@ -337,10 +337,11 @@ The original four project-supplied image inputs are assignment-provided assets. 
 
 ## Useful documentation
 
-- [Software Requirements Specification](docs/SRS%281%29.pdf)
-- [Project rubric](docs/Rubric%281%29.pdf)
-- [Project Requirements Addendum v2.2.1](docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md)
-- [PostgreSQL Contract for Flask v1.1](database/POSTGRESQL_CONTRACT_FOR_FLASK.md)
+- [Software Requirements Specification](docs/SRS(1).pdf)
+- [Project rubric](docs/Rubric(1).pdf)
+- [Project Requirements Addendum](docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md) — controlling record for approved supplemental decisions PRA-001 through PRA-029.
+- [Approved Supplemental Decisions Report](Cafe_Fausse_Approved_Supplemental_Decisions_Report.md) — consolidated informational summary; the Project Requirements Addendum remains controlling.
+- [PostgreSQL Contract for Flask](database/POSTGRESQL_CONTRACT_FOR_FLASK.md)
 - [Prompt-25 full-integration verification](docs/integration-verification/Cafe_Fausse_Prompt25_Full_Integration_Verification.md)
 - [Prompt-26 requirements/rubric traceability audit](docs/requirements-audit/Cafe_Fausse_Prompt26_Requirements_Rubric_Traceability_Audit.md)
 - [Prompt-26A performance verification](docs/performance-verification/Cafe_Fausse_NFR01_NFR02_Performance_Verification.md)
