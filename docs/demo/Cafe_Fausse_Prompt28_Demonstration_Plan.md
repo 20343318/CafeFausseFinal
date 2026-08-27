@@ -1,6 +1,6 @@
 # Cafe Fausse Prompt 28 Final Demonstration Plan
 
-**Status:** PROPOSED - NOT YET APPROVED
+**Status:** APPROVED - repository plan complete; recording not performed
 
 **Prompt-28 execution baseline:** `96c7c70f8656571a7abff197b1c79b330ddb5b90`
 
@@ -14,9 +14,9 @@ The committed evidence is:
 
 - Chrome: **PASS**
 - Edge: **PASS**
-- Firefox: **pending manual verification**
-- Safari: **pending manual verification**
-- NFR-7: **not yet fully closed**
+- Firefox: **PASS - manual, user-approved**
+- Safari: **PASS - manual, user-approved**
+- NFR-7: **CLOSED / satisfied**
 - NFR-1 performance: **PASS**; worst recorded page-load sample 782.601 ms
 - NFR-2 newsletter performance: **PASS**; worst recorded submission 81.925 ms
 - NFR-2 reservation performance: **PASS**; worst recorded submission 462.336 ms
@@ -25,11 +25,11 @@ The committed evidence is:
 
 The performance values are recorded verification results under that disclosed protocol, not universal guarantees.
 
-**Final recording readiness gate - currently NOT READY:**
+Exact Firefox/Safari browser and operating-system versions were not supplied in the retained project evidence. Codex did not execute either browser; the approved results came from manual verification outside the Codex Windows environment.
 
-> Do not treat the project as fully SRS-ready for the final submission recording until the pending Firefox and Safari results have been received and reviewed. If either browser reveals a material SRS defect, stop final recording/submission and correct/reverify the defect first.
+**Technical recording gate: OPEN.**
 
-Prompt 28 intentionally performs no Firefox or Safari test. Planning may proceed, but the final recording may not begin while this gate remains open.
+The four-browser technical gate is closed. The recording has not occurred and must not begin until the separate human/demo preflight checklist in Section 12 is complete. If later preparation reveals a material SRS defect, stop recording/submission and correct/reverify the defect first.
 
 ## 2. Team and privacy rules
 
@@ -219,7 +219,7 @@ Before recording, return the browser to Home. Rehearse all window switches, ensu
 - Hide notifications, passwords, tokens, `.env` files, unrelated terminals, and personal browser data.
 - Rehearse to 8:45; allow the 1:15 buffer for navigation and normal speaking pauses.
 - Verify the recording tool captures the shared screen, all three cameras, and all three microphones.
-- Do not begin until Firefox and Safari results are received/reviewed and NFR-7 is closed, or any discovered material defect has been corrected and reverified.
+- Confirm the retained NFR-7 record still reports the user-approved Firefox and Safari manual passes and NFR-7 closure. If later preparation reveals a material defect, stop until it is corrected and reverified.
 
 ## 5. Direct PostgreSQL evidence queries
 
@@ -352,12 +352,12 @@ Do not read this as a word-for-word essay. Keep each spoken portion to the liste
 | 3 | 1:10 | 2:30 | `TEAM_MEMBER_1` | Switch to `psql`, show `newsletter_customer_before = 0`; return to Home, enter the unique newsletter identity, check Subscribe, save; return to `psql` and run Section 5.1. | “The form validates a real identity and email, then Flask persists the preference in PostgreSQL. The unique key was absent before; this row is the exact email and authoritative subscribed state shown after the browser success.” | `Newsletter preference saved`, `Authoritative preference: subscribed`, then one matching customer row with `newsletter_subscribed = true`. | If success or the exact row is missing/ambiguous, stop. Do not claim persistence or switch to another row. |
 | 4 | 0:45 | 3:15 | `TEAM_MEMBER_2` | Use shared navigation to Menu, briefly show representative Starters/Main Courses/Desserts/Beverages content; navigate to About Us and show history, founders, mission, and commitments. | “The Menu contains the required categorized descriptions and prices without making the audience read every item. About Us preserves the 2010 founders, mission, unforgettable dining, excellent food, and locally sourced ingredients.” | Correct Menu and About routes/content; navigation remains functional. | If a route or required content does not render, stop and diagnose before rerecording. |
 | 5 | 0:40 | 3:55 | `TEAM_MEMBER_2` | Navigate to Gallery, show responsive grid plus image categories, awards, and reviews; open a non-edge image, select Next or Previous, then Close. | “Gallery covers the restaurant interior, dishes, special occasions, and behind-the-scenes work, with the required awards and reviews. The lightbox enlarges images and supports bounded navigation and clean close.” | Grid, enlarged dialog, changed image/counter, and return to Gallery. | If the image/lightbox/navigation fails, stop; do not talk around it. |
-| 6 | 0:30 | 4:25 | `TEAM_MEMBER_2` | Open Chrome/Edge DevTools device toolbar, set a 390 x 844 viewport, show shared navigation reflow and the Gallery grid or Home layout; restore desktop and close DevTools. | “The CSS Grid/Flexbox layout adapts to a narrow mobile viewport without horizontal page scrolling. This is responsive evidence only; it is not Firefox or Safari verification.” | Narrow navigation/layout and obvious grid reflow, then restored desktop. | If overflow or broken layout appears, stop. Do not treat an emulator as four-browser evidence. |
+| 6 | 0:30 | 4:25 | `TEAM_MEMBER_2` | Open Chrome/Edge DevTools device toolbar, set a 390 x 844 viewport, show shared navigation reflow and the Gallery grid or Home layout; restore desktop and close DevTools. | “The CSS Grid/Flexbox layout adapts to a narrow mobile viewport without horizontal page scrolling. This is responsive evidence; the separate retained browser-verification record covers the user-approved Firefox and Safari manual results.” | Narrow navigation/layout and obvious grid reflow, then restored desktop. | If overflow or broken layout appears, stop. Do not treat an emulator as a substitute for the retained browser evidence. |
 | 7 | 0:40 | 5:05 | `TEAM_MEMBER_3` | Navigate to Reservations. Enter recorded `FULL_DEMO_DATE`, party 120, Check availability, and point to recorded `FULL_DEMO_TIME`. | “This party uses the full 120-seat baseline capacity for the occupied interval. Flask returns server-authoritative availability, and React renders this target interval disabled and labelled Unavailable rather than accepting an arbitrary time.” | The preconditioned target slot is visibly **Unavailable** and non-clickable; other nonoverlapping slots may be available. | If the exact slot is not disabled, stop. Rebuild/reprepare through the guarded workflow; never patch rows manually. |
 | 8 | 1:25 | 6:30 | `TEAM_MEMBER_3` | Briefly show the retained `reservation_before = 0`; return to Reservations, choose a different allowed date, party 6, Check availability, select a returned Available slot, enter the unique reservation identity and fictional phone, leave newsletter unchanged, review, and select Reserve table. Pause on confirmation and copy Reference. | “The unique reservation identity has no prior booking. The date bounds, policy, and selectable times come from Flask/PostgreSQL; PostgreSQL revalidates availability, prevents overlapping table occupancy, and allocates the best-capacity table combination atomically.” | Zero before-state, then `Reservation confirmed`, exact local/canonical interval, party 6, assigned tables, newsletter state, and decimal Reference. | If submission fails, confirmation is missing, or the reference cannot be captured, stop and restart with a fresh identity after guarded reset. |
 | 9 | 0:55 | 7:25 | `TEAM_MEMBER_3` | In `psql`, set `reservation_reference`; run Sections 5.3, 5.4, and 5.5. | “The browser reference and unique email select exactly this persisted customer and reservation. Reservation facts live in `reservations`; the complete one-to-many table assignment is normalized in `reservation_table_assignments`, and this aggregate reconstructs the same table numbers shown in React.” | One matching reservation/customer row, sorted authoritative assignment rows, and an aggregate matching the browser reference/time/party/table numbers. | If any value differs or the query returns zero/multiple rows, stop; do not use a latest-row substitute. |
 | 10 | 0:45 | 8:10 | `TEAM_MEMBER_3` | Run Section 5.6 and, if useful, keep browser/health terminal visible beside it. | “PostgreSQL owns persistent data and business configuration; Flask is the server-authoritative validator/orchestrator; React presents returned state. Start interval, duration, advance window, same-day lead, timezone, operating hours, and per-table capacity are database-backed; assignments are normalized and each table is exclusively occupied over the reservation interval.” | One configuration/capacity row plus healthy application evidence. | If values differ from the expected clean seed, stop and guarded-reset before rerecording; never edit configuration during the recording. |
-| 11 | 0:35 | 8:45 | `TEAM_MEMBER_1` | Briefly point to `README.md`/`ai-tooling.md` or keep the app on screen while stating evidence. | “Verification was layered PostgreSQL -> Flask/API -> React -> full-stack -> performance; the frozen evidence includes the documented API-09 baseline anomaly, so we do not collapse it to ‘all tests pass.’ ChatGPT supported requirements, planning, review, and selected image generation; Codex supported repository work, testing, guarded tooling, and documentation, with independent review and user-only Git authority. Recorded NFR-1/NFR-2 evidence passed; Chrome and Edge passed, while this recording proceeded only after the separate Firefox/Safari gate was closed.” | Required testing/AI disclosure is stated naturally, with no large log scroll and no unsupported claim. | If elapsed time is already over 9:20, use only the first two sentences and end under 10:00; if under 5:00 or over 10:00, rerecord. |
+| 11 | 0:35 | 8:45 | `TEAM_MEMBER_1` | Briefly point to `README.md`/`ai-tooling.md` or keep the app on screen while stating evidence. | “Verification was layered PostgreSQL -> Flask/API -> React -> full-stack -> performance; the frozen evidence includes the documented API-09 baseline anomaly, so we do not collapse it to ‘all tests pass.’ ChatGPT supported requirements, planning, review, and selected image generation; Codex supported repository work, testing, guarded tooling, and documentation, with independent review and user-only Git authority. Recorded NFR-1/NFR-2 evidence passed; Chrome and Edge passed, and the user approved separate manual Firefox and Safari passes, closing NFR-7.” | Required testing/AI disclosure is stated naturally, with no large log scroll and no unsupported claim. | If elapsed time is already over 9:20, use only the first two sentences and end under 10:00; if under 5:00 or over 10:00, rerecord. |
 
 Calculated total: **8:45**. Planned buffer before 10:00: **1:15**.
 
@@ -411,7 +411,7 @@ Do not name unsupported AI tools or estimate an AI-generated-code percentage.
 | 10 | Configuration/capacity query and architecture explanation | Implementation decisions; configurable rules; NFR-5/NFR-9 | PostgreSQL configuration, Flask authority, React presentation | `TEAM_MEMBER_3` |
 | 11 | Layered tests, performance, AI disclosure | NFR-1/NFR-2 evidence; AI tooling document; maintainability | Frozen reports/runbooks and `ai-tooling.md` | `TEAM_MEMBER_1` |
 
-All five required pages are covered: Home (2/3), Menu and About Us (4), Gallery (5), and Reservations (7/8). Navigation is exercised across them. This matrix does not claim that any segment proves Firefox or Safari compatibility.
+All five required pages are covered: Home (2/3), Menu and About Us (4), Gallery (5), and Reservations (7/8). Navigation is exercised across them. The NFR-7 record, rather than a recording segment, retains the user-approved Firefox and Safari manual results.
 
 ## 10. Failure and abort rules
 
@@ -419,7 +419,7 @@ Stop and restart the recording rather than narrating around any of these conditi
 
 - PostgreSQL, Flask, Vite, direct readiness, or proxied readiness is not healthy before recording.
 - The working tree/index is not clean or `HEAD`, `origin/main`, and the approved final checkpoint do not match.
-- Firefox/Safari results have not been received/reviewed, NFR-7 is not closed, or a browser result reveals a material SRS defect.
+- The retained NFR-7 record no longer supports the approved four-browser conclusion, or later preparation reveals a material SRS defect.
 - Stale demo data makes a before count nonzero or correlation ambiguous.
 - The target full interval is selectable, not labelled Unavailable, or otherwise nondeterministic.
 - Newsletter save fails or its exact PostgreSQL row/state cannot be shown.
@@ -474,14 +474,14 @@ The final `git status --short` must be empty at the committed recording checkpoi
 
 ## 12. Recording readiness checklist
 
-- [ ] Prompt 28 plan approved
+- [x] Prompt 28 plan approved
 - [ ] final committed project checkpoint recorded
 - [ ] working tree clean
-- [ ] Chrome result available
-- [ ] Edge result available
-- [ ] Firefox result received/reviewed
-- [ ] Safari result received/reviewed
-- [ ] NFR-7 closed or any failure corrected/reverified
+- [x] Chrome result available
+- [x] Edge result available
+- [x] Firefox result received/reviewed
+- [x] Safari result received/reviewed
+- [x] NFR-7 closed
 - [ ] all three group members available
 - [ ] all three cameras/microphones verified
 - [ ] IDs ready for required on-camera verification
@@ -494,7 +494,7 @@ The final `git status --short` must be empty at the committed recording checkpoi
 - [ ] cleanup/reset procedure ready
 - [ ] expected duration rehearsed within 5-10 minutes
 
-Do not check pending items automatically. As of Prompt 28, Firefox, Safari, NFR-7 closure, Prompt-28 approval, the future committed checkpoint, recording, and submission remain pending.
+The browser gate and Prompt-28 plan approval are complete. Do not check any remaining item automatically: the future final committed checkpoint, all human/demo preflight work, recording, and submission remain pending until actually completed.
 
 ## 13. Post-demo submission handoff - outside Prompt 28
 
@@ -512,4 +512,4 @@ This plan does not upload video, create a Drive link or PDF, invent repository U
 
 ## 14. Review checkpoint
 
-Prompt 28 remains **PROPOSED - NOT YET APPROVED** until independent ChatGPT review and explicit user approval. The final recording and all external submission actions remain outside this increment.
+Prompt 28 is **APPROVED**, and Prompt 28A closes the separate NFR-7 browser gate. The final recording and all external submission actions remain unperformed and outside this repository-side closure.

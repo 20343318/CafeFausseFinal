@@ -322,10 +322,10 @@ Committed automated and manual evidence covers responsive desktop, tablet, and m
 
 - Chrome: **PASS**
 - Edge: **PASS**
-- Firefox: **pending manual verification** in a Firefox-capable environment
-- Safari: **pending manual verification** in a Safari-capable environment
+- Firefox: **PASS - manual**
+- Safari: **PASS - manual**
 
-Firefox and Safari remain explicit SRS NFR-7 obligations. NFR-7 is **not yet fully closed**, and completion of this README does not imply final all-browser or all-requirement approval.
+Firefox and Safari were manually verified outside the Codex Windows environment, and the results were explicitly approved by the user. Exact Firefox/Safari browser and operating-system versions were not supplied in the retained project evidence. With the existing Chrome and Edge evidence, SRS NFR-7 is **satisfied and closed**. See the [NFR-7 manual browser verification record](docs/browser-verification/Cafe_Fausse_NFR07_Manual_Browser_Verification.md).
 
 ## Local deployment status
 
@@ -344,3 +344,4 @@ The original four project-supplied image inputs are assignment-provided assets. 
 - [Prompt-25 full-integration verification](docs/integration-verification/Cafe_Fausse_Prompt25_Full_Integration_Verification.md)
 - [Prompt-26 requirements/rubric traceability audit](docs/requirements-audit/Cafe_Fausse_Prompt26_Requirements_Rubric_Traceability_Audit.md)
 - [Prompt-26A performance verification](docs/performance-verification/Cafe_Fausse_NFR01_NFR02_Performance_Verification.md)
+- [NFR-7 manual browser verification](docs/browser-verification/Cafe_Fausse_NFR07_Manual_Browser_Verification.md)
