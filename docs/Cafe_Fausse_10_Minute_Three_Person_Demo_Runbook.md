@@ -44,6 +44,7 @@ Complete these steps before the timed demonstration begins.
 - Confirm PostgreSQL, Flask, React/Vite, direct readiness, and proxied readiness are healthy.
 - Open the application on Home.
 - Open a prepared `psql` session in a second window.
+- Open a prepared application-health terminal that clearly shows both direct and proxied readiness as healthy. Keep it free of secrets and unrelated logs.
 - Keep the approved PostgreSQL evidence queries from Section 5 of `docs/demo/Cafe_Fausse_Prompt28_Demonstration_Plan.md` ready to run. Do not improvise replacement SQL during the demo.
 - Prepare Chrome or Edge DevTools for the 390 x 844 responsive viewport, but leave DevTools closed until P2's segment.
 - Make browser zoom, terminal font size, and camera layout readable in the shared screen.
@@ -68,7 +69,7 @@ Before the timed demo, use the approved guarded preparation workflow to establis
 | 0:25-1:05 | P1 | Show Home and shared navigation. | Restaurant identity, contact/hours, theme, navigation |
 | 1:05-2:10 | P1 | Show newsletter database before-state, submit form on Home, then show PostgreSQL after-state. | Zero before; saved/subscribed UI; exact customer row with subscription true |
 | 2:10-2:50 | P1 | Navigate to Menu and About Us. | Required menu categories, descriptions/prices, history, founders, mission |
-| 2:50-3:20 | P1 | Summarize architecture and hand off. | React -> Flask -> PostgreSQL and server-authoritative persistence |
+| 2:50-3:20 | P1 | Briefly show the prepared application-health terminal, summarize architecture, and hand off. | Direct and proxied readiness healthy; React -> Flask -> PostgreSQL and server-authoritative persistence |
 | 3:20-3:45 | P2 | State actual name; present ID; accept handoff on About Us. | P2 identity |
 | 3:45-4:35 | P2 | Navigate to Gallery; show categories, awards/reviews; open, advance, and close lightbox. | Gallery content and interaction |
 | 4:35-5:15 | P2 | Use DevTools at 390 x 844; show navigation/layout reflow; restore desktop. | Responsive Grid/Flexbox behavior without horizontal overflow |
@@ -122,11 +123,13 @@ Text in brackets is an action cue and is not spoken. The narrative is a rehearsa
 
 #### 2:50-3:20 - Architecture and handoff
 
-**Action:** [Keep About Us visible.]
+**Action:** [Switch briefly to the prepared application-health terminal. Show both direct and proxied readiness as healthy without scrolling through logs or exposing secrets. Return to the browser with About Us visible before handing off.]
 
 **Narrative:**
 
-> The user interface is React, Flask validates and orchestrates form requests, and PostgreSQL owns persistent customer, reservation, table, and business-configuration data. That separation keeps the browser simple while the server and database enforce authoritative rules. P2 will now demonstrate Gallery interaction, responsive behavior, and server-provided reservation availability.
+> The prepared health view confirms that both readiness paths are healthy. The user interface is React, Flask validates and orchestrates form requests, and PostgreSQL owns persistent customer, reservation, table, and business-configuration data. That separation keeps the browser simple while the server and database enforce authoritative rules. P2 will now demonstrate Gallery interaction, responsive behavior, and server-provided reservation availability.
+
+**Required visible result:** The application-health terminal clearly reports healthy direct and proxied readiness, with no secrets or unrelated logs visible.
 
 ### P2 - 3:20 to 6:40
 
@@ -216,7 +219,7 @@ Text in brackets is an action cue and is not spoken. The narrative is a rehearsa
 
 **Narrative:**
 
-> Verification progressed from PostgreSQL to Flask, React, full-stack integration, and performance. NFR-1 and both NFR-2 form measurements passed; all four required browsers are recorded as passed. ChatGPT supported requirements, planning, review, and selected image generation; Codex supported repository work, tests, guarded tooling, and documentation. This concludes Cafe Fausse.
+> Verification progressed from PostgreSQL to Flask, React, full-stack integration, and performance. NFR-1 and both NFR-2 form measurements passed. Chrome and Edge passed, and Firefox and Safari passed through manual, user-approved verification. ChatGPT supported requirements, planning, review, and selected image generation; Codex supported repository work, tests, guarded tooling, and documentation. This concludes Cafe Fausse.
 
 ## 6. Handoff choreography
 
@@ -255,6 +258,7 @@ Recommended delivery target during rehearsal is **9:40-9:50**, leaving 10-20 sec
 | Responsive design | P2, 4:35-5:15 |
 | Implementation decisions | P1 architecture; P2 server authority; P3 configuration and transactions |
 | React, Flask, and PostgreSQL roles | P1 and P3 |
+| Application environment/readiness | P1, 2:50-3:20 |
 | Automated testing and AI-assisted implementation | P3 close |
 | Browser compatibility | P2 responsive narrative and P3 close; Firefox/Safari remain described only as manual, user-approved passes |
 
@@ -285,8 +289,8 @@ Use the approved guarded reset/cleanup workflow before retrying. Do not manually
 - [ ] `FULL_DEMO_DATE` and `FULL_DEMO_TIME` produce the rehearsed unavailable state.
 - [ ] `SUCCESS_DEMO_DATE` has an available party-of-6 slot.
 - [ ] Approved PostgreSQL queries are prepared and readable.
+- [ ] Prepared application-health terminal clearly shows healthy direct and proxied readiness without secrets or unrelated logs.
 - [ ] Browser, `psql`, and DevTools windows are arranged in demonstration order.
 - [ ] Notifications, secrets, and unrelated content are hidden.
 - [ ] Guarded cleanup/reset procedure is ready.
 - [ ] Full rehearsal completes by 10:00, preferably by 9:40-9:50.
-
