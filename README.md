@@ -43,7 +43,7 @@ Prompt-26A recorded the following development/test environment. These exact VM r
 | Item | Recorded value |
 |---|---|
 | Operating system | Windows Server 2025 |
-| VM resources | 8 logical processors, 8.00 GiB RAM |
+| VM resources | 8 logical processors, 16.00 GiB RAM |
 | PostgreSQL | 18.3 |
 | Python / Flask | 3.14.6 / 3.1.3 |
 | Node.js / npm | 24.15.0 / 12.0.2 |
