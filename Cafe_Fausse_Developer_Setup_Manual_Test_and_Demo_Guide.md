@@ -92,10 +92,10 @@ Use the actual PostgreSQL installation path if it differs. `CAFE_FAUSSE_PSQL` he
 
 ## 3. Set the repository location
 
-Open PowerShell and set the repository root. Change the path if the repository is elsewhere.
+Open PowerShell and set the repository root. This command assumes the repository is in `source\CafeFausse` beneath the current Windows user's profile. If it is elsewhere, assign its actual absolute path to `$CafeRepo` instead.
 
 ```powershell
-$CafeRepo = 'C:\Users\<UserName>\source\CafeFausse'
+$CafeRepo = Join-Path $env:USERPROFILE 'source\CafeFausse'
 Set-Location $CafeRepo
 Get-Location
 ```
@@ -521,7 +521,7 @@ Use three PowerShell terminals. Start them in the order below.
 ### Terminal 1 - Flask backend
 
 ```powershell
-$CafeRepo = 'C:\Users\<UserName>\source\CafeFausse'
+$CafeRepo = Join-Path $env:USERPROFILE 'source\CafeFausse'
 Set-Location $CafeRepo
 
 Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
@@ -571,7 +571,7 @@ Leave this terminal open. Flask performs no migration or schema change at startu
 ### Terminal 2 - React/Vite frontend
 
 ```powershell
-$CafeRepo = 'C:\Users\<UserName>\source\CafeFausse'
+$CafeRepo = Join-Path $env:USERPROFILE 'source\CafeFausse'
 Set-Location $CafeRepo
 $env:CAFE_FAUSSE_FLASK_PROXY_TARGET = 'http://127.0.0.1:5000'
 Set-Location frontend
@@ -808,7 +808,7 @@ This deletes current Cafe Fausse application data in `cafe_fausse_dev`. Stop Fla
 In an administrator PowerShell terminal:
 
 ```powershell
-$CafeRepo = 'C:\Users\<UserName>\source\CafeFausse'
+$CafeRepo = Join-Path $env:USERPROFILE 'source\CafeFausse'
 Set-Location $CafeRepo
 
 $env:PGHOST = 'localhost'
