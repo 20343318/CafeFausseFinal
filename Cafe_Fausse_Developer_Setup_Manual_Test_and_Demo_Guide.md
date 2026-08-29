@@ -237,6 +237,79 @@ Expected result:
 
 **Stop when:** authentication fails, the server cannot be reached, or the server version differs. A PostgreSQL 18.3 client connected to a different server version does not satisfy the project contract.
 
+### Optional Step 4.2A - Delete the existing development database for a complete provisioning retest
+
+Skip this optional step for an initial setup or an ordinary clean-baseline rebuild. Use it only when deliberately retesting database creation and provisioning from an absent `cafe_fausse_dev` database.
+
+This permanently deletes the entire local `cafe_fausse_dev` database and all data inside it. Stop Flask and close any `psql` session connected to that database before continuing. The command uses `--force` to terminate any remaining connections to this exact database.
+
+First validate and explicitly confirm the fixed target:
+
+```powershell
+$CafeDatabaseToDrop = 'cafe_fausse_dev'
+if ($env:PGDATABASE -cne $CafeDatabaseToDrop) {
+    throw "Refusing to drop '$env:PGDATABASE'; expected '$CafeDatabaseToDrop'."
+}
+
+$DropConfirmation = Read-Host "Type DROP cafe_fausse_dev to permanently delete the database"
+if ($DropConfirmation -cne 'DROP cafe_fausse_dev') {
+    throw 'Database deletion was not confirmed.'
+}
+```
+
+Expected result: PowerShell displays the confirmation prompt and returns to the prompt without error only after the exact confirmation text is entered.
+
+**Stop when:** the selected database is not exactly `cafe_fausse_dev`, the database is not disposable, or the exact confirmation is not provided.
+
+Delete only the validated database:
+
+```powershell
+dropdb `
+    --if-exists `
+    --force `
+    -h $env:PGHOST `
+    -p $env:PGPORT `
+    -U $env:PGUSER `
+    $CafeDatabaseToDrop
+
+if ($LASTEXITCODE -ne 0) {
+    throw "dropdb failed with exit code $LASTEXITCODE."
+}
+```
+
+Expected result: `dropdb` normally produces no output and returns exit code `0`.
+
+Verify that the database no longer exists:
+
+```powershell
+$DroppedDatabaseCheck = psql -X -tA -v ON_ERROR_STOP=1 `
+    -h $env:PGHOST `
+    -p $env:PGPORT `
+    -U $env:PGUSER `
+    -d postgres `
+    -c "SELECT datname FROM pg_database WHERE datname = 'cafe_fausse_dev';"
+
+if ($LASTEXITCODE -ne 0) {
+    throw "Database verification failed with exit code $LASTEXITCODE."
+}
+if ($DroppedDatabaseCheck) {
+    throw 'cafe_fausse_dev still exists.'
+}
+'Confirmed: cafe_fausse_dev does not exist.'
+```
+
+Expected result:
+
+```text
+Confirmed: cafe_fausse_dev does not exist.
+```
+
+**Continue when:** the verification confirms that `cafe_fausse_dev` does not exist. Proceed directly to Step 4.3 to recreate it.
+
+**Stop when:** `dropdb` fails, verification cannot connect to the `postgres` maintenance database, or the verification query still finds `cafe_fausse_dev`.
+
+Deleting a database does not delete PostgreSQL cluster roles. The passwordless group roles and `cafe_fausse_local_app` may still exist. When Step 4.5 is reached, follow its existing-role instructions rather than attempting to create the application login again.
+
 ### Step 4.3 - Create the empty development database
 
 For a new environment:
