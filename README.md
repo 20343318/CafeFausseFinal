@@ -26,6 +26,7 @@ The Vite development server proxies `/api` to Flask when `CAFE_FAUSSE_FLASK_PROX
 | `frontend/` | Vite/React application, Gallery assets, Vitest suites, and guarded live-verification helpers. |
 | `docs/` | SRS, rubric, approved designs, prompts, and frozen integration/audit/performance evidence. |
 | `README.md` | Project architecture, local setup, execution, and verification guide. |
+| [`Cafe_Fausse_Developer_Setup_Manual_Test_and_Demo_Guide.md`](Cafe_Fausse_Developer_Setup_Manual_Test_and_Demo_Guide.md) | Developer-friendly, end-to-end provisioning, startup, manual-testing, and demonstration instructions with expected results and stop conditions. |
 | [`ai-tooling.md`](ai-tooling.md) | AI-assisted development disclosure and review controls. |
 
 ## Prerequisites and verified environment
@@ -43,7 +44,7 @@ Prompt-26A recorded the following development/test environment. These exact VM r
 | Item | Recorded value |
 |---|---|
 | Operating system | Windows Server 2025 |
-| VM resources | 8 logical processors, 16.00 GiB RAM |
+| VM resources | 8 logical processors, 8.00 GiB RAM |
 | PostgreSQL | 18.3 |
 | Python / Flask | 3.14.6 / 3.1.3 |
 | Node.js / npm | 24.15.0 / 12.0.2 |
@@ -84,7 +85,21 @@ Set-Location ..
 
 ### PostgreSQL
 
-Install and start PostgreSQL 18.3 separately. Ensure `pgcrypto` can be created by the administrator used for initialization. Put `psql` on `PATH` or set `CAFE_FAUSSE_PSQL` to the executable path. The repository intentionally does not install or manage a general-purpose PostgreSQL server.
+Install and start PostgreSQL 18.3 separately. Ensure `pgcrypto` can be created by the administrator used for initialization. The repository intentionally does not install or manage a general-purpose PostgreSQL server.
+
+In every new PowerShell session that will use PostgreSQL command-line tools, add the PostgreSQL 18 `bin` directory to that session's `PATH`:
+
+```powershell
+$PostgreSqlBin = 'C:\Program Files\PostgreSQL\18\bin'
+if (-not (Test-Path -LiteralPath $PostgreSqlBin)) {
+    throw "PostgreSQL 18 bin directory not found: $PostgreSqlBin"
+}
+if (($env:PATH -split ';') -notcontains $PostgreSqlBin) {
+    $env:PATH += ";$PostgreSqlBin"
+}
+```
+
+This is session-local and must be repeated in newly opened terminals that need `psql`, `createdb`, or `pg_isready`. Use the actual PostgreSQL installation path if it differs. Setting `CAFE_FAUSSE_PSQL` helps repository database scripts locate `psql`, but does not make `createdb` or `pg_isready` available.
 
 ## Initialize a local PostgreSQL database
 
@@ -170,7 +185,19 @@ $env:PGHOST = '127.0.0.1'
 $env:PGPORT = '5432'
 $env:PGDATABASE = 'cafe_fausse_dev'
 $env:PGUSER = 'cafe_fausse_local_app'
-# Set either PGPASSWORD or PGPASSFILE in this shell if authentication requires it.
+
+Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
+$CafeAppPassword = Read-Host 'Password for cafe_fausse_local_app' -AsSecureString
+$env:PGPASSWORD = [System.Net.NetworkCredential]::new(
+    '', $CafeAppPassword
+).Password
+$CafeAppPassword.Dispose()
+Remove-Variable CafeAppPassword
+
+if ([string]::IsNullOrEmpty($env:PGPASSWORD)) {
+    throw 'PGPASSWORD is missing; Flask cannot authenticate to PostgreSQL.'
+}
+'PGPASSWORD is set for the Flask process.'
 
 backend\.venv\Scripts\Activate.ps1
 Set-Location backend
@@ -183,6 +210,14 @@ Health endpoints are:
 
 - `GET /api/v1/health/liveness` - process-only response `{"status":"live"}`;
 - `GET /api/v1/health/readiness` - bounded read-only PostgreSQL/app-role probe returning ready or a generic not-ready response.
+
+Before using the browser, verify direct readiness from another PowerShell terminal:
+
+```powershell
+curl.exe -i http://127.0.0.1:5000/api/v1/health/readiness
+```
+
+Continue only when the response is `HTTP/1.1 200 OK` with `{"status":"ready"}`. A `503 SERVICE UNAVAILABLE` means Flask is running but its database connection pool is not ready; verify the Flask terminal's database variables and that exactly one valid credential source—`PGPASSWORD` or `PGPASSFILE`—was supplied to the Flask process.
 
 Supported application settings and defaults are:
 

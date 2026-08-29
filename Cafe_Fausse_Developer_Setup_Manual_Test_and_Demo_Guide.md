@@ -46,7 +46,23 @@ The committed project expects:
 
 Other operating systems and PostgreSQL versions are outside the verified project contract.
 
-Run these checks in PowerShell:
+In every new PowerShell session that will use PostgreSQL command-line tools, add the PostgreSQL 18 `bin` directory to that session's `PATH` first:
+
+```powershell
+$PostgreSqlBin = 'C:\Program Files\PostgreSQL\18\bin'
+if (-not (Test-Path -LiteralPath $PostgreSqlBin)) {
+    throw "PostgreSQL 18 bin directory not found: $PostgreSqlBin"
+}
+if (($env:PATH -split ';') -notcontains $PostgreSqlBin) {
+    $env:PATH += ";$PostgreSqlBin"
+}
+```
+
+Expected result: the commands produce no output and return to the prompt. This changes only the current PowerShell session; repeat it in each newly opened terminal that needs `psql`, `createdb`, or `pg_isready`.
+
+**Stop when:** the directory is not found. Locate the actual PostgreSQL 18 `bin` directory and update `$PostgreSqlBin` before continuing.
+
+Run these checks:
 
 ```powershell
 git --version
@@ -82,13 +98,13 @@ v24.15.0 or newer
 
 If `pwsh` is unavailable but Windows PowerShell 5.1 is installed, use `powershell` wherever this guide shows `pwsh`.
 
-For the simplest workflow, put the PostgreSQL 18 `bin` directory on the current shell's `PATH` so `psql`, `createdb`, and `pg_isready` are all available. If only the repository scripts need help locating `psql`, set the script-specific path:
+If only the repository scripts need help locating `psql`, set the script-specific path:
 
 ```powershell
 $env:CAFE_FAUSSE_PSQL = 'C:\Program Files\PostgreSQL\18\bin\psql.exe'
 ```
 
-Use the actual PostgreSQL installation path if it differs. `CAFE_FAUSSE_PSQL` helps the repository's database scripts locate `psql`; it does not make the separate `createdb` or `pg_isready` commands available. Use their full paths or place the PostgreSQL `bin` directory on `PATH`.
+Use the actual PostgreSQL installation path if it differs. `CAFE_FAUSSE_PSQL` helps the repository's database scripts locate `psql`; it does not make the separate `createdb` or `pg_isready` commands available. The session-level `PATH` setup above is preferred for this guide because all three tools remain available.
 
 ## 3. Set the repository location
 
@@ -524,6 +540,14 @@ Use three PowerShell terminals. Start them in the order below.
 $CafeRepo = Join-Path $env:USERPROFILE 'source\CafeFausse'
 Set-Location $CafeRepo
 
+$PostgreSqlBin = 'C:\Program Files\PostgreSQL\18\bin'
+if (-not (Test-Path -LiteralPath $PostgreSqlBin)) {
+    throw "PostgreSQL 18 bin directory not found: $PostgreSqlBin"
+}
+if (($env:PATH -split ';') -notcontains $PostgreSqlBin) {
+    $env:PATH += ";$PostgreSqlBin"
+}
+
 Remove-Item Env:CAFE_FAUSSE_ALLOW_RESET -ErrorAction SilentlyContinue
 Remove-Item Env:CAFE_FAUSSE_PSQL -ErrorAction SilentlyContinue
 Remove-Item Env:PGPASSFILE -ErrorAction SilentlyContinue
@@ -541,6 +565,11 @@ $env:PGPASSWORD = [System.Net.NetworkCredential]::new(
 $CafeAppPassword.Dispose()
 Remove-Variable CafeAppPassword
 
+if ([string]::IsNullOrEmpty($env:PGPASSWORD)) {
+    throw 'PGPASSWORD is missing; Flask cannot authenticate to PostgreSQL.'
+}
+'PGPASSWORD is set for the Flask process.'
+
 backend\.venv\Scripts\Activate.ps1
 Set-Location backend
 python -m flask --app cafe_fausse run
@@ -549,6 +578,7 @@ python -m flask --app cafe_fausse run
 Expected progress:
 
 ```text
+PGPASSWORD is set for the Flask process.
 * Serving Flask app 'cafe_fausse'
 * Debug mode: off
 * Running on http://127.0.0.1:5000
@@ -558,7 +588,7 @@ Flask may include its standard local-development warning and slightly different 
 
 **Continue when:** the process remains running and shows `http://127.0.0.1:5000` without a startup traceback or configuration error.
 
-**Stop when:** the process exits, reports an unknown `CAFE_FAUSSE_*` variable, cannot bind port 5000, or reports invalid database/application configuration.
+**Stop when:** the PostgreSQL `bin` directory is missing, the password check fails, the process exits, reports an unknown `CAFE_FAUSSE_*` variable, cannot bind port 5000, or reports invalid database/application configuration.
 
 Expected address:
 
@@ -604,6 +634,14 @@ Do not use `npm run preview` for the normal full-stack manual test; the committe
 ### Terminal 3 - Health checks and database evidence
 
 ```powershell
+$PostgreSqlBin = 'C:\Program Files\PostgreSQL\18\bin'
+if (-not (Test-Path -LiteralPath $PostgreSqlBin)) {
+    throw "PostgreSQL 18 bin directory not found: $PostgreSqlBin"
+}
+if (($env:PATH -split ';') -notcontains $PostgreSqlBin) {
+    $env:PATH += ";$PostgreSqlBin"
+}
+
 $DirectLiveness = Invoke-RestMethod `
     'http://127.0.0.1:5000/api/v1/health/liveness'
 $DirectReadiness = Invoke-RestMethod `
@@ -634,7 +672,7 @@ ready
 
 PowerShell may render each object as a separate table or as `@{status=...}`. The three values, in order, must be `live`, `ready`, and `ready`.
 
-**Stop when:** a request throws, returns an HTTP error, reports `service_not_ready`, returns an unexpected body, or the proxied request cannot reach Flask.
+**Stop when:** the PostgreSQL `bin` directory is missing, a request throws, returns an HTTP error, reports `service_not_ready`, returns an unexpected body, or the proxied request cannot reach Flask.
 
 Do not begin manual testing or a rehearsal unless all three checks succeed.
 
