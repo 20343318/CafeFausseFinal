@@ -1,4 +1,4 @@
-# AI Tooling Used for Café Fausse
+# AI Tooling Used for Cafe Fausse
 
 This project used ChatGPT and OpenAI Codex as AI-assisted development tools. Git, PostgreSQL, Python, Node/npm, PowerShell, browsers, editors, and test frameworks were ordinary development tools and are not presented as AI code-generation tools. No percentage of AI-generated code is estimated.
 
@@ -29,7 +29,7 @@ Codex was used in the local repository to:
 
 Codex changes were left unstaged for review. Codex was not given authority to stage, commit, or push project changes; those Git actions remained under user control.
 
-No repository evidence or approved project history establishes use of Cursor, Claude Code, GitHub Copilot, or another AI code-generation tool on Café Fausse, so none is claimed here.
+No repository evidence or approved project history establishes use of Cursor, Claude Code, GitHub Copilot, or another AI code-generation tool on Cafe Fausse, so none is claimed here.
 
 ## Least-to-most AI-assisted workflow
 
@@ -59,6 +59,7 @@ Major increments used explicit approval checkpoints and frozen contracts before 
 - Automated tests plus human review caught implementation, verification, and evidence gaps before checkpoints were frozen.
 - Central PostgreSQL business configuration allowed approved policy changes to propagate without hard-coded React or Flask rule changes.
 - AI assistance accelerated repetitive implementation, test construction, static inspection, and evidence preparation while the user retained requirements and Git authority.
+- Browser testing of Chrome, Edge, Firefox, and Safari all rendered the website fully and passed reservation testing.
 
 ## Limitations and corrective iterations
 
@@ -66,9 +67,7 @@ Major increments used explicit approval checkpoints and frozen contracts before 
 - Baseline handling required explicit ancestry and delta checks when an execution prompt was itself committed after the prior approved checkpoint.
 - Process and cleanup safety needed durable ownership evidence, command/ancestry checks, and fail-safe refusal rather than PID-only termination.
 - Independent review was needed to distinguish actual SRS/rubric obligations from implementation designs and test methodology.
-- One frozen API-09 PostgreSQL selection retains its documented accepted baseline `StopIteration` result even though the standalone complete PostgreSQL programmer gate passed; AI-generated summaries therefore cannot safely collapse evidence to “all tests pass.”
-- Browser evidence depends on available environments. Chrome and Edge passed, while Firefox and Safari remain pending manual verification; NFR-7 is not yet fully closed.
-
+- One frozen API-09 PostgreSQL selection retains its documented accepted baseline `StopIteration` result even though the standalone complete PostgreSQL programmer gate passed; AI-generated summaries therefore cannot safely collapse evidence to all tests pass.
 These limitations are why generated work was treated as a review candidate rather than accepted automatically.
 
 ## Human review and verification controls
@@ -83,8 +82,8 @@ These limitations are why generated work was treated as a review candidate rathe
 - `database/TestInstructions.md`, `backend/TestInstructions.md`, and `frontend/TestInstructions.md` preserve repeatable, restartable, and guarded cleanup workflows.
 - Approved checkpoints froze contracts and prevented silent changes to earlier layers.
 
-The observable artifacts, tests, review diffs, and approval records were the basis for acceptance; private model reasoning was not used as project evidence.
+The observable artifacts, tests, review diffs, and approval records were used as the basis for verifying and accepting project changes.
 
 ## Image-generation disclosure
 
-The committed behind-the-scenes Gallery image, `frontend/assets/gallery/gallery-behind-the-scenes.webp`, was AI-generated during the Café Fausse project. The four originally supplied project images are assignment-provided assets and are not claimed to be AI-generated.
+The committed behind-the-scenes Gallery image, `frontend/assets/gallery/gallery-behind-the-scenes.webp`, was AI-generated during the Cafe Fausse project. The four originally supplied project images are assignment-provided assets and are not claimed to be AI-generated.

@@ -1,6 +1,6 @@
-# Café Fausse
+# Cafe Fausse
 
-Café Fausse is a responsive full-stack restaurant web application built with React and JSX, Flask/Python, and PostgreSQL. It provides Home, Menu, Reservations, About Us, and Gallery routes; an accessible Gallery lightbox; newsletter preference signup; and server-authoritative reservation availability and creation. Customer, reservation, table-assignment, and newsletter state is persisted in PostgreSQL.
+Cafe Fausse is a responsive full-stack restaurant web application built with React and JSX, Flask/Python, and PostgreSQL. It provides Home, Menu, Reservations, About Us, and Gallery routes; an accessible Gallery lightbox; newsletter preference signup; and server-authoritative reservation availability and creation. Customer, reservation, table-assignment, and newsletter state is persisted in PostgreSQL.
 
 Version 1 does not include authentication, administration, reservation cancellation, modification, or rescheduling.
 
@@ -31,13 +31,14 @@ The Vite development server proxies `/api` to Flask when `CAFE_FAUSSE_FLASK_PROX
 
 ## Prerequisites and verified environment
 
-The committed configuration supports or requires:
+The project was developed and verified using the following windows powershell, PostgreSQL, Phyton, Node.js, and Git software and versions listed below:
 
-- Windows PowerShell 5.1 or PowerShell 7+ for the repository's `.ps1` workflows. Other operating systems have not been verified.
-- PostgreSQL **18.3** with `pgcrypto`, plus `psql` and `createdb`. Other PostgreSQL versions are outside the verified Version 1 contract.
+- Windows PowerShell 5.1 or PowerShell 7+ for the repository's `.ps1` workflows. 
+- PostgreSQL **18.3** with `pgcrypto`, plus `psql` and `createdb`. 
 - A standard GIL-enabled 64-bit CPython **3.14.x**. `backend/pyproject.toml` requires `>=3.14,<3.15`.
 - Node.js **24.15.0 or newer**, as declared by `frontend/package.json`, and npm capable of installing lockfile version 3 with `npm ci`.
 - Git for source and review-diff workflows.
+- Other versions of the above listed software weren't tested although they may in fact work as designed. 
 
 Prompt-26A recorded the following development/test environment. These exact VM resources and browser patch are evidence, not new minimum requirements.
 
@@ -217,7 +218,7 @@ Before using the browser, verify direct readiness from another PowerShell termin
 curl.exe -i http://127.0.0.1:5000/api/v1/health/readiness
 ```
 
-Continue only when the response is `HTTP/1.1 200 OK` with `{"status":"ready"}`. A `503 SERVICE UNAVAILABLE` means Flask is running but its database connection pool is not ready; verify the Flask terminal's database variables and that exactly one valid credential source—`PGPASSWORD` or `PGPASSFILE`—was supplied to the Flask process.
+Continue only when the response is `HTTP/1.1 200 OK` with `{"status":"ready"}`. A `503 SERVICE UNAVAILABLE` means Flask is running but its database connection pool is not ready; verify the Flask terminal's database variables and that exactly one valid credential source`PGPASSWORD` or `PGPASSFILE`was supplied to the Flask process.
 
 Supported application settings and defaults are:
 
@@ -336,7 +337,7 @@ npm audit --audit-level=low
 Set-Location ..
 ```
 
-The committed Prompt-25 evidence records that the standalone complete PostgreSQL programmer gate passed. In the API-09 PostgreSQL selection, 61 of 62 tests passed; the sole result was the accepted unchanged baseline test `test_free_partial_full_and_back_to_back_occupancy_are_provisional_and_nonmutating_after_cleanup`, with `StopIteration` while locating `full_start_text`. Do not report this historical baseline as a generic “all tests pass” result. See the frozen [Prompt-25 full-integration report](docs/integration-verification/Cafe_Fausse_Prompt25_Full_Integration_Verification.md) for the exact disposition and cleanup evidence.
+The committed Prompt-25 evidence records that the standalone complete PostgreSQL programmer gate passed. In the API-09 PostgreSQL selection, 61 of 62 tests passed; the sole result was the accepted unchanged baseline test `test_free_partial_full_and_back_to_back_occupancy_are_provisional_and_nonmutating_after_cleanup`, with `StopIteration` while locating `full_start_text`. Do not report this historical baseline as a generic all tests pass result. See the frozen [Prompt-25 full-integration report](docs/integration-verification/Cafe_Fausse_Prompt25_Full_Integration_Verification.md) for the exact disposition and cleanup evidence.
 
 Manual route, keyboard, responsive, lightbox, form, browser, and cleanup checks are detailed in the frontend instructions. Use fictional test identities and disposable nonproduction data.
 
@@ -364,18 +365,18 @@ Firefox and Safari were manually verified outside the Codex Windows environment,
 
 ## Local deployment status
 
-The current demonstration path is local/localhost. No staging server is claimed or configured, and no `staging.md` is required for the current repository. Final demonstration and external submission administration are later manual work, not part of this setup guide.
+The current demonstration path is local/localhost. No staging server is claimed or configured, and no `staging.md` is required for the current repository. 
 
 ## Gallery assets and provenance
 
-The original four project-supplied image inputs are assignment-provided assets. The additional committed `frontend/assets/gallery/gallery-behind-the-scenes.webp` image was AI-generated during the Café Fausse project. No external photographer, URL, license name, or royalty-free claim is asserted for the supplied inputs because the repository contains no such provenance record.
+The original four project-supplied image inputs are assignment-provided assets. The additional committed `frontend/assets/gallery/gallery-behind-the-scenes.webp` image was AI-generated during the Cafe Fausse project. No external photographer, URL, license name, or royalty-free claim is asserted for the supplied inputs because the repository contains no such provenance record.
 
 ## Useful documentation
 
 - [Software Requirements Specification](docs/SRS(1).pdf)
 - [Project rubric](docs/Rubric(1).pdf)
-- [Project Requirements Addendum](docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md) — controlling record for approved supplemental decisions PRA-001 through PRA-029.
-- [Approved Supplemental Decisions Report](Cafe_Fausse_Approved_Supplemental_Decisions_Report.md) — consolidated informational summary; the Project Requirements Addendum remains controlling.
+- [Project Requirements Addendum](docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md) controlling record for approved supplemental decisions PRA-001 through PRA-029.
+- [Approved Supplemental Decisions Report](Cafe_Fausse_Approved_Supplemental_Decisions_Report.md) consolidated informational summary; the Project Requirements Addendum remains controlling.
 - [PostgreSQL Contract for Flask](database/POSTGRESQL_CONTRACT_FOR_FLASK.md)
 - [Prompt-25 full-integration verification](docs/integration-verification/Cafe_Fausse_Prompt25_Full_Integration_Verification.md)
 - [Prompt-26 requirements/rubric traceability audit](docs/requirements-audit/Cafe_Fausse_Prompt26_Requirements_Rubric_Traceability_Audit.md)
