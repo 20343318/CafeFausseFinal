@@ -69,7 +69,7 @@ def test_booking_creates_customer_and_atomic_reservation_then_exact_retry_recons
     email = f"api08-success-{uuid4().hex}@example.test"
     app = create_app(_settings())
     try:
-        client = app.test_client(); slot = _slot(client, 6); payload = _payload(email, slot, 6, middle_initial="q.")
+        client = app.test_client(); slot = _slot(client, 6); payload = _payload(email, slot, 6, middle_initial="q")
         created = client.post("/api/v1/reservations", json=payload)
         assert created.status_code == 201 and created.get_json()["booking_result"] == "created"
         confirmation = created.get_json()["confirmation"]
@@ -102,6 +102,11 @@ def test_invalid_request_and_identity_conflict_do_not_leave_partial_state():
     app = create_app(_settings())
     try:
         client = app.test_client(); slot = _slot(client)
+        period = client.post("/api/v1/reservations", json=_payload(email, slot, middle_initial="A."))
+        assert period.status_code == 422
+        assert period.get_json()["error"]["fields"] == [{
+            "field": "middle_initial", "code": "invalid_format", "message": "Enter one letter."
+        }]
         invalid = client.post("/api/v1/reservations", json=_payload(email, slot, party_size=0))
         assert invalid.status_code == 422
         created = client.post("/api/v1/reservations", json=_payload(email, slot))

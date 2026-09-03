@@ -23,7 +23,7 @@ def test_ut_api05_identity_required_normalization_case_and_transience():
         VALID
         | {
             "first_name": "  Ada\t María  ",
-            "middle_initial": "m.",
+            "middle_initial": "m",
             "last_name": "  de   Rivera ",
             "email": " ADA.RIVERA@EXAMPLE.COM ",
         }
@@ -41,21 +41,40 @@ def test_ut_api05_identity_required_normalization_case_and_transience():
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("middle", ["a", "A", "a.", " A. ", "é", "é."])
+@pytest.mark.parametrize("middle", ["a", "A", " a ", "é"])
 def test_ut_api05_valid_middle_initials(middle):
     result = validate_newsletter_status_identity(VALID | {"middle_initial": middle})
     assert result.errors == ()
     assert result.value is not None
     assert len(result.value.middle_initial or "") == 1
-    assert result.value.middle_initial == middle.strip().removesuffix(".").upper()
+    assert result.value.middle_initial == middle.strip().upper()
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("middle", ["", " ", ".", "AB", "A..", "1", None, True, "ß"])
+@pytest.mark.parametrize("middle", ["A.", "a.", "AB", ".", "1", "!", "A..", "ABC", None, True, "ß"])
 def test_ut_api05_invalid_middle_initials(middle):
     result = validate_newsletter_status_identity(VALID | {"middle_initial": middle})
     assert result.value is None
     assert [error.field for error in result.errors] == ["middle_initial"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("middle", ["", " "])
+def test_ut_api05_empty_middle_initial_is_none(middle):
+    result = validate_newsletter_status_identity(VALID | {"middle_initial": middle})
+    assert result.errors == ()
+    assert result.value is not None
+    assert result.value.middle_initial is None
+
+
+@pytest.mark.unit
+def test_ut_api05_period_middle_initial_has_stable_validation_error():
+    result = validate_newsletter_status_identity(VALID | {"middle_initial": "A."})
+    assert [error.as_dict() for error in result.errors] == [{
+        "field": "middle_initial",
+        "code": "invalid_format",
+        "message": "Enter one letter.",
+    }]
 
 
 @pytest.mark.unit

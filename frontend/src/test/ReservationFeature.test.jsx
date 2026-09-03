@@ -46,12 +46,35 @@ async function readyToSubmit(client = operations()) {
 }
 
 describe('reservation context and availability', () => {
+  it('keeps the date and party fields in the shared alignment grid without changing their accessible order', async () => {
+    await ready()
+    const date = screen.getByLabelText(/Reservation date Required/)
+    const party = screen.getByLabelText(/Party size Required/)
+    const dateField = date.closest('.form-field')
+    const partyField = party.closest('.form-field')
+    const choiceGrid = dateField.closest('.choice-grid')
+
+    expect(Array.from(choiceGrid.children)).toEqual([dateField, partyField])
+    expect(date.previousElementSibling).toHaveAttribute('id', 'local_date-help')
+    expect(party.previousElementSibling).toHaveAttribute('id', 'party_size-help')
+    expect(date).toHaveAttribute('aria-describedby', 'local_date-help')
+    expect(party).toHaveAttribute('aria-describedby', 'party_size-help')
+    expect(choiceGrid.nextElementSibling).toBe(screen.getByRole('button', { name: 'Check availability' }))
+  })
+
   it('loads context and applies authoritative native bounds', async () => {
     await ready()
     expect(screen.getByLabelText(/Reservation date Required/)).toHaveAttribute('min', '2026-08-24')
     expect(screen.getByLabelText(/Reservation date Required/)).toHaveAttribute('max', '2026-10-23')
     expect(screen.getByLabelText(/Party size Required/)).toHaveAttribute('max', '120')
     expect(screen.getByText(/America\/New_York/)).toBeInTheDocument()
+    const hours = document.querySelector('.dining-hours')
+    const rows = hours.querySelectorAll('.dining-hours__row')
+    expect(hours.querySelector('summary')).toHaveTextContent('Current dining hours')
+    expect(rows).toHaveLength(7)
+    expect(rows[0]).toHaveTextContent('Monday:5:00 PM–11:00 PM')
+    expect(rows[2]).toHaveTextContent('Wednesday:5:00 PM–11:00 PM')
+    expect(rows[2].querySelector('.dining-hours__time')).toHaveTextContent('5:00 PM–11:00 PM')
   })
 
   it('blocks controls on context failure and retries OP-01', async () => {
@@ -180,12 +203,19 @@ describe('reservation customer, submission, and recovery', () => {
     const heading = await screen.findByRole('heading', { name: 'Reservation confirmed' })
     expect(heading).toHaveFocus()
     expect(screen.getByText('9007199254740993')).toBeInTheDocument()
-    expect(screen.getByText(confirmationFixture.confirmation.starts_at)).toBeInTheDocument()
-    expect(screen.getByText(confirmationFixture.confirmation.ends_at)).toBeInTheDocument()
-    expect(screen.getByText('Canonical UTC start')).toBeInTheDocument()
-    expect(screen.getByText('Canonical UTC end')).toBeInTheDocument()
+    expect(screen.getByText('September 12, 2026 at 5:00 PM Eastern Time')).toBeInTheDocument()
+    expect(screen.getByText('September 12, 2026 at 6:30 PM Eastern Time')).toBeInTheDocument()
+    expect(screen.queryByText(confirmationFixture.confirmation.starts_at)).not.toBeInTheDocument()
+    expect(screen.queryByText(confirmationFixture.confirmation.ends_at)).not.toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
     expect(screen.queryByText('ada.rivera@example.com')).not.toBeInTheDocument()
+  })
+
+  it('submits a valid one-letter middle initial unchanged', async () => {
+    const client = await readyToSubmit()
+    await userEvent.type(screen.getByLabelText(/Middle initial Optional/), 'A')
+    await userEvent.click(screen.getByRole('button', { name: 'Reserve table' }))
+    expect(client.createReservation).toHaveBeenCalledWith(expect.objectContaining({ middle_initial: 'A' }))
   })
 
   it.each([
@@ -280,10 +310,10 @@ describe('reservation customer, submission, and recovery', () => {
     expect(screen.getByLabelText(/First name Required/)).toBeEnabled()
   })
 
-  it('does not apply native UTF-16 maxlength to code-point-limited name controls', async () => {
+  it('constrains Middle initial to one input character', async () => {
     await ready()
     expect(screen.getByLabelText(/First name Required/)).not.toHaveAttribute('maxlength')
-    expect(screen.getByLabelText(/Middle initial Optional/)).not.toHaveAttribute('maxlength')
+    expect(screen.getByLabelText(/Middle initial Optional/)).toHaveAttribute('maxlength', '1')
     expect(screen.getByLabelText(/Last name Required/)).not.toHaveAttribute('maxlength')
   })
 })

@@ -129,7 +129,7 @@ creates or changes a customer, newsletter preference, or reservation.
 Example request for a fictitious identity:
 
 ```json
-{"first_name":"Ada","middle_initial":"m.","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com"}
+{"first_name":"Ada","middle_initial":"m","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com"}
 ```
 
 The exact success variants are:
@@ -161,7 +161,7 @@ customer DML.
 Fictitious new subscribe request and exact response:
 
 ```json
-{"first_name":"Ada","middle_initial":"m.","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com","subscribed":true}
+{"first_name":"Ada","middle_initial":"m","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com","subscribed":true}
 ```
 
 ```json

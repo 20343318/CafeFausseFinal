@@ -53,16 +53,12 @@ def _normalize_middle(value: Any) -> tuple[str | None, FieldError | None]:
         return None, _string_error(field)
     normalized = value.strip()
     if not normalized:
-        return None, _error(field, "empty", "This field cannot be empty.")
-    if len(normalized) > 2:
-        return None, _error(field, "invalid_format", "Enter one letter with an optional period.")
-    if normalized.endswith("."):
-        normalized = normalized[:-1]
+        return None, None
     if len(normalized) != 1 or not normalized.isalpha():
-        return None, _error(field, "invalid_format", "Enter one letter with an optional period.")
+        return None, _error(field, "invalid_format", "Enter one letter.")
     upper = normalized.upper()
     if len(upper) != 1:
-        return None, _error(field, "invalid_format", "Enter one letter with an optional period.")
+        return None, _error(field, "invalid_format", "Enter one letter.")
     return upper, None
 
 

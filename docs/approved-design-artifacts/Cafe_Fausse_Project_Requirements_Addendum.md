@@ -1,9 +1,9 @@
 # Cafe Fausse Project Requirements Addendum
 
-**Addendum version:** 2.2.1  
+**Addendum version:** 2.3<br>
 **Established:** 2026-08-13  
-**Last updated:** 2026-08-15  
-**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
+**Last updated:** 2026-09-02<br>
+**Artifact regeneration ID:** `2026-09-02-PRA030-R1`<br>
 **Relationship to baseline:** Supplements but may not contradict `SRS(1).pdf`, `Rubric(1).pdf`, or the Project Requirements Baseline  
 **Change control:** Only explicitly approved decisions become active addendum requirements
 
@@ -439,6 +439,7 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | Integration-test impact | Verify React validation cannot bypass authoritative Flask validation. |
 | Demo / documentation | Demonstrate valid/invalid submissions and configuration boundaries. |
 | Dependencies | PRA-006 through PRA-021, PRA-024, PRA-025 |
+| Amended by | PRA-030 supersedes only the optional-period allowance for middle-initial request input. All other P1-VAL-01 requirements remain active. |
 
 ### PRA-024 - Confirmation, error messaging, and technical logging
 
@@ -478,7 +479,7 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | Demo / documentation | Demonstrate full schedule, disabled unavailable slots, stale-slot handling, and responsiveness. |
 | Dependencies | PRA-006 through PRA-019, PRA-023, PRA-024 |
 
-## 6. Prompt 4 approved supplemental requirements
+## 6. Prompt 4 and later approved supplemental requirements
 
 ### PRA-026 - Prospective configuration changes and repeatable reinitialization
 
@@ -557,6 +558,28 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 | Dependencies | PRA-002, PRA-005 through PRA-013, PRA-023, PRA-025, PRA-026, PRA-028 |
 | Supersedes | Earlier statements that classified the SRS weekly hours as non-persisted fixed application behavior; it does not activate holiday/date-specific exceptions. |
 
+### PRA-030 - One-character middle-initial request input
+
+| Field | Value |
+|---|---|
+| Type | Validation refinement |
+| Status | Approved |
+| Approved by/date | Abdul, explicit controlled documentation amendment, 2026-09-02 |
+| Exact approved requirement | Middle initial is optional. When supplied in request input, it must be exactly one alphabetic character and must not contain a period. Lowercase input may normalize to uppercase. The stored value remains uppercase without a period. Read-only full-name text may display the initial with or without a period; this decision does not require a display-formatting change. |
+| Initial/default value | Omitted or empty input represents no supplied middle initial; no value is stored solely because the field exists. |
+| Permitted values / validation | Omitted or empty, or exactly one Unicode alphabetic character after outer-whitespace trimming; maximum input length one; a trailing period, period alone, digits, symbols, two letters, and longer values are invalid. Where field-level validation messages are documented, use `Enter one letter.` |
+| Classification / control | Fixed validation and normalization behavior across React and Flask; PostgreSQL business data remains one uppercase alphabetic character or no value. |
+| Rationale | Aligns the public input contract with the one-character UI constraint and PostgreSQL representation, rejects punctuation instead of silently correcting it, and keeps read-only presentation independent from request validation. |
+| Refines | PRA-019 and PRA-023 / P1-VAL-01 |
+| PostgreSQL impact | No schema or constraint change; the existing optional one-character uppercase stored representation remains authoritative and compatible. |
+| Flask/API impact | Accept omitted/empty or one alphabetic character, optionally normalize lowercase to uppercase, reject input periods and longer values, and preserve the existing validation-error contract. |
+| React/UI impact | Expose a one-character maximum, accept only an empty value or one alphabetic character, submit that character without punctuation, and retain current read-only name formatting. |
+| Unit-test impact | Cover omitted/empty, uppercase and lowercase letters, normalization, maximum length one, the message `Enter one letter.`, and rejection of periods, digits, symbols, two letters, and longer values. |
+| Integration-test impact | Verify accepted one-letter input is submitted and stored uppercase without a period and invalid punctuated input does not reach persistence. |
+| Demo / documentation | Active request schemas and examples use `A`, never `A.`; historical implementation evidence remains historical. Read-only names may retain either display style. |
+| Dependencies | PRA-019, PRA-023, existing PostgreSQL one-character constraint |
+| Supersedes | Only PRA-023 / P1-VAL-01's allowance for an optional period in middle-initial request input. It does not supersede any other P1-VAL-01 validation rule or change read-only name formatting. |
+
 ## 7. Decision-to-Addendum crosswalk
 
 ### 7.1 Prompt 1 decisions
@@ -598,6 +621,12 @@ All entries in this section were explicitly approved by Abdul in the Prompt 1 de
 |---|---|
 | P5-HRS-01 | PRA-029 |
 
+### 7.4 Later approved decisions
+
+| Decision | Addendum ID |
+|---|---|
+| User-approved middle-initial input clarification | PRA-030 |
+
 ## 8. Authoritative-document compatibility findings
 
 No approved supplemental requirement contradicts the SRS or rubric. These interpretations control:
@@ -609,6 +638,7 @@ No approved supplemental requirement contradicts the SRS or rubric. These interp
 5. **Random assignment:** single-table selection remains random among equally suitable choices. Multi-table minimum-count and least-waste criteria precede random tie-breaking to avoid needless fragmentation.
 6. **Displayed availability:** React's display does not weaken Flask/PostgreSQL authority; every booking is revalidated.
 7. **SRS hours versus database configurability:** the required SRS weekly hours are the mandatory Version 1 seed and normal demonstration baseline. PostgreSQL is the authoritative recurring-schedule source, which permits controlled alternate test data without weakening the required seed or activating holiday/date-specific exception behavior.
+8. **Middle-initial request input versus name display:** request input is optional and, when supplied, is exactly one alphabetic character without a period. Storage remains uppercase without a period. A read-only full name may display the stored initial with or without a period because display punctuation is not request input.
 
 ## 9. Remaining unresolved decisions
 
@@ -620,7 +650,7 @@ No genuinely ambiguous operational or persistent-data business rule remains amon
 - exact React components, routing, state management, debounce/on-blur timing, and visual styling;
 - exact test frameworks, fixtures, controlled clock, and deployment topology.
 
-They must continue to honor PRA-001 through PRA-029.
+They must continue to honor PRA-001 through PRA-030.
 
 ## 10. Future enhancements — inactive and unapproved for Version 1
 
@@ -679,3 +709,4 @@ These are not active supplemental requirements and shall not be implemented with
 | 2.1 | 2026-08-14 | Added PRA-026 through PRA-028 from approved Prompt 4 decisions governing prospective configuration changes, database-generated reservation fingerprints, retry/newsletter separation, Version 1 retention, and repeatable nonproduction reset/reinitialization. Added FE-015 through FE-017 as inactive future enhancements. |
 | 2.2 | 2026-08-15 | Added PRA-029 from the approved Prompt 5 operating-hours override. Reclassified recurring weekly hours as authoritative PostgreSQL business configuration seeded to the SRS schedule, preserved holiday/date-specific exceptions as inactive, and updated related traceability and compatibility findings. |
 | 2.2.1 | 2026-08-15 | Regenerated the downloadable artifact after PRA-029 propagation. No requirement changed; this packaging revision provides distinct file bytes and an explicit regeneration identifier for repository verification. |
+| 2.3 | 2026-09-02 | Added PRA-030, which preserves P1-VAL-01's historical record while superseding only its optional-period allowance for middle-initial request input. The active rule is optional input of exactly one alphabetic character, maximum length one, with no period; lowercase may normalize uppercase, storage remains uppercase without a period, and read-only name formatting is unchanged. |

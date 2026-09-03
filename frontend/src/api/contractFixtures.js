@@ -79,13 +79,13 @@ export function cloneFixture(value) {
   return structuredClone(value)
 }
 
-export function publicApiError(code, { retryable = false, outcomeUnknown = false, fields, status = 503 } = {}) {
+export function publicApiError(code, { retryable = false, outcomeUnknown = false, fields, message = 'The requested operation could not be completed.', status = 503 } = {}) {
   const error = new Error(code)
   error.status = status
   error.response = {
     error: {
       code,
-      message: 'The requested operation could not be completed.',
+      message,
       retryable,
       outcome_unknown: outcomeUnknown,
       ...(fields ? { fields } : {}),
@@ -102,11 +102,41 @@ function normalizedEmail(value) {
   return value.trim().toLowerCase()
 }
 
+function normalizedMiddleInitial(body) {
+  if (!Object.hasOwn(body, 'middle_initial') || body.middle_initial === undefined) return null
+  if (body.middle_initial === null) {
+    throw publicApiError('validation_failed', {
+      status: 422,
+      message: 'One or more fields need attention.',
+      fields: [{ field: 'middle_initial', code: 'null_not_allowed', message: 'This field cannot be null.' }],
+    })
+  }
+  if (typeof body.middle_initial !== 'string') {
+    throw publicApiError('validation_failed', {
+      status: 422,
+      message: 'One or more fields need attention.',
+      fields: [{ field: 'middle_initial', code: 'invalid_type', message: 'This field must be a string.' }],
+    })
+  }
+  const middleInitial = body.middle_initial.trim()
+  if (!middleInitial) return null
+  const uppercase = middleInitial.toUpperCase()
+  if (!/^\p{L}$/u.test(middleInitial) || [...uppercase].length !== 1) {
+    throw publicApiError('validation_failed', {
+      status: 422,
+      message: 'One or more fields need attention.',
+      fields: [{ field: 'middle_initial', code: 'invalid_format', message: 'Enter one letter.' }],
+    })
+  }
+  return uppercase
+}
+
 function classifyIdentity(body) {
+  const middleInitial = normalizedMiddleInitial(body)
   if (normalizedEmail(body.email) !== knownCustomerFixture.email) return 'unknown'
   if (normalizedName(body.first_name) !== normalizedName(knownCustomerFixture.first_name)
     || normalizedName(body.last_name) !== normalizedName(knownCustomerFixture.last_name)) return 'identity_conflict'
-  if (body.middle_initial && body.middle_initial.trim().replace(/\.$/u, '').toUpperCase() !== knownCustomerFixture.middle_initial) return 'middle_conflict'
+  if (middleInitial && middleInitial !== knownCustomerFixture.middle_initial) return 'middle_conflict'
   return 'known'
 }
 

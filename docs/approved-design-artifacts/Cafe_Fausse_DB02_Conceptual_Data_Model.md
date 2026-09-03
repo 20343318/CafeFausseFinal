@@ -1,15 +1,15 @@
 # Cafe Fausse DB-02 Conceptual Data Model
 
-**Document version:** 1.2  
+**Document version:** 1.3<br>
 **Established:** 2026-08-15  
-**Last amended:** 2026-08-15  
-**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
+**Last amended:** 2026-09-02<br>
+**Artifact regeneration ID:** `2026-09-02-PRA030-R1`<br>
 **Roadmap increment:** DB-02  
-**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), approved DB-01 Persistent-Data Requirements Analysis 1.2.1, and the approved least-to-most implementation roadmap 1.1.1  
+**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.3 (PRA-001 through PRA-030), approved DB-01 Persistent-Data Requirements Analysis 1.3, and the approved least-to-most implementation roadmap 1.1.1<br>
 **Scope:** Conceptual PostgreSQL data model only  
 **Status:** Approved  
-**Approved by/date:** Abdul, 2026-08-15  
-**Approval source:** Explicit DB-02 approval in the project conversation after review of the PRA-029-amended model  
+**Approved by/date:** Abdul, 2026-08-15; PRA-030 amendment approved 2026-09-02<br>
+**Approval source:** Explicit DB-02 approval after review of the PRA-029-amended model, followed by the explicit PRA-030 middle-initial amendment<br>
 **Code status:** No SQL or application code generated
 
 ## 1. Purpose and boundary
@@ -78,7 +78,7 @@ The dotted Configuration-to-Reservation and Operating-Hours-to-Reservation relat
 |---|---|---:|---|---|
 | Customer identifier | Stable internal identity used by reservations and retry fingerprint generation. | Yes | Unique and immutable; representation is deferred. | Retained until controlled nonproduction reset. |
 | First name | Required first component of SRS Customer Name. | Yes | After trimming/collapse: 1-100 characters and at least one letter. Display punctuation/accents are preserved; comparison is case-insensitive. It is not independently unique. | Must not be silently replaced. |
-| Middle initial | Optional structured name component. | No | One alphabetic character; an optional input period is removed and the value is preserved uppercase. It is not an identity key or fingerprint input. | Empty may be populated; omission preserves; a conflicting populated value is rejected. |
+| Middle initial | Optional structured name component. | No | Request input, when supplied, is exactly one alphabetic character, maximum length one, with no period; lowercase may normalize to uppercase and the stored value remains uppercase without punctuation. It is not an identity key or fingerprint input. | Empty may be populated; omission preserves; a conflicting populated value is rejected. |
 | Last name | Required last component of SRS Customer Name. | Yes | After trimming/collapse: 1-100 characters and at least one letter. Display punctuation/accents are preserved; comparison is case-insensitive. It is not independently unique. | Must not be silently replaced. |
 | Canonical email | Required normalized email identity and marketing address. | Yes | Valid syntax, no more than 254 characters, and lowercase after trimming. It is the unique business identity for one customer. | Immutable through approved Version 1 workflows and retained after unsubscribe. |
 | Phone number | Optional reservation contact information. | No | Approved characters are digits, spaces, plus, parentheses, hyphens, and periods, with 7-15 digits. It is not identity or a fingerprint input; normalized comparison is derived. | Blank may be populated; omission preserves; a differing stored value is not silently overwritten. |
@@ -442,6 +442,7 @@ Every DB-01 item has exactly one persistent home or one explicit nonpersistent c
 | PRA-027 | Database-generated versioned fingerprint, underlying-fact verification, and newsletter separation. |
 | PRA-028 | Normal-operation retention and no automatic purge/archive. |
 | PRA-029 | Restaurant Operating Hours is the authoritative PostgreSQL recurring schedule; Flask/React do not own hard-coded hour values and holiday exceptions remain excluded. |
+| PRA-030 | Middle-initial request input is optional and, when supplied, exactly one alphabetic character without a period; the stored value remains optional, one-character, and uppercase. |
 
 ### 12.3 Rubric traceability
 
@@ -573,7 +574,7 @@ The six-entity model resolves the DB-01 conceptual questions, including the PRA-
 
 ### 17.2 Approval record
 
-DB-02 version 1.2 is **approved** by Abdul as of 2026-08-15. This approval includes the six-concept model and the PRA-029 operating-hours amendment recorded in the preceding version. The status revision introduces no new conceptual decision.
+DB-02 version 1.3 remains **approved**. It includes the six-concept model, the PRA-029 operating-hours amendment, and PRA-030's approved request-validation refinement. PRA-030 does not introduce a new persistent concept or schema change.
 
 DB-02 approval authorizes Prompt 6 / DB-03 logical PostgreSQL schema and integrity design. It does not approve SQL, migrations, transaction/concurrency mechanisms, Flask contracts, React design, or implementation code.
 
@@ -584,5 +585,6 @@ DB-02 approval authorizes Prompt 6 / DB-03 logical PostgreSQL schema and integri
 | 1.1 | 2026-08-15 | Added the PRA-029 operating-hours amendment and expanded the conceptual model to six persistent concepts. |
 | 1.1.1 | 2026-08-15 | Regenerated the downloadable PRA-029-amended artifact without changing requirements or conceptual decisions. |
 | 1.2 | 2026-08-15 | Recorded Abdul's explicit DB-02 approval and authorization to proceed to Prompt 6 / DB-03. No conceptual-model content changed. |
+| 1.3 | 2026-09-02 | Applied PRA-030's optional one-character, no-period middle-initial request rule while preserving the existing optional one-character uppercase stored representation and conceptual model. |
 
 No SQL or application code was generated.

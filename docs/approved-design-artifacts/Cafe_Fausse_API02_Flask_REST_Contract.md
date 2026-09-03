@@ -1,12 +1,12 @@
 # Cafe Fausse API-02 Flask REST Contract
 
-**Document version:** 1.0.2<br>
+**Document version:** 1.0.3<br>
 **Date:** 2026-08-21  
 **Roadmap increment:** API-02 - Flask REST Contract  
 **Status:** Approved<br>
 **Author:** Codex, prepared for Abdul  
 **Approval record:** Approved by Abdul on 2026-08-21. This approval authorizes only API-03 - Flask Architecture, Configuration, and Test Strategy. It does not authorize Flask implementation, API-04 or later increments, React work, integration work, or PostgreSQL changes.
-**Reconciliation record:** Version 1.0.2 applies the approved API08-RC-01/02 reconciliation from 2026-08-24 without changing any public request or response shape.
+**Reconciliation record:** Version 1.0.2 applies the approved API08-RC-01/02 reconciliation from 2026-08-24 without changing any public request or response shape. Version 1.0.3 applies PRA-030's one-character middle-initial request rule without changing paths, response shapes, or status codes.
 
 ## 1. Executive summary
 
@@ -22,11 +22,11 @@ Sources were applied in the prompt's required order:
 
 1. `docs/SRS(1).pdf`, read in full;
 2. `docs/Rubric(1).pdf`, read in full;
-3. `docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md`, version 2.2.1;
-4. DB-01 version 1.2.1, DB-02 version 1.2, DB-03 version 1.1, and DB-04 version 1.1;
+3. `docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md`, version 2.3;
+4. DB-01 version 1.3, DB-02 version 1.3, DB-03 version 1.1, and DB-04 version 1.1;
 5. the implemented DB-05 through DB-07 migrations, reports, verification evidence, and approval records;
 6. `database/POSTGRESQL_CONTRACT_FOR_FLASK.md`, approved baseline version 1.0 and reconciled version 1.1;
-7. `docs/approved-design-artifacts/Cafe_Fausse_API01_Backend_Operation_Inventory.md`, approved baseline version 1.0.1 and reconciled version 1.0.3;
+7. `docs/approved-design-artifacts/Cafe_Fausse_API01_Backend_Operation_Inventory.md`, approved baseline version 1.0.1 and amended version 1.0.4;
 8. the least-to-most roadmap version 1.1.1, Project Requirements Baseline version 1.0, and `AGENTS.md`.
 
 Accepted without reopening: PostgreSQL 18.3 and `pgcrypto`; six approved business tables; four authorized foundation reads; three production routines; `READ COMMITTED` booking; database-owned concurrency, allocation, and retry fingerprinting; no more than three complete attempts for SQLSTATE `55P03`, `40P01`, and `40001`; exact retry by ordinary booking facts; no direct application reads of reservations or assignments; and the documented general-allocation and coarse-lock performance limitations.
@@ -127,7 +127,7 @@ All endpoints are unauthenticated in Version 1. OP-01 through OP-05 are public w
 | Property | JSON type | Presence/null | Limit and accepted form | Normalization and meaning | Error/privacy |
 |---|---|---|---|---|---|
 | `first_name` | string | Required; non-null | 1-100 Unicode characters after normalization; at least one Unicode letter | Trim outer whitespace, collapse each internal whitespace run to one space, preserve display spelling/punctuation/accents; compare case-insensitively | `validation_failed`; PII, request-only except composed confirmation name |
-| `middle_initial` | string | Optional; if present non-null | One Unicode alphabetic character, optionally followed by one period; maximum input length 2 | Trim, remove optional period, uppercase to one character. Omission preserves stored state or matches either state in lookup | Empty/`null` invalid; PII |
+| `middle_initial` | string | Optional; if present non-null | Exactly one Unicode alphabetic character; maximum input length 1; periods are invalid | Trim and uppercase to one character. Omission or empty input preserves stored state or matches either state in lookup | `null` invalid; invalid field message `Enter one letter.`; PII |
 | `last_name` | string | Required; non-null | Same as `first_name` | Same as `first_name` | `validation_failed`; PII |
 | `email` | string | Required; non-null | Maximum 254 characters after trim; one RFC 5322 addr-spec without display name, comments, surrounding whitespace, or domain literal | Trim and lowercase the entire accepted address; DNS ownership/delivery is not verified | PII, request-only; never returned |
 | `confirmation_email` | string | Required; non-null | Same syntax/length as `email` | Normalize identically and require equality to normalized `email`; discard before database access | Secret-like transient PII; never returned, logged, cached, or persisted |
@@ -135,7 +135,7 @@ All endpoints are unauthenticated in Version 1. OP-01 through OP-05 are public w
 
 Name character limits count Unicode code points after trimming/collapse. The contract does not impose a display-changing Unicode normalization form. Email accepts an ordinary addr-spec: one nonempty local part and one nonempty domain separated by one `@`; the local part uses RFC dot-atom characters with no leading, trailing, or consecutive dot; domain labels contain letters, digits, or interior hyphens and are dot-separated. Quoted local parts, comments, whitespace, address literals, and display-name wrappers are rejected. API-03 may select an implementation library only if it enforces this profile.
 
-Omission is the sole public representation of “not supplied” for `middle_initial` and `phone`. `null` and `""` never mean clear, preserve, or no change. A supplied middle initial may populate a stored blank only in OP-04/OP-05; a populated conflict is rejected. A supplied phone may populate a stored blank only on a newly successful OP-05 booking; a differing populated phone is preserved and produces a success notice. Neither field is an identity key. No customer ID is accepted or returned.
+Omission or an empty/whitespace-only string represents “not supplied” for `middle_initial`; `null` is invalid. For `phone`, omission remains the sole representation of not supplied, and `null` or `""` is invalid. A supplied middle initial may populate a stored blank only in OP-04/OP-05; a populated conflict is rejected. A supplied phone may populate a stored blank only on a newly successful OP-05 booking; a differing populated phone is preserved and produces a success notice. Neither field is an identity key. No customer ID is accepted or returned.
 
 ## 8. Date, time, identifier, and number contract
 
@@ -499,7 +499,7 @@ The ten rows below are the complete Saturday schedule for the illustrated seed s
 Request:
 
 ```json
-{"first_name":"Ada","middle_initial":"m.","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com"}
+{"first_name":"Ada","middle_initial":"m","last_name":"Rivera","email":"ADA.RIVERA@EXAMPLE.COM","confirmation_email":"ada.rivera@example.com"}
 ```
 
 Subscribed and unsubscribed:
@@ -567,7 +567,7 @@ Request:
 ```json
 {
   "first_name": "Ada",
-  "middle_initial": "M.",
+  "middle_initial": "M",
   "last_name": "Rivera",
   "email": "ada.rivera@example.com",
   "confirmation_email": "ada.rivera@example.com",
@@ -749,7 +749,7 @@ Sections 7-9 are normative field definitions. This catalogue closes the field-le
 | Schema/property | Type/format | Required/null/permitted | Normalization; source; classification | Example; invalid behavior; privacy |
 |---|---|---|---|---|
 | Identity.`first_name` | string/Unicode | Required, non-null, 1-100, letter required | Trim/collapse; caller; request | `Ada`; 422; PII |
-| Identity.`middle_initial` | string/Unicode letter plus optional period | Optional, non-null, input max 2 | Trim/remove period/uppercase; caller; request | `M.` -> `M`; 422; PII |
+| Identity.`middle_initial` | string/exactly one Unicode alphabetic character | Optional, non-null, input max 1; period prohibited | Trim/uppercase; caller; request | `m` -> `M`; invalid input: 422 with `Enter one letter.`; PII |
 | Identity.`last_name` | string/Unicode | Required, non-null, 1-100, letter required | Trim/collapse; caller; request | `Rivera`; 422; PII |
 | Identity.`email` | string/email | Required, non-null, <=254 | Trim/lowercase; caller; request | `ada@example.com`; 422; PII |
 | Identity.`confirmation_email` | string/email | Required, non-null, <=254, must match | Normalize then discard; caller; request-only | `ada@example.com`; 422; transient sensitive PII |
@@ -846,7 +846,7 @@ No test is created in API-02. Later API increments automate these cases.
 |---|---|
 | Common protocol | Each documented method/path accepted, including body-based `POST /api/v1/newsletter-preferences`; `PUT` on that path is 405 and the obsolete singular path is 404; other wrong methods use 405 with the envelope; unknown paths use 404; GET body/query extras are rejected; JSON media type is accepted; missing body is 400; malformed/non-object/detectable duplicate member is 400; unsupported type is 415; unknown and forbidden fields are 400; all errors have four required members and no diagnostics. Every `retryable:true` case permits identical resubmission; every case requiring correction, refresh, or a different slot has `retryable:false`. |
 | Strict values | Required/optional/null/empty/wrong-type cases for every field; no Boolean/numeric coercion; fractional/exponent-loss/NaN/Infinity rejected; exact boundary lengths; unknown enum rejected; response consumers ignore additive properties. |
-| Unicode identity | Trim/collapse and representative accented/non-ASCII-letter names preserve display; case-insensitive matching; punctuation-only names fail; middle omission differs from null/empty; optional period normalizes; email confirmation matches after normalization; confirmation email absent from all responses/examples/log models. |
+| Unicode identity | Trim/collapse and representative accented/non-ASCII-letter names preserve display; case-insensitive matching; punctuation-only names fail; middle omission/empty represent absence, null fails, one lowercase letter normalizes uppercase, and any period fails with `Enter one letter.`; email confirmation matches after normalization; confirmation email absent from all responses/examples/log models. |
 | OP-01 | Exactly seven ordered weekdays, five current policy facts, inclusive date bounds, valid IANA zone, fixed contact facts, derived max; missing/invalid population gives generic 503; no total/table inventory. |
 | OP-02 | Only two query fields; date/party boundaries; every legitimate slot exactly once in canonical order; unavailable retained; all-false and empty valid arrays are 200; provisional true; no arbitrary/customer/reservation/table/candidate/capacity field. |
 | OP-03 | Subscribed, unsubscribed, not-found, generic mismatch, middle conflict, validation, and indeterminate schemas/statuses; lookup changes no data and returns no profile/contact/ID. |
@@ -996,6 +996,7 @@ Static FR-01, FR-03 through FR-05, and FR-10 through FR-14 require no backend op
 | PRA-025 | Availability-first flow, every legitimate slot, unavailable flags, provisional signal, no arbitrary times/table choice, refresh recovery. |
 | PRA-026 to PRA-028 | Current values remain prospective; exact retry newsletter separation and normal retention remain internal; no history/reset customer API. |
 | PRA-029 | Seven current hours come from PostgreSQL; no Flask/React authoritative schedule constants or exception model. |
+| PRA-030 | Optional middle-initial request input is exactly one alphabetic character, maximum length one, without a period; lowercase may normalize uppercase and invalid input uses `Enter one letter.` |
 
 ### 21.3 Baseline API and rubric coverage
 
@@ -1107,7 +1108,7 @@ There is no deviation from Prompt 11. API-02 changes only this design artifact. 
 | Flask/React/SQL implementation avoided | Complete |
 | Unresolved blockers | None |
 
-API-02 baseline version 1.0.1 is approved by Abdul as of 2026-08-21. Version 1.0.2 applies the explicitly approved API08-RC-01/02 reconciliation and is ready for review before API-08 correction.
+API-02 baseline version 1.0.1 is approved by Abdul as of 2026-08-21. Version 1.0.2 applies the explicitly approved API08-RC-01/02 reconciliation. Version 1.0.3 applies the user-approved PRA-030 middle-initial request refinement without changing the wire shape outside that request-field constraint.
 
 ### 26.1 Version record
 
@@ -1116,6 +1117,7 @@ API-02 baseline version 1.0.1 is approved by Abdul as of 2026-08-21. Version 1.0
 | 1.0 | 2026-08-21 | Established the complete proposed API-02 HTTP/JSON contract. |
 | 1.0.1 | 2026-08-21 | Corrected OP-04 to body-based `POST /api/v1/newsletter-preferences`; added known-reservation recovery for failed post-commit confirmation-name reads; defined `retryable` as identical-request recovery and made `reservation_unavailable` non-retryable. No API-01, PostgreSQL, Flask implementation, or Version 1 business rule changed. |
 | 1.0.2 | 2026-08-24 | Applied API08-RC-01/02 without changing the wire shape: booking outcome now deterministically distinguishes caller party-size validation from invalid server duration, and OP-05's post-commit confirmation source includes only stored name components plus current restaurant IANA timezone. |
+| 1.0.3 | 2026-09-02 | Applied PRA-030: optional middle-initial request input is exactly one alphabetic character, maximum length one, periods are rejected with `Enter one letter.`, and lowercase may normalize uppercase. Read-only name formatting and all paths, response shapes, and status codes remain unchanged. |
 
 ## 27. Approval checkpoint
 

@@ -191,7 +191,9 @@ def _reservation_payload(body):
         "utc_offset_minutes": -240, "party_size": confirmation["party_size"],
         "newsletter_action": "no_change",
     }
-    if len(parts) == 3: payload["middle_initial"] = parts[1]
+    if len(parts) == 3:
+        # Read-only names may include punctuation; submitted initials may not.
+        payload["middle_initial"] = parts[1].removesuffix(".")
     return payload
 
 

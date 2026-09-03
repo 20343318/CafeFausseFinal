@@ -395,7 +395,7 @@ def test_it_dbapi_op04_existing_transitions_preserve_identity_phone_and_reservat
             try:
                 client = app.test_client()
                 unsubscribed = _request(
-                    client, email, False, middle_initial="m."
+                    client, email, False, middle_initial="m"
                 )
                 repeated = _request(client, email, False, middle_initial="M")
                 subscribed = _request(client, email, True, middle_initial="M")

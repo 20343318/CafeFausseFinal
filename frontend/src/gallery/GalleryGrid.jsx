@@ -23,7 +23,7 @@ export function GalleryGrid({ images, onSelect }) {
             />
             <span className="gallery-item__action" aria-hidden="true">View image</span>
           </button>
-          {image.caption && <figcaption>{image.caption}</figcaption>}
+          <figcaption>{image.caption || image.alt}</figcaption>
         </figure>
       ))}
     </div>

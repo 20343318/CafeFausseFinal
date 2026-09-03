@@ -20,6 +20,13 @@ describe('Gallery automatic discovery', () => {
     ])
     expect(galleryAssets).toHaveLength(5)
     expect(orphanGalleryMetadata).toEqual([])
+    expect(galleryAssets.map((asset) => asset.caption)).toEqual([
+      'Café Fausse dining room',
+      'Formal dining room',
+      'Ribeye steak',
+      'Special event',
+      'Behind the scenes',
+    ])
     expect(galleryAssets.find((asset) => asset.filename === 'gallery-behind-the-scenes.webp')).toMatchObject({
       alt: 'Chefs plating dishes in a warmly lit professional kitchen.',
       src: expect.stringContaining('gallery-behind-the-scenes'),
@@ -50,6 +57,7 @@ describe('Gallery automatic discovery', () => {
     expect(assets.map((asset) => asset.filename)).toEqual(['home-cafe-fausse.webp', 'future-patio.JpG'])
     expect(assets[1]).toMatchObject({
       alt: 'Future patio',
+      caption: 'Future patio',
       hasMetadata: false,
     })
   })

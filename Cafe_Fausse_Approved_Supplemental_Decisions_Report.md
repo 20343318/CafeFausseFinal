@@ -2,6 +2,8 @@
 
 **Report date:** 2026-08-27
 
+**Last amended:** 2026-09-02 for PRA-030
+
 **Status:** Informational summary of approved decisions
 
 **Controlling record:** `Cafe_Fausse_Project_Requirements_Addendum.md`
@@ -10,7 +12,7 @@
 
 The Software Requirements Specification (SRS) and Rubric remain the authoritative project sources. Where those documents were silent or left implementation-significant behavior underspecified, the team obtained explicit decisions and recorded them in the **Cafe Fausse Project Requirements Addendum (PRA)**.
 
-This report consolidates the active decisions in PRA-001 through PRA-029 for convenient review. It does not replace the SRS, Rubric, or PRA, and it does not create new requirements. If this summary conflicts with the controlling PRA, the controlling PRA governs, subject to the SRS and Rubric.
+This report consolidates the active decisions in PRA-001 through PRA-030 for convenient review. It does not replace the SRS, Rubric, or PRA, and it does not create new requirements. If this summary conflicts with the controlling PRA, the controlling PRA governs, subject to the SRS and Rubric.
 
 ## 2. Where the decisions were documented
 
@@ -18,14 +20,14 @@ The decisions are maintained in:
 
 - `Cafe_Fausse_Project_Requirements_Addendum.md`
 
-The project deliberately does not place version numbers in filenames because Git provides file version history. An internal document-version value such as `2.2.1`, if retained in the document metadata, identifies document content and is not part of the repository filename. This unversioned-filename convention applies to every project file that previously used a version number in its filename.
+The project deliberately does not place version numbers in filenames because Git provides file version history. An internal document-version value such as `2.3`, if retained in the document metadata, identifies document content and is not part of the repository filename. This unversioned-filename convention applies to every project file that previously used a version number in its filename.
 
 The controlling addendum contains the decision identifier, approval provenance, exact approved requirement, defaults and validation rules, rationale, SRS/rubric refinement, implementation impacts, test impacts, demonstration notes, and dependencies.
 
 ## 3. Governing status
 
 - Only explicitly approved PRA entries are active.
-- PRA-001 through PRA-029 are the approved decision set summarized below.
+- PRA-001 through PRA-030 are the approved decision set summarized below.
 - SRS and Rubric requirements are not weakened or superseded by the PRA.
 - Items labeled as future enhancements in the PRA are inactive unless separately approved.
 - Technical designs may implement an approved rule, but may not silently change its business meaning.
@@ -145,7 +147,7 @@ Version 1 has no customer-facing reservation cancellation, modification, or resc
 React provides immediate validation and Flask revalidates authoritatively. Approved field rules include:
 
 - First and last names: required; trimmed/collapsed; **1–100 characters**; at least one letter; case-insensitive matching; display punctuation and accents preserved.
-- Middle initial: optional single alphabetic character, optional period on input, stored uppercase without the period.
+- Middle initial: PRA-023 originally allowed an optional period on input; PRA-030 supersedes only that allowance. The active request rule is optional input of exactly one alphabetic character, maximum length one, with no period. Lowercase may normalize uppercase, storage remains uppercase without a period, and read-only names may display the initial with or without a period.
 - Email and confirmation: required on both forms; trimmed; valid syntax; maximum **254 characters**; lowercase canonical value; values must match; confirmation is not stored.
 - Phone: optional on reservations; approved punctuation is allowed; **7–15 digits**; normalized to digits for comparison; update behavior follows PRA-019.
 - Party size: integer from 1 through the current derived maximum.
@@ -190,6 +192,10 @@ The recurring weekly schedule is authoritative PostgreSQL business data. Initial
 
 Flask reads the current schedule for slot generation, closing validation, and client delivery rather than duplicating the hour values as business constants. React displays API-supplied hours and consumes API-supplied availability. Controlled test/demo data may use an alternate recurring schedule without changing business logic, but reset tooling must restore the SRS baseline. Changes apply prospectively. Version 1 has no holiday, date-specific exception, or schedule-history behavior unless separately approved.
 
+#### PRA-030 — One-character middle-initial request input
+
+Middle initial is optional. Request input, when supplied, is exactly one alphabetic character with maximum length one and no period. Lowercase may normalize to uppercase, and the stored value remains uppercase without a period. Invalid request input uses `Enter one letter.` where a field message is documented. Read-only full-name text may continue to display the initial with or without a period. PRA-030 supersedes only PRA-023 / P1-VAL-01's optional-period request allowance; every other PRA-023 rule remains active.
+
 ## 5. Approved defaults and boundaries at a glance
 
 | Area | Approved value or rule |
@@ -224,7 +230,8 @@ Examples of out-of-scope areas include functionality such as customer reservatio
 | PRA-006–PRA-025 | Prompt 1 approvals | Reservation, capacity, identity, newsletter, validation, UI, messaging |
 | PRA-026–PRA-028 | Prompt 4 approvals | Configuration lifecycle, retry identity, retention |
 | PRA-029 | Prompt 5 approval | PostgreSQL-backed operating-hours authority |
+| PRA-030 | User-approved amendment | One-character middle-initial request input; supersedes only P1-VAL-01's optional-period allowance |
 
 ## 8. Review conclusion
 
-Yes, the project documented the decisions needed because the SRS and Rubric were silent or underspecified. The controlled source is `Cafe_Fausse_Project_Requirements_Addendum.md`. Git provides its version history, so no version number belongs in the filename. The 29 active PRA decisions are summarized in this report without activating future enhancements or changing frozen implementation conclusions.
+Yes, the project documented the decisions needed because the SRS and Rubric were silent or underspecified. The controlled source is `Cafe_Fausse_Project_Requirements_Addendum.md`. Git provides its version history, so no version number belongs in the filename. The 30 active PRA decisions are summarized in this report without activating future enhancements or changing frozen implementation conclusions.

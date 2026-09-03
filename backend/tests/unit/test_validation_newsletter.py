@@ -9,7 +9,7 @@ from cafe_fausse.validation.newsletter import validate_newsletter_preference
 
 VALID = {
     "first_name": "  Ada   Marie ",
-    "middle_initial": "m.",
+    "middle_initial": "m",
     "last_name": " Rivera ",
     "email": " ADA.RIVERA@EXAMPLE.COM ",
     "confirmation_email": "ada.rivera@example.com",
@@ -93,6 +93,7 @@ def test_ut_api06_validation_missing_subscribed_and_ordered_identity_errors():
         ({"first_name": " "}, "first_name"),
         ({"first_name": "A" * 101}, "first_name"),
         ({"last_name": "---"}, "last_name"),
+        ({"middle_initial": "A."}, "middle_initial"),
         ({"middle_initial": "AB"}, "middle_initial"),
         ({"email": "invalid", "confirmation_email": "invalid"}, "email"),
         ({"confirmation_email": "other@example.com"}, "confirmation_email"),

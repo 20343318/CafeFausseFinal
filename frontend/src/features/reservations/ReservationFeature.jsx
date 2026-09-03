@@ -4,16 +4,10 @@ import { useOperations } from '../../api/operations.js'
 import { ErrorSummary, FormField, StatusPanel } from '../../components/FormPrimitives.jsx'
 import { identityBody, validateIdentity } from '../../forms/validation.js'
 import { useNewsletterLookup } from '../../forms/useNewsletterLookup.js'
+import { formatClockTime, formatRestaurantDateTime } from '../../utils/time-formatting.js'
 
 const EMPTY_CUSTOMER = { first_name: '', middle_initial: '', last_name: '', email: '', confirmation_email: '', phone: '' }
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-function timeLabel(value) {
-  const match = value.match(/T(\d{2}):(\d{2})/)
-  if (!match) return value
-  const hour = Number(match[1])
-  return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`
-}
 
 function dateLabel(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
@@ -287,7 +281,7 @@ function ReservationWorkflow({ context }) {
     sendReservation(reservationBody())
   }
 
-  if (confirmation) return <ReservationConfirmationView result={confirmation} headingRef={confirmationRef} onNew={() => setConfirmation(null)} />
+  if (confirmation) return <ReservationConfirmationView result={confirmation} restaurantTimezone={context.restaurant_timezone} headingRef={confirmationRef} onNew={() => setConfirmation(null)} />
 
   return (
     <form className="reservation-form" aria-label="Reservation" onSubmit={submit} aria-busy={pending} noValidate>
@@ -329,7 +323,17 @@ function ContextSummary({ context }) {
         <div><dt>Same-day lead</dt><dd>{context.reservation_policy.same_day_lead_minutes} minutes</dd></div>
         <div><dt>Advance window</dt><dd>{context.reservation_policy.advance_window_days} days</dd></div>
       </dl>
-      <details><summary>Current dining hours</summary>{context.weekday_hours.map((entry) => <p key={entry.iso_weekday}>{DAY_NAMES[entry.iso_weekday - 1]}: {entry.opens_at_local.slice(0, 5)}–{entry.closes_at_local.slice(0, 5)}</p>)}</details>
+      <details className="dining-hours">
+        <summary>Current dining hours</summary>
+        <div className="dining-hours__list">
+          {context.weekday_hours.map((entry) => (
+            <p className="dining-hours__row" key={entry.iso_weekday}>
+              <span>{DAY_NAMES[entry.iso_weekday - 1]}:</span>
+              <span className="dining-hours__time">{formatClockTime(entry.opens_at_local)}–{formatClockTime(entry.closes_at_local)}</span>
+            </p>
+          ))}
+        </div>
+      </details>
     </section>
   )
 }
@@ -350,7 +354,7 @@ export function AvailabilityArea({ availability, selectedStart, setSelectedStart
           {availability.data.slots.map((slot) => (
             <label key={slot.starts_at_local} className={`slot-card${selectedStart === slot.starts_at_local ? ' is-selected' : ''}${!slot.available ? ' is-unavailable' : ''}`}>
               <input type="radio" name="reservation_slot" value={slot.starts_at_local} checked={selectedStart === slot.starts_at_local} disabled={!slot.available} onChange={() => setSelectedStart(slot.starts_at_local)} />
-              <span><strong>{timeLabel(slot.starts_at_local)}–{timeLabel(slot.ends_at_local)}</strong><small>{slot.available ? selectedStart === slot.starts_at_local ? 'Selected' : 'Available' : 'Unavailable'}</small></span>
+              <span><strong>{formatClockTime(slot.starts_at_local)}–{formatClockTime(slot.ends_at_local)}</strong><small>{slot.available ? selectedStart === slot.starts_at_local ? 'Selected' : 'Available' : 'Unavailable'}</small></span>
             </label>
           ))}
         </div>
@@ -369,7 +373,7 @@ export function CustomerAndReservationFormArea({ customer, update, blur, errors,
       <legend>3. Your details and newsletter preference</legend>
       <div className="form-grid">
         {fields.map(([id, label, autoComplete, optional, type]) => <FormField key={id} id={id} label={label} optional={optional} error={errors[id]}>
-          {({ describedBy }) => <input id={id} type={type} autoComplete={autoComplete} value={customer[id]} onChange={(event) => update(id, event.target.value)} onBlur={() => blur(id)} aria-invalid={Boolean(errors[id])} aria-describedby={describedBy} required={!optional} maxLength={id.includes('email') ? 254 : id === 'phone' ? 32 : undefined} />}
+          {({ describedBy }) => <input id={id} type={type} autoComplete={autoComplete} value={customer[id]} onChange={(event) => update(id, event.target.value)} onBlur={() => blur(id)} aria-invalid={Boolean(errors[id])} aria-describedby={describedBy} required={!optional} maxLength={id === 'middle_initial' ? 1 : id.includes('email') ? 254 : id === 'phone' ? 32 : undefined} />}
         </FormField>)}
       </div>
       <div className="newsletter-choice">
@@ -385,7 +389,7 @@ export function CustomerAndReservationFormArea({ customer, update, blur, errors,
 export function ReservationReviewArea({ localDate, partySize, selectedSlot, customer, newsletterAction }) {
   return (
     <section className="form-card review-area" aria-labelledby="review-heading"><h2 id="review-heading">4. Review and reserve</h2><dl>
-      <div><dt>Date</dt><dd>{localDate || 'Not selected'}</dd></div><div><dt>Time</dt><dd>{selectedSlot ? `${timeLabel(selectedSlot.starts_at_local)}–${timeLabel(selectedSlot.ends_at_local)}` : 'Not selected'}</dd></div><div><dt>Party size</dt><dd>{partySize || 'Not entered'}</dd></div><div><dt>Name</dt><dd>{[customer.first_name, customer.middle_initial, customer.last_name].filter(Boolean).join(' ') || 'Not entered'}</dd></div><div><dt>Newsletter action</dt><dd>{newsletterAction.replace('_', ' ')}</dd></div>
+      <div><dt>Date</dt><dd>{localDate || 'Not selected'}</dd></div><div><dt>Time</dt><dd>{selectedSlot ? `${formatClockTime(selectedSlot.starts_at_local)}–${formatClockTime(selectedSlot.ends_at_local)}` : 'Not selected'}</dd></div><div><dt>Party size</dt><dd>{partySize || 'Not entered'}</dd></div><div><dt>Name</dt><dd>{[customer.first_name, customer.middle_initial, customer.last_name].filter(Boolean).join(' ') || 'Not entered'}</dd></div><div><dt>Newsletter action</dt><dd>{newsletterAction.replace('_', ' ')}</dd></div>
     </dl></section>
   )
 }
@@ -395,11 +399,11 @@ export function ReservationFeedback({ feedback, recovery, pending, onRetry, onAb
   return <StatusPanel tone={feedback.tone} title={feedback.title} role="alert" actions={<>{onRefresh && <button className="button button--secondary" type="button" onClick={onRefresh}>Refresh times</button>}{recovery && <button className="button button--primary" type="button" onClick={onRetry} disabled={pending}>{pending ? 'Retrying the same reservation…' : 'Retry the same reservation'}</button>}{recovery && <button className="button button--secondary" type="button" onClick={onAbandon}>Leave unresolved</button>}</>}><p>{feedback.text}</p></StatusPanel>
 }
 
-export function ReservationConfirmationView({ result, headingRef, onNew }) {
+export function ReservationConfirmationView({ result, restaurantTimezone, headingRef, onNew }) {
   const { confirmation, booking_result: bookingResult, phone_notice: phoneNotice } = result
   return (
     <section className="confirmation-view" aria-labelledby="confirmation-heading"><p className="eyebrow">Confirmed</p><h2 id="confirmation-heading" tabIndex="-1" ref={headingRef}>Reservation confirmed</h2>{bookingResult === 'exact_retry' && <p role="status">Your existing reservation was recovered.</p>}<dl>
-      <div><dt>Name</dt><dd>{confirmation.customer_name}</dd></div><div><dt>Reference</dt><dd>{confirmation.reservation_reference}</dd></div><div><dt>Restaurant-local interval</dt><dd>{confirmation.starts_at_local} to {confirmation.ends_at_local}</dd></div><div><dt>Canonical UTC start</dt><dd>{confirmation.starts_at}</dd></div><div><dt>Canonical UTC end</dt><dd>{confirmation.ends_at}</dd></div><div><dt>Party size</dt><dd>{confirmation.party_size}</dd></div><div><dt>Assigned table{confirmation.assigned_table_numbers.length > 1 ? 's' : ''}</dt><dd>{confirmation.assigned_table_numbers.join(', ')}</dd></div><div><dt>Newsletter</dt><dd>{confirmation.newsletter_subscribed ? 'Subscribed' : 'Not subscribed'}</dd></div><div><dt>Restaurant</dt><dd>{confirmation.restaurant.address}<br />{confirmation.restaurant.phone}</dd></div>
+      <div><dt>Name</dt><dd>{confirmation.customer_name}</dd></div><div><dt>Reference</dt><dd>{confirmation.reservation_reference}</dd></div><div><dt>Starts</dt><dd>{formatRestaurantDateTime(confirmation.starts_at, restaurantTimezone)}</dd></div><div><dt>Ends</dt><dd>{formatRestaurantDateTime(confirmation.ends_at, restaurantTimezone)}</dd></div><div><dt>Party size</dt><dd>{confirmation.party_size}</dd></div><div><dt>Assigned table{confirmation.assigned_table_numbers.length > 1 ? 's' : ''}</dt><dd>{confirmation.assigned_table_numbers.join(', ')}</dd></div><div><dt>Newsletter</dt><dd>{confirmation.newsletter_subscribed ? 'Subscribed' : 'Not subscribed'}</dd></div><div><dt>Restaurant</dt><dd>{confirmation.restaurant.address}<br />{confirmation.restaurant.phone}</dd></div>
     </dl>{phoneNotice && <p className="status-panel status-panel--information">{phoneNotice.message}</p>}<p>This on-screen confirmation does not indicate that email, SMS, or phone delivery occurred.</p><div className="action-group"><Link className="button button--primary" to="/">Return home</Link><button className="button button--secondary" type="button" onClick={onNew}>Make another reservation</button></div></section>
   )
 }

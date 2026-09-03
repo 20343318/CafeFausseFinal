@@ -1,16 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useOperations } from '../../api/operations.js'
 import { StatusPanel } from '../../components/FormPrimitives.jsx'
+import { formatClockTime } from '../../utils/time-formatting.js'
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
-function timeLabel(localTime) {
-  const [hourText, minute] = localTime.split(':')
-  const hour = Number(hourText)
-  const suffix = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 || 12
-  return `${displayHour}:${minute} ${suffix}`
-}
 
 export function CurrentHours() {
   const operations = useOperations()
@@ -49,7 +42,7 @@ export function CurrentHours() {
       <p className="field-help">Restaurant local time ({state.context.restaurant_timezone})</p>
       {state.context.weekday_hours.map((entry) => (
         <p key={entry.iso_weekday}>
-          {DAY_NAMES[entry.iso_weekday - 1]}: {timeLabel(entry.opens_at_local)}&ndash;{timeLabel(entry.closes_at_local)}
+          {DAY_NAMES[entry.iso_weekday - 1]}: {formatClockTime(entry.opens_at_local)}&ndash;{formatClockTime(entry.closes_at_local)}
         </p>
       ))}
     </div>

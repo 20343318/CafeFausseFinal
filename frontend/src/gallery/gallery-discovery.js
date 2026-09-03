@@ -81,7 +81,7 @@ export function createGalleryAssets(globResult, metadata = galleryMetadata) {
         normalizedFilename,
         hasMetadata: Boolean(presentation),
         alt: presentation?.alt || deriveAltFromFilename(filename),
-        caption: presentation?.caption,
+        caption: presentation?.caption || deriveAltFromFilename(filename),
         order: presentation?.order,
         objectPosition: presentation?.objectPosition || 'center',
         width: presentation?.width,

@@ -6,6 +6,8 @@
 
 **Date:** 2026-08-25
 
+> **Supersession note (2026-09-02):** PRA-030 supersedes only this historical report's legacy optional-period and missing-`maxLength` middle-initial behavior. Current request input is optional and, when supplied, accepts exactly one alphabetic character with maximum length one and no period. The implementation record below is intentionally preserved as historical evidence; read-only name formatting is unchanged.
+
 ## 1. Baseline and scope
 
 Phase 0 began on `main` at full HEAD `f1fee08834f781ce6288ad771343b5a0842025b9`. `HEAD`, `origin/main`, and `origin/HEAD` were aligned (`0/0`), the worktree and real Git index were clean, and recent history showed the approved Prompt-22 checkpoint `417b212edf23b620ee008bdb371f690d6e3e2abf` followed only by the committed Prompt-23 input. REACT-01 through REACT-04 were confirmed `APPROVED AND FROZEN`; all 57 pre-existing tests passed before implementation.

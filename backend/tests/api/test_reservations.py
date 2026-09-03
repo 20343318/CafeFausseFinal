@@ -118,6 +118,20 @@ def test_booking_rejects_unknown_fields_and_invalid_slot_before_service(settings
     assert response.status_code == 422 and service.calls == []
 
 
+def test_booking_rejects_period_middle_before_service(settings, dependency_factory):
+    service = Service(result())
+    response = client_for(settings, dependency_factory, service).post(
+        "/api/v1/reservations", json=VALID | {"middle_initial": "A."}
+    )
+    assert response.status_code == 422
+    assert response.get_json()["error"]["fields"] == [{
+        "field": "middle_initial",
+        "code": "invalid_format",
+        "message": "Enter one letter.",
+    }]
+    assert service.calls == []
+
+
 def test_confirmation_local_times_apply_iana_rules_to_each_committed_instant(settings, dependency_factory):
     start = datetime(2026, 11, 1, 4, 30, tzinfo=timezone.utc)
     transition_result = ReservationBookingResult(

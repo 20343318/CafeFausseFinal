@@ -2,6 +2,7 @@ export const galleryMetadata = {
   'home-cafe-fausse.webp': {
     order: 1,
     alt: 'Warmly lit formal dining room with chandeliers and set tables.',
+    caption: 'Café Fausse dining room',
     objectPosition: 'center',
     width: 1792,
     height: 1024,
@@ -9,6 +10,7 @@ export const galleryMetadata = {
   'gallery-cafe-interior.webp': {
     order: 2,
     alt: 'Formal dining room with chandeliers, floral arrangements, and round set tables.',
+    caption: 'Formal dining room',
     objectPosition: 'center',
     width: 1792,
     height: 1024,
@@ -32,6 +34,7 @@ export const galleryMetadata = {
   'gallery-behind-the-scenes.webp': {
     order: 5,
     alt: 'Chefs plating dishes in a warmly lit professional kitchen.',
+    caption: 'Behind the scenes',
     objectPosition: 'center',
     width: 1536,
     height: 1024,

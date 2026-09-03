@@ -12,6 +12,11 @@ describe('Gallery page', () => {
     expect(buttons.map((button) => within(button).getByRole('img').getAttribute('alt'))).toEqual(
       galleryAssets.map((asset) => asset.alt),
     )
+    const titles = document.querySelectorAll('.gallery-item figcaption')
+    expect(titles).toHaveLength(galleryAssets.length)
+    expect(Array.from(titles, (title) => title.textContent)).toEqual(
+      galleryAssets.map((asset) => asset.caption),
+    )
   })
 
   it('opens a single modal, names/describes it, and restores the exact thumbnail focus on close', async () => {

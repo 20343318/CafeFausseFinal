@@ -9,7 +9,7 @@ import {
 
 const ada = {
   first_name: 'Ada',
-  middle_initial: 'M.',
+  middle_initial: 'M',
   last_name: 'Rivera',
   email: 'ada.rivera@example.com',
   confirmation_email: 'ada.rivera@example.com',
@@ -24,6 +24,8 @@ describe('contract-faithful default fixture resolvers', () => {
 
   it('uses full permitted OP-03 identity semantics, including omitted middle initial', () => {
     expect(resolveNewsletterStatus(ada)).toEqual({ status: 'matched', subscribed: true })
+    expect(resolveNewsletterStatus({ ...ada, middle_initial: 'm' })).toEqual({ status: 'matched', subscribed: true })
+    expect(resolveNewsletterStatus({ ...ada, middle_initial: '' })).toEqual({ status: 'matched', subscribed: true })
     expect(resolveNewsletterStatus({ ...ada, middle_initial: undefined })).toEqual({ status: 'matched', subscribed: true })
     expect(() => resolveNewsletterStatus({ ...ada, first_name: 'Grace' })).toThrowError(expect.objectContaining({ response: { error: expect.objectContaining({ code: 'customer_identity_conflict' }) } }))
     expect(() => resolveNewsletterStatus({ ...ada, middle_initial: 'Q' })).toThrowError(expect.objectContaining({ response: { error: expect.objectContaining({ code: 'middle_initial_conflict' }) } }))
@@ -44,5 +46,36 @@ describe('contract-faithful default fixture resolvers', () => {
     expect(resolveReservation({ ...request, first_name: 'ADA', middle_initial: undefined }).confirmation.customer_name).toBe('Ada M. Rivera')
     expect(resolveReservation({ ...request, newsletter_action: 'unsubscribe' }).confirmation.newsletter_subscribed).toBe(false)
     expect(resolveReservation({ ...request, newsletter_action: 'subscribe' }).confirmation.newsletter_subscribed).toBe(true)
+  })
+
+  it.each([
+    ['newsletter status', resolveNewsletterStatus, ada],
+    ['newsletter preference', resolveNewsletterPreference, { ...ada, subscribed: true }],
+    ['reservation', resolveReservation, { ...ada, starts_at_local: availabilityFixture.slots[0].starts_at_local, utc_offset_minutes: -240, party_size: 4, newsletter_action: 'no_change' }],
+  ])('rejects invalid PRA-030 middle initials in the %s mock path', (_name, resolve, request) => {
+    for (const middleInitial of ['A.', 'AB', '7', '.', '@', 'ABC']) {
+      expect(() => resolve({ ...request, middle_initial: middleInitial })).toThrowError(expect.objectContaining({
+        status: 422,
+        response: {
+          error: {
+            code: 'validation_failed',
+            message: 'One or more fields need attention.',
+            retryable: false,
+            outcome_unknown: false,
+            fields: [{ field: 'middle_initial', code: 'invalid_format', message: 'Enter one letter.' }],
+          },
+        },
+      }))
+    }
+  })
+
+  it.each([
+    ['newsletter status', resolveNewsletterStatus, ada],
+    ['newsletter preference', resolveNewsletterPreference, { ...ada, subscribed: true }],
+    ['reservation', resolveReservation, { ...ada, starts_at_local: availabilityFixture.slots[0].starts_at_local, utc_offset_minutes: -240, party_size: 4, newsletter_action: 'no_change' }],
+  ])('preserves optional and lowercase-normalized middle initials in the %s mock path', (_name, resolve, request) => {
+    expect(() => resolve({ ...request, middle_initial: 'm' })).not.toThrow()
+    expect(() => resolve({ ...request, middle_initial: '' })).not.toThrow()
+    expect(() => resolve({ ...request, middle_initial: undefined })).not.toThrow()
   })
 })

@@ -1,12 +1,12 @@
 # Cafe Fausse API-01 Backend Operation Inventory
 
-**Document version:** 1.0.3
+**Document version:** 1.0.4
 **Date:** 2026-08-21  
 **Roadmap increment:** API-01 - Backend Operation Inventory  
 **Status:** Approved  
 **Author:** Codex, prepared for Abdul  
 **Approval record:** Approved by Abdul on 2026-08-21. This approval authorizes only API-02 REST Contract Design. It does not authorize Flask implementation, React work, integration work, or PostgreSQL changes.
-**Reconciliation record:** Version 1.0.3 applies the approved API08-RC-01/02 contract reconciliation from 2026-08-24. It preserves the public REST shape while making booking classification deterministic and authorizing the minimum OP-05 post-commit timezone projection.
+**Reconciliation record:** Version 1.0.3 applies the approved API08-RC-01/02 contract reconciliation from 2026-08-24. Version 1.0.4 applies PRA-030's approved one-character middle-initial request rule without changing an API path, response shape, or status code.
 
 ## 1. Executive summary
 
@@ -32,9 +32,9 @@ Sources were applied in the required order:
 
 1. `docs/SRS(1).pdf`, read in full (SRS FR-01 through FR-18 and NFR-01 through NFR-12);
 2. `docs/Rubric(1).pdf`, read in full, including the score-5, working-form, full-stack integration, direct-database-effect, and demonstration expectations;
-3. `docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md`, version 2.2.1;
-4. `docs/approved-design-artifacts/Cafe_Fausse_DB01_Persistent_Data_Requirements_Analysis.md`, version 1.2.1;
-5. `docs/approved-design-artifacts/Cafe_Fausse_DB02_Conceptual_Data_Model.md`, version 1.2;
+3. `docs/approved-design-artifacts/Cafe_Fausse_Project_Requirements_Addendum.md`, version 2.3;
+4. `docs/approved-design-artifacts/Cafe_Fausse_DB01_Persistent_Data_Requirements_Analysis.md`, version 1.3;
+5. `docs/approved-design-artifacts/Cafe_Fausse_DB02_Conceptual_Data_Model.md`, version 1.3;
 6. `docs/approved-design-artifacts/Cafe_Fausse_DB03_Logical_PostgreSQL_Schema.md`, version 1.1;
 7. `docs/approved-design-artifacts/Cafe_Fausse_DB04_Reservation_Transaction_and_Concurrency_Design.md`, version 1.1;
 8. the DB-05 implementation and completion evidence;
@@ -61,7 +61,7 @@ API-01 does not select REST paths, HTTP methods, parameters, JSON names or shape
 | Initial worktree | `git status --short --branch` returned only `## main...origin/main`; no user changes existed. |
 | Instructions | Repository-root `AGENTS.md` was present and read; no more-specific applicable instruction file was found. |
 | Required sources | Every source listed in Section 2 exists at the exact repository path shown. |
-| Versions | Addendum 2.2.1; DB-01 1.2.1; DB-02 1.2; DB-03 1.1; DB-04 1.1; roadmap 1.1.1; PostgreSQL contract 1.0. |
+| Versions | Addendum 2.3; DB-01 1.3; DB-02 1.3; DB-03 1.1; DB-04 1.1; roadmap 1.1.1; PostgreSQL contract 1.0. |
 | Hard Gate 1 | `database/DB07_VERIFICATION_REPORT.md` records approval by Abdul on 2026-08-20 and authorizes only API-01 after separate instruction. |
 | Frozen contract | `database/POSTGRESQL_CONTRACT_FOR_FLASK.md` records the same approval/date and freezes signatures, outcomes, grants, retry, and transaction semantics. |
 | Implementation match | Migrations 007-009 contain the same three production signatures/result shapes; migration 009 grants their execution to `cafe_fausse_app`; migration 004 grants the documented foundation reads. Contract outcome/detail literals match migrations 007-008. |
@@ -185,7 +185,7 @@ OP-06 answers only whether the Flask process can respond. OP-07 separately check
 | Initiator/consumer | Unauthenticated public client after valid identity facts are available in either form. |
 | Conceptual inputs | First name, optional middle initial, last name, email, and confirmation email. No phone is needed because phone is not identity. |
 | Provenance | Caller supplies values; Flask creates normalized names/middle/canonical email and compares confirmation; PostgreSQL supplies any matching row's stored name/middle/current Boolean. |
-| Flask normalization | Trim/collapse names; validate 1-100 and Unicode-letter rule; preserve display spelling; normalize optional middle to one uppercase alphabetic character without period; trim/validate/lowercase email and compare normalized confirmation. |
+| Flask normalization | Trim/collapse names; validate 1-100 and Unicode-letter rule; preserve display spelling; accept an optional middle initial only as exactly one alphabetic character without a period and normalize lowercase to one uppercase character; trim/validate/lowercase email and compare normalized confirmation. |
 | Flask validation | Complete request-shape/format validation before lookup; reject identifiers, phone-based identity, malformed email, or mismatched confirmation. |
 | PostgreSQL interaction | Read only `cafe_fausse.customers` by exact canonical `email`, authorized by migration 004. Read only first name, middle initial, last name, and `newsletter_subscribed`; use case-insensitive normalized first/last comparison. Omitted input middle matches either stored state; supplied middle matches stored equal, is accepted without mutation when stored is blank, and conflicts when both populated/different. |
 | Transaction character | One short read-only snapshot. |
@@ -334,7 +334,7 @@ The controlled production routine result shapes remain internal database-to-Flas
 |---|---|---|---|
 | Required names | Require first/last; trim and collapse internal whitespace; 1-100 characters; at least one Unicode letter; preserve punctuation, accents, and display spelling | Persisted length/coarse checks; case-insensitive stored matching under controlled behavior | OP-03/04/05 |
 | Name matching | Supply approved normalized display values; never overwrite based on case variants | Match first/last case-insensitively for the customer resolved by canonical email | OP-03/04/05 |
-| Middle initial | Optional; trim; accept one alphabetic character with optional period; normalize uppercase without period | Omission preserves; blank stored may be populated only in mutating paths; populated conflict rejects | OP-03/04/05 |
+| Middle initial | Optional; trim; accept exactly one alphabetic character; maximum input length one; reject periods; normalize lowercase to uppercase without punctuation | Omission preserves; blank stored may be populated only in mutating paths; populated conflict rejects | OP-03/04/05 |
 | Email | Require; trim; full syntax validation; maximum 254; lowercase canonical | Exact unique canonical identity and persisted canonical defense | OP-03/04/05 |
 | Confirmation email | Require on both user-facing forms; apply same normalization and require equality | Never passed to a routine or persisted | OP-03/04/05 |
 | Phone | Optional reservation-only; allow digits/spaces/plus/parentheses/hyphens/periods; require 7-15 digits; derive digits transiently for comparison | New/existing blank may populate on successful new booking; omission preserves; differing populated stays unchanged with notice | OP-05 |
@@ -550,7 +550,7 @@ All database-changing fixture cases use isolated test data and restore alternate
 | API-06 | User-friendly failures | Outcome categories/minimization defined; words/HTTP deferred. |
 | API-07 | Integrate PostgreSQL and React | Every operation maps to database source and future consumer; implementation/integration later. |
 
-### 21.5 PRA-006 through PRA-025 and PRA-029
+### 21.5 PRA-006 through PRA-025 and PRA-029 through PRA-030
 
 | PRA | Coverage |
 |---|---|
@@ -575,6 +575,7 @@ All database-changing fixture cases use isolated test data and restore alternate
 | PRA-024 | OP-05 complete confirmation/no delivery; all safe outcome/log boundaries. |
 | PRA-025 | OP-01 -> OP-02 -> OP-03 -> OP-05 availability-first path, provisional/nonpromise/refresh behavior. |
 | PRA-029 | OP-01 reads and delivers PostgreSQL current hours; OP-02/05 use them; no Flask/React constants. |
+| PRA-030 | OP-03/04/05 accept optional middle-initial request input only as one alphabetic character without a period; lowercase may normalize uppercase. |
 
 PRA-001 to PRA-005 govern ordering, least-to-most scope, testing, authority, and configurability and are honored by this design. PRA-026 to PRA-028 are already enforced by PostgreSQL and appear in freshness, exact retry, retention, exclusions, and test fixtures; they do not justify additional public operations.
 
@@ -666,7 +667,7 @@ The wire/architecture/timing/presentation choices in Section 23 are deliberate r
 | Contradictions escalated | Complete: API08-RC-01/02 resolve the combined-classification and OP-05 confirmation-timezone gaps. |
 | Approval pause before API-02 | Required and recorded below |
 
-API-01 version 1.0.1 was approved by Abdul on 2026-08-21. Version 1.0.3 incorporates the later explicitly approved API-07 and API08-RC-01/02 reconciliations without altering the original operation count or public workflow boundary.
+API-01 version 1.0.1 was approved by Abdul on 2026-08-21. Version 1.0.3 incorporates the later explicitly approved API-07 and API08-RC-01/02 reconciliations without altering the original operation count or public workflow boundary. Version 1.0.4 applies the user-approved PRA-030 middle-initial request refinement.
 
 ### Version record
 
@@ -675,6 +676,7 @@ API-01 version 1.0.1 was approved by Abdul on 2026-08-21. Version 1.0.3 incorpor
 | 1.0.1 | 2026-08-21 | Approved API-01 backend operation inventory. |
 | 1.0.2 | 2026-08-23 | Applied the approved `API-07 OP-02 timezone/snapshot reconciliation`: within one `REPEATABLE READ READ ONLY` snapshot, OP-02 may read only `reservation_configuration.restaurant_timezone` and call the unchanged frozen provisional-availability routine. |
 | 1.0.3 | 2026-08-24 | Applied API08-RC-01/02: OP-05 now distinguishes caller party-size `invalid_request` from server-duration `invalid_database_configuration`, and its existing post-commit read-only confirmation transaction may project only stored name components plus current `reservation_configuration.restaurant_timezone`. |
+| 1.0.4 | 2026-09-02 | Applied PRA-030: optional middle-initial request input is exactly one alphabetic character, maximum length one, with periods rejected; lowercase may normalize uppercase and stored/read-only behavior is otherwise unchanged. |
 
 ## 27. Approval checkpoint
 

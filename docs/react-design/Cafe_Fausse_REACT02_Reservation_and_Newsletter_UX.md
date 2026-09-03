@@ -10,6 +10,8 @@
 
 **Next authorized increment:** Prompt 21 - complete UI/UX and React test strategy
 
+**PRA-030 amendment:** The frozen design remains approved, but its middle-initial request rule is amended by PRA-030: the optional input accepts exactly one alphabetic character, has maximum length one, and rejects periods. Read-only name formatting is unchanged.
+
 ## 1. Baseline and approval state
 
 Phase 0 was performed read-only before this artifact was created.
@@ -164,7 +166,7 @@ Group fields under “Your details” with explicit persistent labels and visibl
 | UI field | Requirement and input guidance | Autofill / mobile guidance |
 |---|---|---|
 | First name | Required; 1-100 after approved trim/collapse; must contain a Unicode letter | `given-name` |
-| Middle initial | Optional; one alphabetic character, optional period accepted | `additional-name`; short text input |
+| Middle initial | Optional; exactly one alphabetic character when supplied; maximum length one; period rejected; invalid message `Enter one letter.` | `additional-name`; short text input |
 | Last name | Required; same approved name rules as first | `family-name` |
 | Email | Required; approved ordinary address profile, maximum 254 | `email`, email keyboard |
 | Confirm email | Required; normalized equality with Email | Do not intentionally autofill from primary; never block paste |

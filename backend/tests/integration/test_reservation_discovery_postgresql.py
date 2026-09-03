@@ -350,7 +350,9 @@ def test_free_partial_full_and_back_to_back_occupancy_are_provisional_and_nonmut
         free = _availability(client, requested, 120).get_json()["slots"]
         assert free and all(slot["available"] is True for slot in free)
         first_start = datetime.fromisoformat(free[0]["starts_at"].replace("Z", "+00:00"))
-        full_start = first_start + timedelta(minutes=180)
+        back_to_back_slot = next(slot for slot in free if slot["starts_at"] == free[0]["ends_at"])
+        full_slot = free[-1]
+        full_start = datetime.fromisoformat(full_slot["starts_at"].replace("Z", "+00:00"))
         with _manager() as manager:
             manager.execute("SET ROLE cafe_fausse_test")
             for index in range(2):
@@ -377,8 +379,7 @@ def test_free_partial_full_and_back_to_back_occupancy_are_provisional_and_nonmut
         partial_full_party = _availability(client, requested, 120).get_json()["slots"]
         assert next(slot for slot in partial_small if slot["starts_at"] == free[0]["starts_at"])["available"] is True
         assert next(slot for slot in partial_full_party if slot["starts_at"] == free[0]["starts_at"])["available"] is False
-        back_to_back = (first_start + timedelta(minutes=90)).isoformat().replace("+00:00", "Z")
-        assert next(slot for slot in partial_full_party if slot["starts_at"] == back_to_back)["available"] is True
+        assert next(slot for slot in partial_full_party if slot["starts_at"] == back_to_back_slot["starts_at"])["available"] is True
 
         with _manager() as manager:
             manager.execute("SET ROLE cafe_fausse_test")
@@ -395,9 +396,8 @@ def test_free_partial_full_and_back_to_back_occupancy_are_provisional_and_nonmut
                     [(reservation_ids[1], table_number) for table_number in range(1, 31)],
                 )
             manager.commit()
-        full_start_text = full_start.isoformat().replace("+00:00", "Z")
         occupied = _availability(client, requested, 4).get_json()["slots"]
-        assert next(slot for slot in occupied if slot["starts_at"] == full_start_text)["available"] is False
+        assert next(slot for slot in occupied if slot["starts_at"] == full_slot["starts_at"])["available"] is False
     finally:
         close_resources(app)
         if reservation_ids or customer_ids:

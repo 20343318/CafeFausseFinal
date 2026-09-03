@@ -230,6 +230,7 @@ def test_at_api05_op03_validation_fields_are_exact_and_ordered(settings, depende
         (VALID | {"first_name": 7}, "first_name"),
         (VALID | {"first_name": " "}, "first_name"),
         (VALID | {"first_name": "A" * 101}, "first_name"),
+        (VALID | {"middle_initial": "A."}, "middle_initial"),
         (VALID | {"email": "invalid", "confirmation_email": "invalid"}, "email"),
         (VALID | {"confirmation_email": "other@example.com"}, "confirmation_email"),
     ],

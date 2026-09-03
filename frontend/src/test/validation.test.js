@@ -30,6 +30,17 @@ describe('contract-compatible client validation', () => {
     expect(validateIdentity({ ...base, middle_initial: 'MM', phone: '12' }, { includePhone: true })).toMatchObject({ middle_initial: expect.any(String), phone: expect.any(String) })
   })
 
+  it('accepts exactly one middle-initial letter', () => {
+    const base = { first_name: 'Ada', last_name: 'Rivera', email: 'ada@example.com', confirmation_email: 'ada@example.com' }
+    expect(validateIdentity({ ...base, middle_initial: 'A' })).toEqual({})
+  })
+
+  it.each(['A.', 'AB', '7', '.', '@'])('rejects the invalid middle initial %s without transforming it', (middleInitial) => {
+    const values = { first_name: 'Ada', middle_initial: middleInitial, last_name: 'Rivera', email: 'ada@example.com', confirmation_email: 'ada@example.com' }
+    expect(validateIdentity(values)).toHaveProperty('middle_initial', 'Enter one letter.')
+    expect(values.middle_initial).toBe(middleInitial)
+  })
+
   it('counts name limits in Unicode code points and accepts supplementary-plane letters', () => {
     const supplementaryLetter = '\u{10400}'
     const base = { last_name: 'Rivera', middle_initial: '', email: 'ada@localhost', confirmation_email: 'ada@localhost' }
@@ -38,13 +49,14 @@ describe('contract-compatible client validation', () => {
     expect(validateIdentity({ ...base, first_name: supplementaryLetter.repeat(101) })).toHaveProperty('first_name')
   })
 
-  it('accepts a supplementary-plane middle initial with or without a period', () => {
+  it('accepts one supplementary-plane letter but rejects a trailing period', () => {
     const base = { first_name: 'Ada', last_name: 'Rivera', email: 'ada@localhost', confirmation_email: 'ada@localhost' }
     expect(validateIdentity({ ...base, middle_initial: '\u{10400}' })).toEqual({})
-    expect(validateIdentity({ ...base, middle_initial: '\u{10400}.' })).toEqual({})
+    expect(validateIdentity({ ...base, middle_initial: '\u{10400}.' })).toHaveProperty('middle_initial', 'Enter one letter.')
   })
 
   it('omits optional fields from the exact identity body', () => {
     expect(identityBody({ first_name: ' Ada ', middle_initial: '', last_name: ' Rivera ', email: 'ADA@EXAMPLE.COM', confirmation_email: 'ada@example.com' })).toEqual({ first_name: 'Ada', last_name: 'Rivera', email: 'ada@example.com', confirmation_email: 'ada@example.com' })
+    expect(identityBody({ first_name: ' Ada ', middle_initial: ' A ', last_name: ' Rivera ', email: 'ADA@EXAMPLE.COM', confirmation_email: 'ada@example.com' })).toEqual({ first_name: 'Ada', middle_initial: 'A', last_name: 'Rivera', email: 'ada@example.com', confirmation_email: 'ada@example.com' })
   })
 })

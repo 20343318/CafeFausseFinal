@@ -1,14 +1,14 @@
 # Cafe Fausse DB-01 Persistent-Data Requirements Analysis
 
-**Document version:** 1.2.1  
+**Document version:** 1.3<br>
 **Established:** 2026-08-14  
-**Last amended:** 2026-08-15  
-**Artifact regeneration ID:** `2026-08-15-PRA029-R1`  
+**Last amended:** 2026-09-02<br>
+**Artifact regeneration ID:** `2026-09-02-PRA030-R1`<br>
 **Roadmap increment:** DB-01  
-**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.2.1 (PRA-001 through PRA-029), and the approved least-to-most implementation roadmap 1.1.1  
+**Authoritative sources:** `SRS(1).pdf`, `Rubric(1).pdf`, Project Requirements Addendum 2.3 (PRA-001 through PRA-030), and the approved least-to-most implementation roadmap 1.1.1<br>
 **Scope:** PostgreSQL persistent-data requirements only  
-**Status:** Approved as amended by PRA-029  
-**Approved by/date:** Abdul, 2026-08-15  
+**Status:** Approved as amended by PRA-029 and PRA-030<br>
+**Approved by/date:** Abdul, 2026-08-15; PRA-030 amendment approved 2026-09-02<br>
 **Approval source:** Explicit DB-01 approval followed by explicit operating-hours override P5-HRS-01 in the project conversation  
 **Code status:** No SQL or application code generated
 
@@ -55,7 +55,7 @@ Requirement references use SRS `FR-*` and `NFR-*`, rubric `RUB-*` from the basel
 |---|---|---|---|---|---|
 | CUS-01 Customer identifier | Stable identity required by SRS Customers and Reservations minimum fields. Sources: FR-17, FR-18; PRA-019. | Required for every persisted customer; generated representation deferred. | PBD; customer record. | Unique and immutable; one customer may have zero or many reservations. Retained until controlled reset under PRA-028. | PostgreSQL generates/preserves it and uses it for reservation and retry relationships. Flask needs it internally; React does not need database identity unless an approved contract later exposes a safe reference. |
 | CUS-02 First name | Required component of SRS Customer Name. Sources: FR-06, FR-17; PRA-019, PRA-023. | Required; trimmed/collapsed; 1-100 characters; at least one letter; display punctuation/accents preserved; case-insensitive matching. | PBD; customer record. | Participates in existing-customer match with normalized email and last name. Not silently overwritten. Retained until reset. | PostgreSQL preserves authoritative display value and supports matching/integrity. Flask validates/matches; React collects/displays. |
-| CUS-03 Middle initial | Optional structured component of SRS Customer Name. Sources: PRA-019, PRA-023. | Optional; one alphabetic character with optional input period; stored uppercase without period. Existing empty may be populated; omission preserves; conflicting populated value rejected. | PBD when supplied; customer record. | Not customer identity and excluded from reservation fingerprint. Retained once populated until reset; no general profile-update feature. | PostgreSQL preserves authoritative value and supports approved conflict behavior. Flask validates; React collects optionally. |
+| CUS-03 Middle initial | Optional structured component of SRS Customer Name. Sources: PRA-019, PRA-023, PRA-030. | Optional request input; when supplied, exactly one alphabetic character, maximum length one, with no period. Lowercase may normalize to uppercase; stored uppercase without punctuation. Existing empty may be populated; omission preserves; conflicting populated value rejected. | PBD when supplied; customer record. | Not customer identity and excluded from reservation fingerprint. Retained once populated until reset; no general profile-update feature. | PostgreSQL preserves the authoritative optional one-character value and supports approved conflict behavior. Flask validates; React collects optionally. |
 | CUS-04 Last name | Required component of SRS Customer Name. Sources: FR-06, FR-17; PRA-019, PRA-023. | Required; same 1-100, trimming, letter, display, and case-insensitive matching rules as first name. | PBD; customer record. | Participates in match with normalized email and first name. Not silently overwritten. Retained until reset. | PostgreSQL preserves value and supports matching/integrity. Flask validates/matches; React collects/displays. |
 | CUS-05 Canonical email | Required customer identity and marketing address. Sources: FR-06, FR-15 to FR-18; PRA-019 to PRA-021, PRA-023. | Required for every persisted customer; trimmed; syntactically valid; maximum 254 characters; canonical lowercase; one customer per normalized email. | PBD; customer record; primary business identity key. | Unique across customers; immutable through Version 1 workflows; retained even after unsubscribe. One customer may have many reservations. | PostgreSQL enforces authoritative uniqueness/canonical value. Flask validates/matches; React collects twice but receives safe outcomes only. |
 | CUS-06 Confirmation email input | Second entry used to reduce typing errors. Sources: PRA-019, PRA-023. | Required on reservation and dedicated newsletter forms; normalized entries must match. | TRN; no persistent source. | Exists only during client/backend validation; never retained as duplicate customer data, confirmation data, or log content. | PostgreSQL has no business-storage responsibility. Flask revalidates; React collects and compares for usability. |
@@ -318,6 +318,7 @@ The following do not represent unresolved business requirements and must not be 
 | PRA-027 | Versioned database fingerprint, exact retry, and newsletter separation |
 | PRA-028 | Retention through normal operation and no automatic purge/archive |
 | PRA-029 | PostgreSQL-backed recurring weekly schedule seeded to the SRS hours; no hard-coded Flask/React authority or holiday exceptions |
+| PRA-030 | Optional middle-initial request input is exactly one alphabetic character without a period; storage remains optional, one-character, and uppercase |
 | RUB-01, RUB-05 to RUB-07 | Complete SRS data, working forms, full-stack integration, direct database effects, sophisticated logic |
 
 ## 12. Future PostgreSQL, Flask, and React information needs
@@ -366,12 +367,12 @@ The items in Section 9 are intentionally deferred technical design choices, not 
 | Item | Recorded value |
 |---|---|
 | Increment | DB-01 — Persistent-data requirements |
-| Status | Approved as amended by PRA-029 |
+| Status | Approved as amended by PRA-029 and PRA-030 |
 | Approver | Abdul |
 | Approval date | 2026-08-15 |
-| Approval source | Explicit DB-01 approval and later P5-HRS-01 operating-hours override in the project conversation |
+| Approval source | Explicit DB-01 approval, later P5-HRS-01 operating-hours override, and the explicit PRA-030 middle-initial amendment in the project conversation |
 | Next authorized increment | Prompt 5 / DB-02 — Conceptual data modeling |
-| Artifact regeneration | `2026-08-15-PRA029-R1`; packaging-only revision with no change to approved requirements |
+| Artifact regeneration | `2026-09-02-PRA030-R1`; applies the approved one-character middle-initial request refinement without changing persistent structure |
 
 DB-01 approval authorizes Prompt 5 / DB-02 conceptual data modeling. It does not approve a PostgreSQL schema, SQL, migrations, transaction mechanism, Flask contract, or React design.
 

@@ -43,7 +43,7 @@ def test_invalid_availability_query(values, field, code):
 
 VALID_BOOKING = {
     "first_name": " Ada ",
-    "middle_initial": "q.",
+    "middle_initial": "q",
     "last_name": " Rivera ",
     "email": " ADA.RIVERA@example.com ",
     "confirmation_email": "ada.rivera@EXAMPLE.COM",
@@ -71,6 +71,7 @@ def test_valid_booking_normalizes_only_approved_request_facts():
 @pytest.mark.parametrize(
     ("changes", "field", "code"),
     [
+        ({"middle_initial": "Q."}, "middle_initial", "invalid_format"),
         ({"starts_at_local": "2026-09-12T17:00-04:00"}, "starts_at_local", "invalid_format"),
         ({"starts_at_local": "2026-09-12T17:00:00Z"}, "starts_at_local", "invalid_format"),
         ({"starts_at_local": "2026-09-12T17:00:00.000-04:00"}, "starts_at_local", "invalid_format"),

@@ -29,6 +29,7 @@ export function MenuPage() {
       </div>
       <figure className="menu-feature-image">
         <img
+          className="menu-feature-image__image"
           src={ribeyeImage}
           alt="Grilled ribeye steak plated with vegetables and fresh herbs."
           width="1024"

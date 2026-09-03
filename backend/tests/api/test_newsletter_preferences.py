@@ -400,6 +400,22 @@ def test_at_api06_op04_validation_order_phone_and_unknown_fields(
 
 
 @pytest.mark.api
+def test_at_api06_op04_rejects_period_middle_before_service(settings, dependency_factory):
+    service = PreferenceService()
+    response = client_for(settings, dependency_factory, service).post(
+        "/api/v1/newsletter-preferences",
+        json=VALID | {"middle_initial": "A."},
+    )
+    assert response.status_code == 422
+    assert response.get_json()["error"]["fields"] == [{
+        "field": "middle_initial",
+        "code": "invalid_format",
+        "message": "Enter one letter.",
+    }]
+    assert service.calls == []
+
+
+@pytest.mark.api
 @pytest.mark.parametrize(
     ("data", "content_type", "status", "code"),
     [

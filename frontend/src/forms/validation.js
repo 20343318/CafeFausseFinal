@@ -27,7 +27,7 @@ export function validateIdentity(values, { includePhone = false } = {}) {
     else if ([...normalized].length > 100 || !/\p{L}/u.test(normalized)) errors[field] = 'Enter a name containing a letter, up to 100 characters.'
   }
   const middle = (values.middle_initial || '').trim()
-  if (middle && !/^\p{L}\.?$/u.test(middle)) errors.middle_initial = 'Enter one letter, with an optional period.'
+  if (middle && !/^\p{L}$/u.test(middle)) errors.middle_initial = 'Enter one letter.'
   if (!values.email?.trim()) errors.email = 'Email is required.'
   else if (!isValidEmail(values.email)) errors.email = 'Enter a valid email address.'
   if (!values.confirmation_email?.trim()) errors.confirmation_email = 'Confirm email is required.'
